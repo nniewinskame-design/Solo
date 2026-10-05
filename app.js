@@ -408,6 +408,7 @@ async function refreshLibrary(animate) {
     G.appendChild(b);
   });
   const has = all.length > 0;
+  nudgeBackup(all);
   $("#lib").hidden = !has; $("#lib-empty").hidden = has;
   $("#lib-count").textContent = has ? String(all.length) : "";
   $("#lib-none").hidden = !(has && q && !list.length);
@@ -1449,25 +1450,51 @@ $$("#themeseg button").forEach(b => b.addEventListener("click", () => {
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#170B0F" : "#F4EEE4");
   syncSettings();
 }));
-$("#btn-backup").addEventListener("click", async () => {
+async function saveBackup() {
   const all = await DB.all();
-  if (!all.length) { $("#backup-status").textContent = "Biblioteka jest pusta."; return; }
+  if (!all.length) return 0;
   download(`solo-kopia-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: "solo", version: 2, saved: Date.now(), pieces: all }), "application/json");
-  $("#backup-status").textContent = `Zapisano kopię: ${all.length} ${plural(all.length, "utwór", "utwory", "utworów")}.`;
+  store.set("backupAt", String(Date.now()));
+  const el = $("#backup-nudge"); if (el) el.hidden = true;
+  return all.length;
+}
+$("#btn-backup").addEventListener("click", async () => {
+  const n = await saveBackup();
+  $("#backup-status").textContent = n ? `Zapisano kopię: ${n} ${plural(n, "utwór", "utwory", "utworów")}.` : "Biblioteka jest pusta.";
 });
+/* A gentle reminder in the library: a few days after the first pieces, then at most monthly,
+   and only when something changed since the last copy. Browsers may clear a site's storage. */
+const DAY = 864e5;
+function nudgeBackup(all) {
+  const now = Date.now(), el = $("#backup-nudge");
+  if (!el) return;                              // a stale cached page without the reminder
+  const mine = all.filter(p => p.sourceType !== "example");
+  if (!mine.length) { el.hidden = true; return; }
+  if (!store.get("libSince")) store.set("libSince", String(now));
+  const last = Math.max(+store.get("backupAt", 0), +store.get("nudgeLater", 0));
+  const changed = mine.some(p => Math.max(p.updated || 0, p.created || 0) > +store.get("backupAt", 0));
+  const due = last ? now - last > 30 * DAY : now - +store.get("libSince") > 3 * DAY;
+  el.hidden = !(changed && due);
+}
+$("#nudge-save")?.addEventListener("click", async () => { const n = await saveBackup(); if (n) hud(`Zapisano kopię: ${n} ${plural(n, "utwór", "utwory", "utworów")}`, 3000); });
+$("#nudge-x")?.addEventListener("click", () => { store.set("nudgeLater", String(Date.now())); fadeOut($("#backup-nudge"), 180); });
 $("#in-backup").addEventListener("change", async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   try {
     const j = JSON.parse(await f.text());
     if (!["solo", "pulpit-nutowy"].includes(j.app) || !Array.isArray(j.pieces)) throw new Error();
-    let n = 0;
+    const have = new Map((await DB.all()).map(p => [p.id, p]));
+    let n = 0, newer = 0;
     for (const p of j.pieces) {
       if (!p || typeof p.id !== "string" || typeof p.xml !== "string") continue;
+      const cur = have.get(p.id);                 // an older copy never overwrites newer changes
+      if (cur && (cur.updated || 0) > (p.updated || 0)) { newer++; continue; }
       const clean = { ...p, title: String(p.title || ""), composer: String(p.composer || ""), images: Array.isArray(p.images) ? p.images.filter(s => typeof s === "string" && s.startsWith("data:image/")) : [],
         thumb: typeof p.thumb === "string" && p.thumb.startsWith("data:image/") ? p.thumb : null };
       await DB.put(clean); n++;
     }
-    $("#backup-status").textContent = `Wczytano ${n} ${plural(n, "utwór", "utwory", "utworów")}.`; syncSettings();
+    $("#backup-status").textContent = `Wczytano ${n} ${plural(n, "utwór", "utwory", "utworów")}.` +
+      (newer ? ` ${newer} ${plural(newer, "utwór masz", "utwory masz", "utworów masz")} już w nowszej wersji.` : ""); syncSettings();
   } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
 });
 

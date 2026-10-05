@@ -553,6 +553,8 @@ function exampleXml() {
 }
 
 
+/* Tata's library lives here, per web address (origin). Never rename the database or store, and never
+   move the live address, without a migration: the pieces would look gone. */
 const DB = {
   db: null, mem: new Map(), ok: true,
   async open() {
