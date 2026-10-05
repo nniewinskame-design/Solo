@@ -367,10 +367,10 @@ document.addEventListener("keydown", e => {
 });
 
 /* ---------------- Home / library ---------------- */
-/* the welcome screen has the brass photo; the library uses the others, so no photo appears twice */
+/* the welcome screen has the flat-lay photo; the library uses the others, so no photo appears twice */
 const HERO = [
   { src: "img/window.jpg", pos: "50% 42%" }, { src: "img/piano.jpg", pos: "35% 50%" },
-  { src: "img/flatlay.jpg", pos: "50% 30%" }
+  { src: "img/brass.jpg", pos: "30% 50%" }
 ];
 function setupHero() {
   const h = HERO[Math.floor(Date.now() / 86400000) % HERO.length];
