@@ -1,6 +1,7 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "3.6";
+const VERSION = "3.7";
+const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -1435,7 +1436,7 @@ $("#s-sub").addEventListener("click", e => {
 function syncSettings() {
   const th = store.get("theme") === "dark" ? "dark" : "light";
   $$("#themeseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.theme === th)));
-  $("#ver").textContent = VERSION;
+  $("#ver").textContent = BUILD ? `${VERSION} · test ${BUILD}` : VERSION;
   DB.all().then(all => {
     $("#store-count").textContent = all.length ? `${all.length} ${plural(all.length, "utwór", "utwory", "utworów")} w bibliotece` : "Biblioteka jest pusta";
   }).catch(() => {});

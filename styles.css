@@ -737,3 +737,5 @@ input.inl::selection{background:rgba(75,22,34,.20)}
 .seg-t.editing .inl-box{margin:-2px 0;width:100%}
 .card .t.editing,.card .m .c.editing,.stitle .a.editing,.seg-t.editing{padding:0;overflow:visible}
 @media (prefers-reduced-motion:reduce){ .inl-box{animation:none} }
+html[data-env="test"]{--strip:22px;--safe-t:calc(env(safe-area-inset-top,0px) + var(--strip))}
+html[data-env="test"]::before{content:"WERSJA TESTOWA";position:fixed;left:0;right:0;top:0;z-index:9999;box-sizing:content-box;height:var(--strip);padding-top:env(safe-area-inset-top,0px);display:flex;align-items:center;justify-content:center;background:#FFC93C;color:#1E1B2E;font:700 12px/1 var(--sans);letter-spacing:.14em;pointer-events:none}
