@@ -9,8 +9,12 @@ const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 let tk = null;
 const engineReady = new Promise(resolve => {
   const boot = () => {
-    const go = () => { tk = new verovio.toolkit(); resolve(tk); };
-    if (verovio.module.calledRun) go(); else verovio.module.onRuntimeInitialized = go;
+    const go = () => { if (tk) return; tk = new verovio.toolkit(); resolve(tk); };
+    /* this Verovio build never sets calledRun; once the wasm exports exist the runtime is up
+       (or will be within the same task), so a cached, already-started engine isn't missed */
+    const m = verovio.module;
+    m.onRuntimeInitialized = go;
+    if (m.calledRun || typeof m._vrvToolkit_constructor === "function") setTimeout(go, 0);
   };
   const s = document.getElementById("verovio-script");
   if (window.verovio) boot(); else s.addEventListener("load", boot);
