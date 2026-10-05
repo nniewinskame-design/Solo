@@ -1,0 +1,20 @@
+{
+  "name": "Solo",
+  "short_name": "Solo",
+  "description": "Nuty ze zdjęcia: sama partia solowa, w Twoim kluczu i tonacji.",
+  "lang": "pl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F4EEE4",
+  "theme_color": "#4B1622",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    { "action": "./", "accept": { "application/vnd.recordare.musicxml+xml": [".musicxml"], "application/pdf": [".pdf"] } }
+  ]
+}
