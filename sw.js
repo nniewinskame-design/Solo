@@ -1,5 +1,5 @@
 /* Solo service worker: works offline after the first visit (photo reading still needs internet). */
-const CACHE = "solo-v18";
+const CACHE = "solo-v19";
 const SHELL = ["./", "index.html", "styles.css", "theme.js", "core.js", "motion.js", "app.js", "clefs.js", "manifest.webmanifest",
   "prywatnosc.html", "regulamin.html", "licencje.html", "legal.js",
   "fonts/fonts.css", "fonts/geist-latin.woff2", "fonts/geist-latinext.woff2",
@@ -27,7 +27,9 @@ self.addEventListener("fetch", e => {
   if (big) {
     e.respondWith(caches.open(CACHE).then(async c => (await c.match(e.request)) || fetch(e.request).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; })).then(isolate));
   } else {
-    e.respondWith(fetch(e.request).then(r => { if (r.ok) { const cl = r.clone(); caches.open(CACHE).then(c => c.put(e.request, cl)); } return r; })
+    /* revalidate (ETag) instead of trusting the HTTP cache: GitHub Pages lets files go stale for
+       10 minutes, which right after a deploy pairs new HTML with old CSS/JS */
+    e.respondWith(fetch(e.request, { cache: "no-cache" }).then(r => { if (r.ok) { const cl = r.clone(); caches.open(CACHE).then(c => c.put(e.request, cl)); } return r; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match("index.html"))).then(isolate));
   }
 });
