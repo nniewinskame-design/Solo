@@ -1332,6 +1332,7 @@ function dataUrlToBlob(u) {
 }
 /* ---- Reading on the device: homr (open-source optical music recognition), free and offline ---- */
 let recognizer = null;
+const HEAVY_ORIGIN = "https://nniewinskame-design.github.io/Solo/";
 async function getRecognizer(prefer) {
   if (recognizer && !prefer) return recognizer;
   if (recognizer) { try { await recognizer.dispose(); } catch {} recognizer = null; }
@@ -1339,7 +1340,10 @@ async function getRecognizer(prefer) {
   if (typeof Worker === "undefined") throw new Error("Ta przeglądarka nie potrafi czytać nut na urządzeniu. Zaktualizuj przeglądarkę albo otwórz Solo w Chrome lub Safari.");
   const mod = await import("./homr/homr.js");
   const abs = p => new URL(p, location.href).href;
-  recognizer = await mod.createRecognizer({ baseUrl: abs("homr/models/"), wasmPaths: abs("homr/ort/"), prefer,
+  /* Cloudflare Pages rejects files over 25 MiB, so on pages.dev the models and onnxruntime come
+     from the GitHub Pages copy of the same repo (served with Access-Control-Allow-Origin: *) */
+  const heavy = p => location.hostname.endsWith(".pages.dev") ? HEAVY_ORIGIN + p : abs(p);
+  recognizer = await mod.createRecognizer({ baseUrl: heavy("homr/models/"), wasmPaths: heavy("homr/ort/"), prefer,
     createWorker: () => new Worker(abs("homr/worker.js"), { type: "module" }) });
   return recognizer;
 }
