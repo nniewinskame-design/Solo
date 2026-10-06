@@ -45,20 +45,20 @@ const INSTRUMENTS = [
   { id: "wiolonczela", name: "Wiolonczela", clef: "bass", tr: 0, lo: 36, hi: 81, comf: [36, 69], clefs: ["bass", "tenor", "treble"], voice: "string", group: "Smyczkowe" },
   { id: "kontrabas", name: "Kontrabas", clef: "bass", tr: 12, lo: 28, hi: 67, comf: [28, 55], clefs: ["bass"], voice: "string", group: "Smyczkowe" },
   /* Klawiszowe */
-  { id: "fortepian", name: "Fortepian", clef: "treble", tr: 0, lo: 21, hi: 108, voice: "piano", group: "Klawiszowe" },
-  { id: "organy", name: "Organy", clef: "treble", tr: 0, lo: 36, hi: 96, voice: "reed", group: "Klawiszowe" },
-  { id: "akordeon", name: "Akordeon", clef: "treble", tr: 0, lo: 41, hi: 93, voice: "reed", group: "Klawiszowe" },
-  { id: "keyboard", name: "Keyboard", clef: "treble", tr: 0, lo: 36, hi: 96, voice: "piano", group: "Klawiszowe" },
+  { id: "fortepian", name: "Fortepian", clef: "treble", tr: 0, lo: 21, hi: 108, clefs: ["treble", "bass"], voice: "piano", group: "Klawiszowe" },
+  { id: "organy", name: "Organy", clef: "treble", tr: 0, lo: 36, hi: 96, clefs: ["treble", "bass"], voice: "reed", group: "Klawiszowe" },
+  { id: "akordeon", name: "Akordeon", clef: "treble", tr: 0, lo: 28, hi: 93, clefs: ["treble", "bass"], voice: "reed", group: "Klawiszowe" },
+  { id: "keyboard", name: "Keyboard", clef: "treble", tr: 0, lo: 36, hi: 96, clefs: ["treble", "bass"], voice: "piano", group: "Klawiszowe" },
   /* Szarpane */
   { id: "gitara", name: "Gitara", clef: "treble", tr: 12, lo: 40, hi: 83, voice: "piano", group: "Szarpane" },
   { id: "gitara-bas", name: "Gitara basowa", clef: "bass", tr: 12, lo: 28, hi: 67, voice: "piano", group: "Szarpane" },
   { id: "ukulele", name: "Ukulele", clef: "treble", tr: 0, lo: 60, hi: 81, voice: "piano", group: "Szarpane" },
   { id: "mandolina", name: "Mandolina", clef: "treble", tr: 0, lo: 55, hi: 88, voice: "piano", group: "Szarpane" },
-  { id: "harfa", name: "Harfa", clef: "treble", tr: 0, lo: 24, hi: 103, voice: "piano", group: "Szarpane" },
+  { id: "harfa", name: "Harfa", clef: "treble", tr: 0, lo: 24, hi: 103, clefs: ["treble", "bass"], voice: "piano", group: "Szarpane" },
   /* Perkusyjne (melodyczne) */
   { id: "dzwonki", name: "Dzwonki", clef: "treble", tr: -24, lo: 79, hi: 108, voice: "piano", group: "Perkusyjne" },
   { id: "ksylofon", name: "Ksylofon", clef: "treble", tr: -12, lo: 65, hi: 108, voice: "piano", group: "Perkusyjne" },
-  { id: "marimba", name: "Marimba", clef: "treble", tr: 0, lo: 45, hi: 96, voice: "piano", group: "Perkusyjne" },
+  { id: "marimba", name: "Marimba", clef: "treble", tr: 0, lo: 45, hi: 96, clefs: ["treble", "bass"], voice: "piano", group: "Perkusyjne" },
   { id: "wibrafon", name: "Wibrafon", clef: "treble", tr: 0, lo: 53, hi: 89, voice: "piano", group: "Perkusyjne" },
   /* Głos */
   { id: "sopran", name: "Sopran", clef: "treble", tr: 0, lo: 60, hi: 84, voice: "voice", group: "Głos" },

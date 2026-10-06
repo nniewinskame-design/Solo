@@ -764,7 +764,7 @@ function previewNote(n) {
   try {
     const AC = window.AudioContext || window.webkitAudioContext; previewCtx = previewCtx || new AC(); previewCtx.resume?.();
     const g = previewCtx.createGain(); g.gain.value = 0.16; g.connect(previewCtx.destination);
-    const t = previewCtx.currentTime + 0.02; voiceForPart(S.editSel && S.editSel.pid)(previewCtx, g, 440 * Math.pow(2, (midiOf(p) - 69) / 12), t, t + 0.4);
+    const t = previewCtx.currentTime + 0.02; voiceForPart(S.editSel && S.editSel.pid)(previewCtx, g, 440 * Math.pow(2, (midiOf(p) - partTr(S.editSel && S.editSel.pid) - 69) / 12), t, t + 0.4);
   } catch {}
 }
 /* which written note a height on the staff means: the five lines of the tapped staff give the steps */
@@ -1273,7 +1273,7 @@ async function play(fromMs) {
       const start = Math.max(e.tstamp, fromMs);      // resuming mid-note: the note keeps sounding
       const el = document.getElementById(id);
       const pid = partOfEl(el);
-      ev.push({ id, el, pid, t: (start - fromMs) / 1000 * k, dur: Math.max(0.08, (end - start) / 1000 * k), pitch: v.pitch, silent: pb.mute.size && pb.mute.has(pid) });
+      ev.push({ id, el, pid, t: (start - fromMs) / 1000 * k, dur: Math.max(0.08, (end - start) / 1000 * k), pitch: v.pitch - partTr(pid), silent: pb.mute.size && pb.mute.has(pid) });
     } catch {}
   }));
   if (!ev.length) { hud("Brak nut do odtworzenia"); return; }
@@ -3022,11 +3022,31 @@ $$("#ap-show button").forEach(b => b.addEventListener("click", () => { ap.show =
 /* the melody part: the first kept one that is not a piano */
 const melodyPart = () => (S.parts.find(p => p.keep && !(p.staves > 1 || PIANO_RE.test(p.name))) || S.parts[0]).id;
 function partLabel(p) { const own = partName(p.id) || p.name, solo = S.parts.find(x => !(x.staves > 1 || PIANO_RE.test(x.name))); return p === solo && S.piece.instrument && !/ (I|II|III|IV)$/.test(own) ? S.piece.instrument : own; }
+/* how far a part is written above how it sounds: only for a part named for a transposing instrument */
+function partTr(pid) { try { const i = namedInstr(pid); return i ? i.tr || 0 : 0; } catch { return 0; } }
+/* the notes of one voice of a part as they sound (written pitch minus the instrument's transposition) */
+function soundingLine(xml, pid, voice = "1") {
+  const part = kids(parseXml(xml).documentElement, "part").find(p => p.getAttribute("id") === pid); if (!part) return [];
+  const tr = partTr(pid);
+  return [...part.getElementsByTagName("note")].filter(n => kid(n, "pitch") && !kid(n, "chord") && !kid(n, "grace") && (txt(n, "voice") || "1") === voice).map(n => midiOf(kid(n, "pitch")) - tr);
+}
+/* the 2nd voice already in the score under this melody (its own part, or voice 2 on the melody's staff), in the
+   melody's written pitch, so a 3rd voice is written against it; null when there is none */
+function secondVoiceIn(xml, src) {
+  const trS = partTr(src), mel = soundingLine(xml, src);
+  const cands = [soundingLine(xml, src, "2"), ...S.parts.filter(p => p.id !== src && p.staves < 2).map(p => soundingLine(xml, p.id))]   // a one-line piano or harp voice counts too
+    .filter(l => l.length === mel.length && l.length && l.some((m, i) => m !== mel[i]));
+  if (!cands.length) return null;
+  /* the nearest line to the melody (below it, or above it when a higher instrument plays it) */
+  const dist = l => l.reduce((x, m, i) => x + Math.abs(mel[i] - m), 0), top = cands.reduce((a, b) => dist(b) < dist(a) ? b : a);
+  return top.map(m => m + trS);
+}
 function addPart(xml, instrId, role, opts = {}) {
   const ins = instrById(instrId), src = opts.src || melodyPart();
   const before = new Set(analyseXml(xml).parts.map(p => p.id));
   const sameInstr = instrOfPart(src) === instrId;          // the very same instrument (Puzon ≠ Puzon altowy)
-  let out = makePart(xml, src, { role, instr: ins, interval: opts.int || 0, keepClef: sameInstr && ["voice2", "voice3", "melody"].includes(role) });
+  const v2Midi = role === "voice3" ? secondVoiceIn(xml, src) : null;
+  let out = makePart(xml, src, { role, instr: ins, interval: opts.int || 0, keepClef: sameInstr && ["voice2", "voice3", "melody"].includes(role), v2Midi, srcTr: partTr(src) });
   const newId = analyseXml(out).parts.map(p => p.id).find(id => !before.has(id));
   if (opts.same && newId) return { xml: mergeAsVoice2(out, src, newId), id: null };
   /* the first melody part takes the instrument's name before numbering (so "Puzon" becomes "Puzon I") */
