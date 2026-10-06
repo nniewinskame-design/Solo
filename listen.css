@@ -83,7 +83,7 @@
 /* ---------- tuner: the same stage, the note name inside the orb ---------- */
 .tuner2.lx{position:relative;background:none;padding:4px 0 0;gap:10px;align-items:center;border-radius:0}
 .tuner2.lx::before{display:none}                    /* the orb and its glow carry the state now */
-.tuner2.lx > .lx-glow{left:50%;top:-8%;width:min(130vw,640px);aspect-ratio:1;transform:translateX(-50%);background:radial-gradient(closest-side,color-mix(in oklab,var(--lx-sky) 14%,transparent),transparent);animation:lx-breathe 4s ease-in-out infinite alternate}
+.tuner2.lx > .lx-glow{left:0;top:-8%;width:100%;aspect-ratio:1;background:radial-gradient(closest-side,color-mix(in oklab,var(--lx-sky) 14%,transparent),transparent);animation:lx-breathe 4s ease-in-out infinite alternate}
 .tuner2.lx[data-st="ok"] > .lx-glow{background:radial-gradient(closest-side,color-mix(in oklab,var(--lx-ok) 16%,transparent),transparent)}
 .tn-stage{width:min(82vw,340px,46dvh)}
 #sh-tuner .tn-stage{width:min(64vw,260px,36dvh)}

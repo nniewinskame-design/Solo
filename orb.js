@@ -66,7 +66,7 @@ function createOrb(canvas, opt = {}) {
     st.dark = isDark();
     const A = hueRGB(st.hue), B = hueRGB(ORB_PAIR[st.hue] || "pink"), L = hueRGB("lime"), G = hueRGB("green"), F = hueRGB("blue"), S = hueRGB("coral");
     const halo = g.createRadialGradient(0, 0, 0, 0, 0, 1);
-    halo.addColorStop(0, rgba(A, st.dark ? 0.42 : 0.30)); halo.addColorStop(0.45, rgba(A, st.dark ? 0.16 : 0.12)); halo.addColorStop(1, rgba(A, 0));
+    halo.addColorStop(0, rgba(A, opt.hollow ? (st.dark ? 0.14 : 0.18) : st.dark ? 0.42 : 0.30)); halo.addColorStop(0.45, rgba(A, st.dark ? 0.16 : 0.12)); halo.addColorStop(1, rgba(A, 0));   // hollow: a calm middle for the text
     const core = g.createRadialGradient(-0.32, -0.38, 0, -0.2, -0.25, 0.9);
     /* hollow (text inside, the tuner): a light centre and a saturated rim, so the note name stays readable */
     const hol = !!opt.hollow;
