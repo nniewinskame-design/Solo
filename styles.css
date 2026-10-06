@@ -2001,3 +2001,5 @@ body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,72px) + 9
 .addfig .addpick>*{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;border-radius:10px;background:var(--brand-tint);color:var(--brand-ink);font:600 13px var(--font);cursor:pointer;border:0}
 .addfig .addpick svg.i{width:18px;height:18px;flex:none}
 .addfig figcaption{color:var(--text-3)}
+.addfig .addpick[hidden]{display:none!important}
+.addfig .add[hidden]{display:none!important}

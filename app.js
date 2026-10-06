@@ -2994,7 +2994,10 @@ function drawPending() {
     const f = document.createElement("figure");
     /* another page: from the camera, the photo library or a file (not the camera only) */
     f.className = "addfig";
-    f.innerHTML = `<div class="addpick" role="group" aria-label="Dodaj stronę"><button type="button" data-act="camera">${icon("camera")}<span>Aparat</span></button><label for="in-gallery" role="button" tabindex="0">${icon("image")}<span>Galeria</span></label><label for="in-files" role="button" tabindex="0">${icon("file")}<span>Plik</span></label></div><figcaption>Dodaj stronę</figcaption>`;
+    /* "+" as before; a tap shows the three ways in its place (the camera never opens by itself) */
+    f.innerHTML = `<button class="add" type="button" aria-label="Dodaj stronę" aria-expanded="false">${icon("plus")}</button><div class="addpick" role="group" aria-label="Dodaj stronę" hidden><button type="button" data-act="camera">${icon("camera")}<span>Aparat</span></button><label for="in-gallery" role="button" tabindex="0">${icon("image")}<span>Galeria</span></label><label for="in-files" role="button" tabindex="0">${icon("file")}<span>Plik</span></label></div><figcaption>&nbsp;</figcaption>`;
+    const add = f.querySelector(".add"), pick = f.querySelector(".addpick");
+    add.addEventListener("click", () => { add.hidden = true; pick.hidden = false; add.setAttribute("aria-expanded", "true"); });
     t.appendChild(f);
   }
   $("#btn-read").disabled = !pending.length;
@@ -3389,7 +3392,7 @@ const HOMR_ERR = {
   bad_input: "Tego zdjęcia nie da się odczytać. Spróbuj innego zdjęcia lub zrzutu ekranu.",
   engine_missing: "Nie udało się pobrać modelu nut. Sprawdź internet i spróbuj jeszcze raz.",
   engine_failed: "Odczyt się nie udał. Spróbuj jeszcze raz albo zrób wyraźniejsze zdjęcie.",
-  worker_lost: "Zabrakło pamięci w urządzeniu. Zamknij inne karty i aplikacje, potem spróbuj jeszcze raz.",
+  worker_lost: "Przeglądarka przerwała odczyt: dała Solo za mało pamięci roboczej (to nie miejsce na telefonie). Zamknij inne karty w przeglądarce i spróbuj jeszcze raz.",
   timeout: "Odczyt trwał za długo. Spróbuj jeszcze raz.",
   busy: "Trwa już inny odczyt. Poczekaj chwilę."
 };
@@ -3407,13 +3410,13 @@ function readErrText(code, log, ctx) {
 /* the extra CPU models (about 110 MB) are not fetched over mobile data without asking (R7) */
 const metered = () => { const c = navigator.connection; return !!c && (!!c.saveData || c.type === "cellular"); };
 /* one page, with a watchdog: no progress for STALL_MS stops it as "timeout" */
-function recognizeWatched(rec, blob, signal, onProgress) {
+function recognizeWatched(rec, blob, signal, onProgress, ocr = true) {
   const ctl = new AbortController(); let dog = 0;
   const pet = () => { clearTimeout(dog); dog = setTimeout(() => ctl.abort(Object.assign(new Error("no progress"), { name: "TimeoutError" })), STALL_MS); };
   const stop = () => ctl.abort(signal.reason);
   if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
   pet();
-  return rec.recognizePage(blob, { ocr: true, signal: ctl.signal, onProgress: p => { pet(); onProgress(p); } })
+  return rec.recognizePage(blob, { ocr, signal: ctl.signal, onProgress: p => { pet(); onProgress(p); } })
     .finally(() => { clearTimeout(dog); signal.removeEventListener("abort", stop); });
 }
 async function readPage(pg, i, n, signal, ctx) {
@@ -3433,12 +3436,14 @@ async function readPage(pg, i, n, signal, ctx) {
     } else if (stage === "ocr") { $("#ck1-t").textContent = "Przygotowanie"; ck("ck3", "now"); $("#ck3-t").textContent = `${pre}Odczytywanie napisów (tempo, określenia)`; bar(total ? done / total : null); }
     else if (stage === "xml") { ck("ck3", "now"); }
   };
-  const blob = await pageBlob(pg);
+  let blob = await pageBlob(pg);
   let again = 0;
   for (;;) {
-    const rec = await getRecognizer(ctx.prefer, signal);
+    /* low memory (a phone ran out once): one thread, a smaller picture and no reading of the words above the staves */
+    if (ctx.lowMem && !blob.small) { const url = URL.createObjectURL(blob); try { const im = await loadImage(url); const r2 = await canvasToJpegBlob(im, 1800, 0.88); blob = r2.blob; blob.small = true; } catch (e) { console.warn(e); } finally { URL.revokeObjectURL(url); } }
+    const rec = await getRecognizer(ctx.lowMem ? "wasm" : ctx.prefer, signal);
     /* the reader also reads the text above each staff: tempo, rit., a tempo, rehearsal letters (see attachTexts) */
-    const r = await recognizeWatched(rec, blob, signal, progress);
+    const r = await recognizeWatched(rec, blob, signal, progress, !ctx.lowMem);
     if (r.ok) {
       if (rec.backend === "webgpu") store.set("homrGpuOk", "1");
       if (ctx.prefer) { store.set("homrPrefer", ctx.prefer); store.set("homrPreferAt", String(Date.now())); }
@@ -3457,8 +3462,9 @@ async function readPage(pg, i, n, signal, ctx) {
       if (metered()) throw fail("Na tym urządzeniu odczyt potrzebuje jeszcze ok. 110 MB. Połącz się z Wi-Fi i spróbuj jeszcze raz.");
       ctx.prefer = "wasm-threads"; continue;
     }
-    /* a failed engine (often out of memory after several pages) gets one more go, started afresh */
-    if ((r.error === "engine_failed" || r.error === "worker_lost" || r.error === "busy") && again++ < 1) continue;
+    /* a failed engine (often out of memory after several pages) gets one more go, started afresh, and then a last one in
+       the low-memory way (this and the following pages) */
+    if ((r.error === "engine_failed" || r.error === "worker_lost" || r.error === "busy") && again++ < 2) { if (again === 2 || r.error === "worker_lost" || /memory|Aborted\(|allocat|RangeError|OOM/i.test(log)) ctx.lowMem = true; continue; }
     if (r.error === "not_music" && n > 1) return { xml: "", staves: [], texts: [], empty: true };    // a cover or a page of text (B-14)
     throw fail(readErrText(r.error, log, ctx));
   }
