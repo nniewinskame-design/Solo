@@ -54,34 +54,42 @@ const DEGREES = [
   { d: 0, lof: 0, minor: false, fn: "T" }, { d: 3, lof: -1, minor: false, fn: "S" }, { d: 4, lof: 1, minor: false, fn: "D" },
   { d: 5, lof: 3, minor: true, fn: "Tp" }, { d: 1, lof: 2, minor: true, fn: "Sp" }, { d: 2, lof: 4, minor: true, fn: "Dp" }
 ];
+/* minor (§9): natural minor for t and s, harmonic minor for D (the raised leading tone: E major in A minor); the side
+   chords are the major triads III (tP), VI (sP) and VII (dP). Same order as DEGREES, so the functions line up. */
+const DEGREES_MINOR = [
+  { d: 0, lof: 0, minor: true, fn: "T" }, { d: 3, lof: -1, minor: true, fn: "S" }, { d: 4, lof: 1, minor: false, fn: "D" },
+  { d: 2, lof: -3, minor: false, fn: "Tp" }, { d: 5, lof: -4, minor: false, fn: "Sp" }, { d: 6, lof: -2, minor: false, fn: "Dp" }
+];
+const degreesOf = mode => mode === "minor" ? DEGREES_MINOR : DEGREES;
 /* The chord of each bar, chosen for the whole tune at once (iastate "Harmonizing a melody", Open Music Theory
    harmonic syntax, folk-song practice):
-   - melody notes weigh by length and place: beat 1 ×1, beat 3 of 4/4 ×0.6, other beats ×0.3, off the beat ×0.15,
-     a note reached by a leap ×1.5; prominent notes should be chord tones
+   - melody notes weigh by length and place: beat 1 ×1, the bar's middle beat (3 of 4/4, 4 of 6/8) ×0.6, other beats
+     ×0.3, off the beat ×0.15, a note reached by a leap ×1.5; prominent notes should be chord tones
    - few chords: T and D(7) first, then S, rarely the side chords (vi, ii, iii)
    - functions move T → S → D → T; a step back D → S is avoided
-   - the last bar is the tonic, the bar before it prefers the dominant (a cadence) */
+   - the last bar is the tonic, the bar before it prefers the dominant (a cadence)
+   - a pickup bar is counted from where it really starts (the end of a full bar) */
 const VOCAB = { T: 1, D: 1, S: 0.85, Tp: 0.45, Sp: 0.45, Dp: 0.12 };
 const FUNC = { T: "T", Tp: "T", Dp: "T", S: "S", Sp: "S", D: "D" };
 function chordsForBars(xml, partId) {
   const doc = parseXml(xml), part = kids(doc.documentElement, "part").find(p => p.getAttribute("id") === partId) || kids(doc.documentElement, "part")[0];
   if (!part) return [];
-  let fifths = 0, mode = "major", div = 1, beats = 4, bt = 4, prevMidi = null;
+  let fifths = 0, mode = "major", prevMidi = null, guess = null;
   const bars = [];
-  kids(part, "measure").forEach((m, i) => {
+  barInfo(part).forEach(({ m, div, beats, bt, full, len, pickup }) => {
     kids(m, "attributes").forEach(a => {
-      const k = kid(a, "key"); if (k) { fifths = parseInt(txt(k, "fifths"), 10) || 0; mode = txt(k, "mode") === "minor" ? "minor" : "major"; }
-      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      const k = kid(a, "key"); if (k) { fifths = parseInt(txt(k, "fifths"), 10) || 0; const md = txt(k, "mode"); mode = md === "minor" ? "minor" : md ? "major" : (guess = guess || detectMode(part, fifths)); }
     });
     const tonicLof = fifths + (mode === "minor" ? 3 : 0), beat = bt === 8 && beats % 3 === 0 ? 1.5 : 4 / bt;
-    const w = new Array(12).fill(0); let pos = 0, any = false;
+    const nb = Math.round(beats * 4 / bt / beat), mid = nb % 2 === 0 && nb > 2 ? nb / 2 : nb === 2 && beat === 1.5 ? 1 : -1;
+    const w = new Array(12).fill(0); let pos = pickup ? (full - len) / div : 0, any = false;
+    const v1 = (kids(m, "note")[0] && txt(kids(m, "note")[0], "voice")) || "1";
     kids(m, "note").forEach(n => {
-      if (kid(n, "chord") || kid(n, "grace")) return;
+      if (kid(n, "chord") || kid(n, "grace") || (txt(n, "voice") || "1") !== v1) return;
       const d = (parseFloat(txt(n, "duration")) || 0) / div, p = kid(n, "pitch");
       if (p) {
         const midi = midiOf(p), onBeat = Math.abs(pos / beat - Math.round(pos / beat)) < 1e-6, bi = Math.round(pos / beat);
-        let mw = !onBeat ? 0.15 : bi === 0 ? 1 : (beats === 4 && bt === 4 && bi === 2) ? 0.6 : 0.3;
+        let mw = !onBeat ? 0.15 : bi === 0 ? 1 : bi === mid ? 0.6 : 0.3;
         if (prevMidi !== null && Math.abs(midi - prevMidi) > 2) mw *= 1.5;
         w[((midi % 12) + 12) % 12] += Math.max(0.25, d) * mw; prevMidi = midi; any = true;
       }
@@ -91,7 +99,7 @@ function chordsForBars(xml, partId) {
   });
   const pcOfLof = l => ((l * 7) % 12 + 12) % 12;
   /* how well each chord fits each bar */
-  const fit = bars.map(b => DEGREES.map(g => {
+  const fit = bars.map(b => degreesOf(b.mode).map(g => {
     if (!b.any) return 0;
     const root = pcOfLof(b.tonicLof + g.lof), tri = [root, (root + (g.minor ? 3 : 4)) % 12, (root + 7) % 12];
     const tot = b.w.reduce((a, x) => a + x, 0) || 1;
@@ -111,13 +119,15 @@ function chordsForBars(xml, partId) {
   let k = D[n - 1].reduce((b, x, kk) => x > D[n - 1][b] ? kk : b, 0); const pick = new Array(n);
   for (let i = n - 1; i >= 0; i--) { pick[i] = k; k = F[i][k]; }
   return bars.map((b, i) => {
-    const g = DEGREES[pick[i]], root = pcOfLof(b.tonicLof + g.lof);
+    const g = degreesOf(b.mode)[pick[i]], root = pcOfLof(b.tonicLof + g.lof);
     return { bar: i + 1, ...g, seventh: g.fn === "D" && b.w[(root + 10) % 12] > 0, tonicLof: b.tonicLof, mode: b.mode };
   });
 }
+/* Polish function names: major T S D Tp Sp Dp; minor t s D tP sP dP (the dominant is major: harmonic minor) */
+const FN_MINOR = { T: "t", S: "s", D: "D", Tp: "tP", Sp: "sP", Dp: "dP" };
 function chordLabel(c, shiftFifths, kind) {
   if (!c) return "";
-  if (kind === "fn") return (c.mode === "minor" ? ({ T: "tP", S: "sP", D: "dP", Tp: "t", Sp: "s", Dp: "D" }[c.fn] || c.fn) : c.fn) + (c.seventh ? "7" : "");
+  if (kind === "fn") return (c.mode === "minor" ? FN_MINOR[c.fn] || c.fn : c.fn) + (c.seventh ? "7" : "");
   const p = lofToPitch(c.tonicLof + c.lof + shiftFifths), name = plName(p.letter, p.alter);
   return (c.minor ? name.toLowerCase() : name) + (c.seventh ? "7" : "");
 }

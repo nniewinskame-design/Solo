@@ -142,7 +142,7 @@ function analyseXml(xml) {
   const firstKept = parts.find(p => p.keep);
   const pEl = firstKept && kids(root, "part").find(p => p.getAttribute("id") === firstKept.id);
   const keyEl = pEl && pEl.getElementsByTagName("key")[0];
-  if (keyEl) { fifths = parseInt(txt(keyEl, "fifths") || "0", 10) || 0; mode = txt(keyEl, "mode") === "minor" ? "minor" : "major"; }
+  if (keyEl) { fifths = parseInt(txt(keyEl, "fifths") || "0", 10) || 0; const md = txt(keyEl, "mode"); mode = md === "minor" || (!md && detectMode(pEl, fifths) === "minor") ? "minor" : "major"; }
   let title = txt(kid(root, "work") || root, "work-title") || txt(root, "movement-title");
   if (!title) { const c = $$("credit credit-words", doc)[0]; if (c) title = c.textContent.trim(); }
   const ident = kid(root, "identification");
@@ -361,6 +361,50 @@ function keyAlter(fifths, step) {
   return 0;
 }
 function clefId(c) { const s = txt(c, "sign"), l = txt(c, "line"); return s === "C" ? "C" + (l || "3") : s; }
+/* how long a bar really is (in divisions): the furthest any voice reaches (<backup>/<forward> followed) */
+function barFill(m) {
+  let pos = 0, max = 0;
+  [...m.children].forEach(el => {
+    const d = parseFloat(txt(el, "duration")) || 0;
+    if (el.tagName === "backup") pos -= d; else if (el.tagName === "forward") pos += d;
+    else if (el.tagName === "note" && !kid(el, "chord") && !kid(el, "grace")) pos += d;
+    max = Math.max(max, pos);
+  });
+  return max;
+}
+/* bars of a part: divisions, full length and real length (a pickup or the bar that completes it is shorter, §12) */
+function barInfo(part) {
+  let div = 1, beats = 4, bt = 4; const ms = kids(part, "measure");
+  return ms.map((m, i) => {
+    kids(m, "attributes").forEach(a => {
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+    });
+    const full = div * 4 * beats / bt, f = barFill(m), whole = [...m.getElementsByTagName("rest")].some(r => r.getAttribute("measure") === "yes");
+    const len = !whole && f > 0 && f < full - 1e-6 && (i === 0 || i === ms.length - 1) ? f : full;
+    return { m, div, beats, bt, full, len, pickup: i === 0 && len < full };
+  });
+}
+/* note values for a length in quarters: one value when there is one (dotted too), else tied values that keep the beat
+   visible (5/4 = dotted half + half, 9/8 = dotted half + dotted quarter) */
+const NOTE_VAL = [[6, "whole", 1], [4, "whole", 0], [3, "half", 1], [2, "half", 0], [1.5, "quarter", 1], [1, "quarter", 0], [0.75, "eighth", 1], [0.5, "eighth", 0], [0.25, "16th", 0]];
+function noteValues(q) {
+  const one = NOTE_VAL.find(v => Math.abs(v[0] - q) < 1e-6); if (one) return [one];
+  const out = []; let left = q;
+  while (left > 1e-6) { const v = NOTE_VAL.find(x => x[0] <= left + 1e-6 && x[0] <= 3) || NOTE_VAL[NOTE_VAL.length - 1]; out.push(v); left -= v[0]; if (out.length > 16) break; }
+  return out;
+}
+/* major or minor when the file does not say (<mode> missing: homr, ready tunes, new melodies): a tune that ends on the
+   relative minor's tonic, or ends in its tonic triad and uses its raised leading tone, is minor */
+function detectMode(part, fifths) {
+  const pcs = [...part.getElementsByTagName("note")].filter(n => !kid(n, "chord") && !kid(n, "grace") && kid(n, "pitch")).map(n => { const p = kid(n, "pitch"); return ((LETTER_PC[txt(p, "step")] + (parseFloat(txt(p, "alter")) || 0)) % 12 + 12) % 12; });
+  if (!pcs.length) return "major";
+  const pc = l => { const p = lofToPitch(l); return ((LETTER_PC[p.letter] + p.alter) % 12 + 12) % 12; };
+  const last = pcs[pcs.length - 1], minT = pc(fifths + 3), majT = pc(fifths), lt = pc(fifths + 8);
+  if (last === minT) return "minor";
+  if (last === majT) return "major";
+  return pcs.filter(x => x === lt).length >= 2 && [minT, pc(fifths), pc(fifths + 4)].includes(last) ? "minor" : "major";
+}
 /* T33: the reader knows a note is E-flat but writes no accidental sign, so Verovio drew a plain E
    (this is what looked like "flats are not read"). Add the signs as they are printed: against the key,
    once per bar and line position. Safe to run on any score: notes that already have a sign are kept. */
