@@ -1905,3 +1905,18 @@ body.immersive .loopbar{display:none}
 .bar-pane #bar-clefnote{display:none}
 body.editmode .ed-info:has(+ .bar-pane:not([hidden])){display:none}
 .meter .mt-own.on input,.meter .mt-own.on i,.meter .mt-own.on input::placeholder{color:#fff!important}
+
+/* ---- metre as beats: dots, − n uderzeń +, the note value ---- */
+.bpick,.metro #m-meter{display:flex;flex-direction:column;gap:10px;align-items:center}
+.bp-dots{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;max-width:100%}
+.bp-dot{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;padding:0}
+.bp-dot::before{content:"";width:14px;height:14px;border-radius:50%;background:var(--hairline-2);transition:transform 160ms var(--ease-out),background 160ms}
+.bp-dot[aria-pressed="true"]::before{background:var(--brand);transform:scale(1.2)}
+.bp-dot:disabled{opacity:1}
+.bp-ctl,.metro #m-meter{width:100%}
+.mc-row{display:flex;align-items:center;justify-content:center;gap:16px}
+.mc-n{min-width:9ch;text-align:center;font:600 16px var(--font);font-variant-numeric:tabular-nums;color:var(--text)}
+.mc-unit{grid-template-columns:repeat(4,1fr)!important;width:min(100%,280px);margin:8px auto 0}
+.mc-unit button{min-height:40px}
+.mc-unit svg.i{width:22px;height:22px}
+.bp-val{text-align:center;margin:0;font-variant-numeric:tabular-nums}

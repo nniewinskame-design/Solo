@@ -1322,22 +1322,33 @@ function buildBarSheet() {
 /* any metre (Nat, 7 Oct): four common ones one tap away, and a small field shaped like a chip to type any other:
    the top number 1-32 (an additive 3+2+2 too: the phone keypad has "+"), the bottom one 1, 2, 4, 8, 16 or 32 */
 const METERS = ["4/4", "3/4", "2/4", "6/8"], METER_BT = [1, 2, 4, 8, 16, 32];
-function meterPicker(box, cur, pick) {
-  const [t0, b0] = String(cur || "4/4").split("/"), common = METERS.includes(cur);
-  box.innerHTML = `<div class="chips mt-chips">${METERS.map(v => `<button type="button" data-v="${v}" aria-pressed="${v === cur}">${v}</button>`).join("")}
-    <label class="mt-own${common ? "" : " on"}"><input class="mt-top" inputmode="tel" autocomplete="off" maxlength="8" placeholder="7" aria-label="Metrum: górna liczba" value="${common ? "" : esc(t0)}"><i>/</i><input class="mt-bt" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="8" aria-label="Metrum: dolna liczba" value="${common ? "" : esc(b0)}"></label></div>
-    <p class="note mt-hint" hidden>Dolna liczba: 2, 4, 8 lub 16.</p>`;
-  const own = $(".mt-own", box), top = $(".mt-top", box), bot = $(".mt-bt", box), hint = $(".mt-hint", box);
-  const okTop = t => /^\d{1,2}(\+\d{1,2})*$/.test(t) && beatsOf(t) >= 1 && beatsOf(t) <= 32, okBot = b => METER_BT.includes(+b) && /^\d+$/.test(b);
-  const mark = v => { $$(".mt-chips [data-v]", box).forEach(c => c.setAttribute("aria-pressed", String(c.dataset.v === v))); own.classList.toggle("on", !!v && !METERS.includes(v)); };
-  box.onclick = e => { const c = e.target.closest("[data-v]"); if (!c) return; top.value = bot.value = ""; hint.hidden = true; own.classList.remove("bad"); mark(c.dataset.v); pick(c.dataset.v); };
-  const check = final => {
-    const t = top.value.replace(/\s/g, ""), b = bot.value.trim();
-    const bad = (t && !okTop(t)) || (b && !okBot(b)); own.classList.toggle("bad", !!bad); hint.hidden = !(b && !okBot(b));
-    if (final && t && b && !bad) { const v = `${t}/${b}`; mark(v); pick(v); }
+function meterPicker(box, cur, pick) { beatPicker(box, cur, pick); }
+/* the metre as beats (Nat, 7 Oct, Soundbrenner-like), the same everywhere: − / + set how many beats, the note value
+   says what one beat is (half, quarter, eighth, 16th). In the notes the dots also group the beats: a dot tapped on
+   starts a group, so 7 eighths with groups at 1, 4 and 6 are written 3+2+2/8. The metronome uses the same controls;
+   its dots are its accents. */
+const METER_UNITS = [[2, "n-half", "Półnuta"], [4, "n-quarter", "Ćwierćnuta"], [8, "n-eighth", "Ósemka"], [16, "n-16th", "Szesnastka"]];
+function meterControls(box, beats, unit, onBeats, onUnit) {
+  box.innerHTML = `<div class="mc-row"><button type="button" class="pill round" data-mc="-1" aria-label="Mniej uderzeń"><svg class="i"><use href="#minus"/></svg></button>
+      <b class="mc-n" aria-live="polite">${beats} ${plural(beats, "uderzenie", "uderzenia", "uderzeń")}</b>
+      <button type="button" class="pill round" data-mc="1" aria-label="Więcej uderzeń"><svg class="i"><use href="#plus"/></svg></button></div>
+    <div class="seg mc-unit" role="group" aria-label="Jedno uderzenie to">${METER_UNITS.map(([u, ic, nm]) => `<button type="button" data-u="${u}" aria-pressed="${u === unit}" aria-label="${nm}"><svg class="i"><use href="#${ic}"/></svg></button>`).join("")}</div>`;
+  box.querySelectorAll("[data-mc]").forEach(b => { b.disabled = beats + +b.dataset.mc < 1 || beats + +b.dataset.mc > 16; b.onclick = () => onBeats(beats + +b.dataset.mc); });
+  box.querySelectorAll("[data-u]").forEach(b => (b.onclick = () => onUnit(+b.dataset.u)));
+}
+function beatPicker(box, cur, pick) {
+  const [top, bt] = String(cur || "4/4").split("/");
+  let unit = [2, 4, 8, 16].includes(+bt) ? +bt : 4, beats = Math.max(1, Math.min(16, beatsOf(top) || 4));
+  const starts = new Set([0]); String(top).split("+").reduce((acc, g) => { starts.add(acc); return acc + (parseInt(g, 10) || 0); }, 0);
+  const value = () => { const st = [...starts].filter(i => i < beats).sort((a, b) => a - b), g = st.map((x, i) => (st[i + 1] ?? beats) - x); return `${g.length > 1 ? g.join("+") : beats}/${unit}`; };
+  const draw = () => {
+    box.classList.add("bpick");
+    box.innerHTML = `<div class="bp-dots" role="group" aria-label="Uderzenia: dotknij, żeby zacząć grupę">${Array.from({ length: beats }, (_, i) => `<button type="button" class="bp-dot" data-i="${i}" aria-pressed="${starts.has(i)}" ${i ? "" : "disabled"} aria-label="Uderzenie ${i + 1}${starts.has(i) ? ", początek grupy" : ""}"></button>`).join("")}</div>
+      <div class="bp-ctl"></div><p class="note bp-val">${esc(value())}${starts.size > 1 ? "" : " · dotknij kropki, żeby podzielić na grupy"}</p>`;
+    box.querySelectorAll(".bp-dot").forEach(d => (d.onclick = () => { const i = +d.dataset.i; if (starts.has(i)) starts.delete(i); else starts.add(i); draw(); pick(value()); }));
+    meterControls($(".bp-ctl", box), beats, unit, n => { beats = n; [...starts].forEach(i => { if (i >= n) starts.delete(i); }); draw(); pick(value()); }, u => { unit = u; draw(); pick(value()); });
   };
-  [top, bot].forEach(x => { x.oninput = () => check(false); x.onchange = () => check(true); x.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); x === top ? bot.focus() : bot.blur(); } }; });
-  top.addEventListener("input", () => { if (/^\d{2}$/.test(top.value) && +top.value > 3 && !top.value.includes("+")) bot.focus(); });
+  draw();
 }
 function barOp(op, val) {
   const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml), parts = [...doc.getElementsByTagName("part")];
@@ -3646,7 +3657,7 @@ function buildToolsSheet() {
 function syncMetro() {
   $("#m-bpm").textContent = metro.bpm;
   const nm = $("#m-name"); if (nm) nm.textContent = tempoName(metro.bpm);
-  meterPicker($("#m-meter"), metro.meter, v => setMetroMeter(v, true));
+  meterControls($("#m-meter"), metro.beats, metro.unit || 4, n => setMetroMeter(`${n}/${metro.unit || 4}`, true), u => setMetroMeter(`${metro.beats}/${u}`, true));
   const acc = metroAcc();
   $("#m-beats").innerHTML = acc.map((a, i) => `<button type="button" class="${i === 0 ? "one" : ""}" data-i="${i}" data-acc="${a ? 1 : 0}" aria-pressed="${a}" aria-label="Akcent na ${i + 1}"></button>`).join("");
   metro.dots = $$("#m-beats > *");
