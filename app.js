@@ -661,7 +661,7 @@ function openPiece(piece, settings) {
   }
   updateTitles();
   S.only = null; S.keepBefore = null;              // "Tylko ta" belongs to the piece it was used in
-  $("#peek").hidden = true; pb.loop = null; pb.trainer = null; pb.mute.clear(); pb.resumeMs = 0; $("#loopbar").hidden = true; $("#btn-loop").setAttribute("aria-pressed", "false"); S.undo = []; S.redo = []; S.editSel = null; S.keepSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
+  $("#peek").hidden = true; pb.loop = null; pb.trainer = null; pb.mute.clear(); pb.resumeMs = 0; $("#loopbar").hidden = true; $("#btn-loop").setAttribute("aria-pressed", "false"); S.undo = []; S.redo = []; S.editSel = null; S.keepSel = null; S.barSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
   $("#pages").innerHTML = `<div class="loading-page"><span class="spinner"></span></div>`;
   $("#scroller").scrollTop = 0;
   if (S.view !== "score") go("score");
@@ -820,7 +820,7 @@ async function doRender() {
     if (doubt.size) { const order = drawnBars(xml); $$("#pages g.measure").forEach((g, i) => g.classList.toggle("doubt", doubt.has(order[i]))); }
     S.fromMs = 0; S.fromBar = -1;
     if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
-    S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip(); markRange();
+    S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip(); markRange(); markBarSel();
     requestAnimationFrame(() => { drawLoop(); syncLoopUi(); });
     S.baseBpm = scoreBpm(); $("#tp-bpm").textContent = String(curBpm());
     if (openSheetId === "more") syncTempo();
@@ -911,7 +911,7 @@ function edTab(name) {
   $$("#editbar [data-tab-ed]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tabEd === name)));
   $$("#editbar .ed-pane").forEach(p => (p.hidden = p.dataset.pane !== name));
   S.edTab = name;
-  if (name === "bar") buildBarSheet();          // Takt sits in the tool panel like the other tools (the music stays in view)
+  if (name === "bar") buildBarSheet(); else markBarSel();          // Takt sits in the tool panel like the other tools (the music stays in view)
 }
 function selectNote(sel) {
   S.editSel = sel; if (sel) S.editMode = true;
@@ -971,6 +971,15 @@ function pitchAtY(staff, y, part, m) {
 /* a tap in correcting mode: on (or right next to) a note → that note; elsewhere on a staff → a new note of the
    chosen length at that height, in place of the rest there (the bar keeps adding up) */
 function editTap(e) {
+  /* with Takt open a tap chooses the bar (and the part) Takt works on; it never writes a note */
+  if (S.edTab === "bar") {
+    const m = e.target.closest("g.measure") || measureAt(e.clientX, e.clientY); if (!m) return;
+    const di = measureEls().indexOf(m), bar = drawnBars(processedXml())[di]; if (!bar) return;
+    const any = [...m.querySelectorAll("g.note, g.rest, g.mRest")].sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return Math.abs(ra.top + ra.height / 2 - e.clientY) - Math.abs(rb.top + rb.height / 2 - e.clientY); })[0];
+    const loc = any && locateNote(any);
+    S.editSel = null; S.barSel = { bar, pid: loc && !loc.piano ? loc.pid : readingPartId() };
+    buildBarSheet(); return;
+  }
   const near = e.target.closest("g.note") || nearestNote(e.clientX, e.clientY, 22, "g.note");
   if (near) { const sel = locateNote(near); if (sel && sel.piano) { hud("Partii fortepianu nie poprawisz tutaj.", 3000); return; } if (sel) { selectNote(sel); previewNote(xmlNoteAt(parseXml(S.piece.xml), sel)?.n); } return; }
   const restEl = e.target.closest("g.rest, g.mRest") || nearestNote(e.clientX, e.clientY, 60, "g.rest, g.mRest");
@@ -1284,6 +1293,7 @@ function refreshInfo() {
 /* ---------------- the bar sheet: metre, clef, key signature, adding and removing bars, tempo ---------------- */
 function barTarget() {
   if (S.editSel) return { bar: S.editSel.bar, pid: S.editSel.pid };
+  if (S.editMode && S.barSel) return S.barSel;          // a bar tapped while Takt is open
   const b = S.fromBar >= 0 ? drawnBars(processedXml())[S.fromBar] : null;
   return { bar: b || 1, pid: readingPartId() };
 }
@@ -1298,14 +1308,22 @@ function putAttr(a, el) {
   const after = ATTR_ORDER.indexOf(el.tagName), nx = [...a.children].find(c => ATTR_ORDER.indexOf(c.tagName) > after);
   a.insertBefore(el, nx || null);
 }
+function markBarSel() {
+  $$("#pages g.measure.bsel").forEach(g => g.classList.remove("bsel"));
+  if (!S.editMode || S.edTab !== "bar") return;
+  const { bar } = barTarget(), di = drawnBars(processedXml()).indexOf(bar), g = measureEls()[di]; if (g) g.classList.add("bsel");
+}
 function buildBarSheet() {
   const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml);
   const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || doc.getElementsByTagName("part")[0];
   const m = part && kids(part, "measure")[bar - 1]; if (!m) return;
-  $("#sh-bar-t").textContent = `Takt ${bar}`;
+  $("#sh-bar-t").innerHTML = `Utwór <small>· klucz i metrum od taktu ${bar} (dotknij taktu w nutach, żeby wybrać inny)</small>`;
+  /* the bar Takt works on is marked in the music */
+  markBarSel();
   $("#bar-note").textContent = bar === 1 ? "Metrum, klucz i znaki zmieniają się w całym utworze." : `Metrum, klucz i znaki zmieniają się od taktu ${bar} do końca.`;
   const t = timeAt(part, m), c = clefAt(part, m), k = keyAt(part, m);
-  meterPicker($("#bar-time"), t, v => barOp("time", v));
+  /* the metre is written when the choice settles (one change, one undo step), not at every tap */
+  meterInline($("#bar-time"), t, v => { clearTimeout(buildBarSheet.t); buildBarSheet.t = setTimeout(() => barOp("time", v), 800); });
   $$("#bar-clef button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c)));
   $("#bar-clef-t").textContent = `Klucz · ${partLabel(S.parts.find(x => x.id === pid) || { id: pid, name: "" }) || "ta partia"}`;
   $$("#bar-clefmode button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m === barClefMode)));
@@ -1335,6 +1353,20 @@ function meterControls(box, beats, unit, onBeats, onUnit) {
     <div class="seg mc-unit" role="group" aria-label="Jedno uderzenie to">${METER_UNITS.map(([u, ic, nm]) => `<button type="button" data-u="${u}" aria-pressed="${u === unit}" aria-label="${nm}"><svg class="i"><use href="#${ic}"/></svg></button>`).join("")}</div>`;
   box.querySelectorAll("[data-mc]").forEach(b => { b.disabled = beats + +b.dataset.mc < 1 || beats + +b.dataset.mc > 16; b.onclick = () => onBeats(beats + +b.dataset.mc); });
   box.querySelectorAll("[data-u]").forEach(b => (b.onclick = () => onUnit(+b.dataset.u)));
+}
+/* the metre in one line for the editor: "4/4", − / + for the beats, the note value */
+function meterInline(box, cur, pick) {
+  const [top, bt] = String(cur || "4/4").split("/");
+  let beats = Math.max(1, Math.min(16, beatsOf(top) || 4)), unit = [2, 4, 8, 16].includes(+bt) ? +bt : 4, shown = String(cur || "4/4");
+  const draw = () => {
+    box.innerHTML = `<b class="mi-val">${esc(shown)}</b>
+      <button type="button" class="pill round sm" data-d="-1" aria-label="Mniej uderzeń" ${beats <= 1 ? "disabled" : ""}><svg class="i"><use href="#minus"/></svg></button>
+      <button type="button" class="pill round sm" data-d="1" aria-label="Więcej uderzeń" ${beats >= 16 ? "disabled" : ""}><svg class="i"><use href="#plus"/></svg></button>
+      <div class="seg mi-unit" role="group" aria-label="Jedno uderzenie to">${METER_UNITS.map(([u, ic, nm]) => `<button type="button" data-u="${u}" aria-pressed="${u === unit}" aria-label="${nm}"><svg class="i"><use href="#${ic}"/></svg></button>`).join("")}</div>`;
+    box.querySelectorAll("[data-d]").forEach(b => (b.onclick = () => { beats = Math.max(1, Math.min(16, beats + +b.dataset.d)); shown = `${beats}/${unit}`; draw(); pick(shown); }));
+    box.querySelectorAll("[data-u]").forEach(b => (b.onclick = () => { unit = +b.dataset.u; shown = `${beats}/${unit}`; draw(); pick(shown); }));
+  };
+  draw();
 }
 function beatPicker(box, cur, pick) {
   const [top, bt] = String(cur || "4/4").split("/");
@@ -2773,7 +2805,7 @@ function hudAct(msg, label, fn, ms = 4000) {
 /* a long press on a piece in the library: open, send, rename, delete */
 let cardPiece = null, cardEl = null;
 function openCardSheet(p, el) { cardPiece = p; cardEl = el; $("#sh-card-t").textContent = p.title || "Bez tytułu"; openSheet("card"); }
-$("#cd-open").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => openFromLibrary(p)); });
+$("#cd-open")?.addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => openFromLibrary(p)); });
 $("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => openSheet("share")); }); });
 $("#cd-rename").addEventListener("click", () => { const el = cardEl, p = cardPiece; closeSheetThen(() => { const t = el && el.querySelector(".t"); if (t) inlineEdit(t, { value: p.title || "", placeholder: "Tytuł", onSave: v => renameInLibrary(p, "title", v) }); }); });
 $("#cd-del").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => askDelete(p, true)); });

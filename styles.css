@@ -1938,3 +1938,18 @@ body.editmode .ed-info:has(+ .bar-pane:not([hidden])){display:none}
 .m-names{justify-content:center;gap:6px}
 .m-names .m-tap{background:none!important;box-shadow:inset 0 0 0 1px var(--hairline-2)!important;color:var(--brand-ink)!important}
 .m-names .m-tap{min-width:0!important;width:auto!important;height:34px!important;min-height:34px!important;padding:0 14px!important;font:500 14px var(--font)!important;border-radius:999px!important}
+/* Takt panel fixes: round beat dots, plain bar rows, the chosen bar marked in the music */
+.bar-pane .bp-dot{width:34px!important;height:34px!important;min-width:34px!important;min-height:34px!important;flex:none!important;background:none!important;border-radius:50%!important;padding:0!important}
+.bar-pane .list{background:var(--surface)!important}
+.bar-pane .list .li{background:none!important;border-radius:0!important;width:100%!important;max-width:none!important;justify-content:flex-start!important;display:flex!important;min-height:44px!important}
+.bar-pane .bp-title small{font:500 12px var(--font);color:var(--text-3)}
+#pages g.measure.bsel>rect,#pages g.measure.bsel .staff>path{stroke:var(--brand)}
+#pages g.measure.bsel{fill:inherit}
+#pages g.measure.bsel>.staff>path{stroke:var(--brand);stroke-width:1.6px}
+/* metre in one line (editor) */
+.m-inline{display:flex;align-items:center;gap:8px}
+.m-inline .mi-val{min-width:3.4ch;font:650 18px var(--font);font-variant-numeric:tabular-nums;color:var(--text)}
+.m-inline .pill.round.sm{width:34px!important;height:34px!important;min-height:34px!important;flex:none!important}
+.m-inline .mi-unit{display:grid;grid-template-columns:repeat(4,1fr);margin:0 0 0 auto!important;flex:1;max-width:176px;padding:2px}
+.m-inline .mi-unit button{min-height:32px!important;padding:0!important}
+.m-inline .mi-unit svg.i{width:18px;height:18px}

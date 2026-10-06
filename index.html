@@ -184,14 +184,8 @@
     <div class="ed-pane bar-pane" data-pane="bar" hidden>
 
   <p class="note first" id="bar-note" hidden></p>
-  <b class="bp-title" id="sh-bar-t">Takt</b>
-  <h3 class="lbl">Metrum</h3>
-  <div class="meter" id="bar-time"></div>
-  <h3 class="lbl" id="bar-clef-t">Klucz tej partii</h3>
-  <div class="chips" id="bar-clef"><button data-v="G">Wiolinowy</button><button data-v="F">Basowy</button><button data-v="C4">Tenorowy</button><button data-v="C3">Altowy</button></div>
-  <div class="seg" id="bar-clefmode" style="margin-top:10px"><button data-m="sound">Dźwięki zostają</button><button data-m="lines">Nuty zostają na liniach</button></div>
-  <p class="note" id="bar-clefnote"></p>
-  <h3 class="lbl">Tonacja utworu</h3>
+  <b class="bp-title" id="sh-bar-t">Utwór</b>
+  <h3 class="lbl">Tonacja</h3>
   <div class="keypick" id="bar-keypick">
     <div class="kp-row"><button type="button" class="pill round sm" data-kd="-1" aria-label="Tonacja z jednym bemolem więcej"><svg class="i"><use href="#minus"/></svg></button>
       <div class="kp-val" aria-live="polite"><b id="bar-keyname"></b><small id="bar-keysig"></small></div>
@@ -200,6 +194,12 @@
   </div>
   <details class="bar-fix"><summary>Popraw tylko znaki przy kluczu</summary>
   <label class="ask-row" for="bar-key"><span>Znaki przy kluczu</span><select id="bar-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label></details>
+  <h3 class="lbl" id="bar-clef-t">Klucz tej partii</h3>
+  <div class="chips" id="bar-clef"><button data-v="G">Wiolinowy</button><button data-v="F">Basowy</button><button data-v="C4">Tenorowy</button><button data-v="C3">Altowy</button></div>
+  <div class="seg" id="bar-clefmode" style="margin-top:10px"><button data-m="sound">Dźwięki zostają</button><button data-m="lines">Nuty zostają na liniach</button></div>
+  <p class="note" id="bar-clefnote"></p>
+  <h3 class="lbl">Metrum</h3>
+  <div class="m-inline" id="bar-time"></div>
   <h3 class="lbl">Takty</h3>
   <div class="list">
     <button class="li tap" id="bar-add"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt za</b></span></button>
@@ -255,7 +255,7 @@
       <button data-ed="slur" aria-label="Łuk do następnej nuty"><svg class="i"><use href="#slur"/></svg></button>
     </div>
     <div class="ed-tabs" role="tablist">
-      <button role="tab" data-tab-ed="bar" class="ed-bar" aria-selected="false" aria-label="Takt: metrum, klucz, tonacja"><svg class="i"><use href="#bar"/></svg><span>Takt</span></button>
+      <button role="tab" data-tab-ed="bar" class="ed-bar" aria-selected="false" aria-label="Utwór: tonacja, klucz, metrum, takty"><svg class="i"><use href="#bar"/></svg><span>Utwór</span></button>
       <button role="tab" data-tab-ed="pitch" aria-selected="true" aria-label="Wysokość"><svg class="i"><use href="#drag"/></svg><span>Wysokość</span></button>
       <button role="tab" data-tab-ed="len" aria-selected="false" aria-label="Długość"><svg class="i"><use href="#dur"/></svg><span>Długość</span></button>
       <button role="tab" data-tab-ed="acc" aria-selected="false" aria-label="Znaki chromatyczne"><svg class="i"><use href="#sharp"/></svg><span>♯ ♭</span></button>
@@ -492,7 +492,7 @@
     <div class="chips m-names" id="m-names">
       <button type="button" data-bpm="50">Largo</button><button type="button" data-bpm="70">Adagio</button><button type="button" data-bpm="92">Andante</button>
       <button type="button" data-bpm="112">Moderato</button><button type="button" data-bpm="132">Allegro</button><button type="button" data-bpm="176">Presto</button>
-      <button type="button" class="m-tap" id="m-tap" aria-label="Stuknij tempo kilka razy">Stuknij</button>
+      <button type="button" class="m-tap" id="m-tap" aria-label="Wystukaj tempo kilka razy">Wystukaj</button>
     </div>
     <div class="meter" id="m-meter"></div>
     <button class="btn primary wide big" id="m-go"><svg class="i"><use href="#play"/></svg><span>Start</span></button>
@@ -750,7 +750,6 @@
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-card-t"></h2><button class="done ghost" data-close>Anuluj</button></div>
   <div class="tiles first">
-    <button class="tile" id="cd-open"><svg class="i"><use href="#music"/></svg><span>Otwórz</span></button>
     <button class="tile" id="cd-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
     <button class="tile" id="cd-dup"><svg class="i"><use href="#copy"/></svg><span>Duplikuj</span></button>
     <button class="tile" id="cd-rename"><svg class="i"><use href="#pencil"/></svg><span>Nazwa</span></button>
