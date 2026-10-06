@@ -129,15 +129,22 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
   const src = parts.find(p => p.getAttribute("id") === srcId) || parts[0]; if (!src) return xml;
   let one = soloScore(doc, src);
   let srcFifths = 0; { const k = src.getElementsByTagName("key")[0]; if (k) srcFifths = parseInt(txt(k, "fifths"), 10) || 0; }
-  if (role === "voice2") {
-    const v = parseXml(secondVoiceXml(one, srcId, { interval: interval || 3, level: interval ? 1 : 3 }));
-    const ps = kids(v.documentElement, "part"); one = soloScore(v, ps[ps.length - 1]);
+  if (role === "voice2" || role === "voice3") {
+    /* interval 0: chosen to move smoothly; 9: chord tones; 3/6/5: parallel. The third voice sits lower:
+       the second chord tone below, or the interval taken twice (a third → a fifth below) */
+    const third = role === "voice3";
+    const vx = interval === 9 ? chordVoiceXml(one, srcId, third ? 2 : 1)
+      : secondVoiceXml(one, srcId, { interval: third ? ({ 0: 6, 3: 5, 6: 8, 5: 8 }[interval] || 6) : (interval || 3), level: interval || third ? 1 : 3 });
+    const v = parseXml(vx), ps = kids(v.documentElement, "part"); one = soloScore(v, ps[ps.length - 1]);
   } else if (role === "chords" || role === "bass") {
     one = chordPartXml(one, srcId, role);
   }
   /* sounding range of the instrument: move by octaves so the part sits in its middle */
   const od = parseXml(one), op = kids(od.documentElement, "part")[0];
-  const mid = (instr.lo + instr.hi) / 2, med = median(partPitches(op)), oct = Math.round((mid - med) / 12);
+  /* octaves move only when the part would leave the instrument's range (a lower voice stays below its melody) */
+  const ps = partPitches(op), lo = Math.min(...ps), hi = Math.max(...ps);
+  let oct = 0; while (lo + 12 * oct < instr.lo && oct < 4) oct++; while (hi + 12 * oct > instr.hi && oct > -4) oct--;
+  if (lo + 12 * oct < instr.lo - 2) { const med = median(ps); oct = Math.round(((instr.lo + instr.hi) / 2 - med) / 12); }
   let iv = { d: 7 * oct, s: 12 * oct };
   const t = TR_IV[instr.tr] || TR_IV[0]; iv = fixEnharmonic({ d: iv.d + t.d, s: iv.s + t.s }, srcFifths);
   const wd = parseXml(transposeXmlString(one, iv)), wp = kids(wd.documentElement, "part")[0];
@@ -193,5 +200,36 @@ function mergeAsVoice2(xml, srcId, newId) {
     });
   });
   b.remove(); const pl = kid(root, "part-list"); kids(pl, "score-part").forEach(sp => { if (sp.getAttribute("id") === newId) sp.remove(); });
+  return new XMLSerializer().serializeToString(doc);
+}
+
+/* a voice from the chord under the melody: for each note the nearest chord tone below it (nth = 1: the next one
+   down, the second voice; nth = 2: the one below that, the third voice). Chords come from chordsForBars. */
+function chordVoiceXml(xml, partId, nth = 1) {
+  const doc = parseXml(xml), root = doc.documentElement, src = kids(root, "part").find(p => p.getAttribute("id") === partId); if (!src) return xml;
+  const chords = chordsForBars(xml, partId), ids = new Set(kids(root, "part").map(p => p.getAttribute("id")));
+  let n = 2; while (ids.has("P" + n)) n++; const id = "P" + n, part = src.cloneNode(true); part.setAttribute("id", id);
+  let fifths = 0;
+  kids(part, "measure").forEach((m, i) => {
+    kids(m, "attributes").forEach(a => { const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0; });
+    kids(m, "direction").forEach(d => d.remove());
+    const c = chords[i]; if (!c) return;
+    const r = c.tonicLof + c.lof, pcs = [r, r + (c.minor ? -3 : 4), r + 1].map(l => { const p = lofToPitch(l); return ((([0, 2, 4, 5, 7, 9, 11][STEP_I[p.letter]] + p.alter) % 12) + 12) % 12; });
+    kids(m, "note").forEach(note => {
+      kids(note, "accidental").forEach(a => a.remove()); kids(note, "lyric").forEach(a => a.remove());
+      const p = kid(note, "pitch"); if (!p) return;
+      let midi = midiOf(p), found = 0;
+      for (let t = midi - 1; t > midi - 13; t--) if (pcs.includes(((t % 12) + 12) % 12) && ++found === nth) { midi = t; break; }
+      if (!found) midi -= nth === 1 ? 3 : 7;
+      /* write it with the key's spelling: the nearest letter whose pitch matches */
+      const idx0 = parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")];
+      let best = null; for (let d = 0; d <= 8; d++) { const idx = idx0 - d, st = STEP_N[((idx % 7) + 7) % 7], oc = Math.floor(idx / 7), base = 12 * (oc + 1) + [0, 2, 4, 5, 7, 9, 11][STEP_I[st]], al = midi - base; if (Math.abs(al) <= 1 && (!best || Math.abs(al - keyAlter(fifths, st)) < Math.abs(best.al - keyAlter(fifths, best.st)))) best = { st, oc, al }; }
+      if (!best) return;
+      kid(p, "step").textContent = best.st; kid(p, "octave").textContent = String(best.oc);
+      let a = kid(p, "alter"); if (best.al) { if (!a) { a = doc.createElement("alter"); p.insertBefore(a, kid(p, "octave")); } a.textContent = String(best.al); } else if (a) a.remove();
+    });
+  });
+  root.appendChild(part);
+  const pl = kid(root, "part-list"), sp = doc.createElement("score-part"); sp.setAttribute("id", id); sp.innerHTML = `<part-name>Głos</part-name>`; pl.appendChild(sp);
   return new XMLSerializer().serializeToString(doc);
 }

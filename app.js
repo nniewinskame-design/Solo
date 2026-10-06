@@ -528,7 +528,7 @@ function updateTitles() {
   const seg = (k, text, ph) => `<button class="seg-t${text ? "" : " ph"}" data-edit="${k}">${esc(text || ph)}</button>`;
   $("#s-sub").innerHTML = [
     seg("composer", S.piece.composer, "Kompozytor"),
-    seg("instrument", S.piece.instrument, "Instrument"),
+    S.parts.filter(p => p.keep).length > 1 ? "" : seg("instrument", S.piece.instrument, "Instrument"),
     CLEF_PL[curClef()] ? seg("clef", "klucz " + CLEF_PL[curClef()]) : "",
     seg("key", curKeyName())
   ].filter(Boolean).join('<span class="dot" aria-hidden="true">·</span>');
@@ -1299,13 +1299,15 @@ function cursorMap(ev) {
   return ons;
 }
 function follow(token) {
-  const ps = playState, sc = $("#scroller"), pg = $("#pages"), ons = cursorMap(ps.ev), nBars = measureEls().length;
+  const ps = playState, sc = $("#scroller"), pg = $("#pages"), nBars = measureEls().length;
+  let ons = cursorMap(ps.ev), mapW = pg.offsetWidth;
   if (!ons.length) return;
   const line = document.createElement("div"); line.className = "playline"; pg.appendChild(line);
   const light = document.createElement("div"); light.className = "barlight"; pg.appendChild(light);
   let cur = -1, lastSys = null, lit = [];
   const step = () => {
     if (!playState || token !== playToken) return;
+    if (pg.offsetWidth !== mapW) { ons = cursorMap(ps.ev); mapW = pg.offsetWidth; cur = -1; lastSys = null; }     // zoomed: measure again
     let T = rangeTime(ps) + ps.countLen;                         // time in the file (count-in included)
     if (T < ps.countLen) {                                       // counting in: the first bar waits, lit
       const o = ons[0]; light.style.cssText = `width:${o.mw}px;height:${o.h}px;transform:translate(${o.mx}px,${o.top}px);opacity:.6`;
@@ -1410,7 +1412,9 @@ function drawLoop() {
     const sys = m.closest("g.system") || m, r = m.getBoundingClientRect(), row = rows.get(sys) || { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
     row.l = Math.min(row.l, r.left); row.r = Math.max(row.r, r.right); row.t = Math.min(row.t, r.top); row.b = Math.max(row.b, r.bottom); rows.set(sys, row);
   });
-  rows.forEach(r => { const d = document.createElement("div"); d.className = "loopband"; d.style.cssText = `left:${r.l - pr.left}px;top:${r.t - pr.top - 4}px;width:${r.r - r.l}px;height:${r.b - r.t + 8}px`; pg.appendChild(d); });
+  /* in % of the pages, so zooming in and out keeps the band on its bars */
+  const W = pr.width || 1, H = pr.height || 1, pc = v => (v * 100).toFixed(3) + "%";
+  rows.forEach(r => { const d = document.createElement("div"); d.className = "loopband"; d.style.cssText = `left:${pc((r.l - pr.left) / W)};top:${pc((r.t - pr.top - 4) / H)};width:${pc((r.r - r.l) / W)};height:${pc((r.b - r.t + 8) / H)}`; pg.appendChild(d); });
 }
 function syncLoopUi() {
   $("#btn-loop").setAttribute("aria-pressed", String(!!(pb.loop || pb.pick)));
@@ -1637,8 +1641,7 @@ async function shareXml() {
 }
 $("#btn-share").addEventListener("click", () => openSheet("share"));
 $("#btn-print").addEventListener("click", () => closeSheetThen(printScore));
-$("#btn-pdf").addEventListener("click", () => closeSheetThen(savePdf));
-$("#btn-xml").addEventListener("click", () => closeSheetThen(shareXml));
+
 
 /* ---------------- Clef sheet ---------------- */
 const glyphBox = {};
@@ -2803,8 +2806,7 @@ function renderPartStrip() {
   const box = $("#pstrip"); if (!box || !S.piece) return;
   const only = S.only;
   box.innerHTML = S.parts.map(p => {
-    const own = partName(p.id) || p.name, solo = S.parts.find(x => !(x.staves > 1 || PIANO_RE.test(x.name)));
-    const nm = p === solo && S.piece.instrument && !/ (I|II|III|IV)$/.test(own) ? S.piece.instrument : own;
+    const nm = partLabel(p);
     return `<button class="pchip${only === p.id ? " only" : ""}${pb.mute.has(p.id) ? " muted" : ""}${p.keep ? "" : " off"}" data-pid="${p.id}">${icon(p.staves > 1 || PIANO_RE.test(nm) ? "piano" : "trombone")}<span>${esc(nm)}</span></button>`;
   }).join("") + `<button class="pchip add" data-sheet="addpart" aria-label="Dodaj partię">${icon("plus")}</button>`;
 }
@@ -2883,6 +2885,10 @@ function apStep2(id) {
   ap.show = "staff";
   $("#ap-for").textContent = ins.name; $("#sh-addpart-t").textContent = "Co ma grać?";
   $("#ap-showbox").hidden = !sameInstr;
+  /* with several parts: which one the new part follows */
+  ap.src = ap.src && S.parts.some(p => p.id === ap.src) ? ap.src : melodyPart();
+  $("#ap-srcbox").hidden = S.parts.length < 2;
+  $("#ap-src").innerHTML = S.parts.map(p => `<button class="ichip" data-src="${p.id}" aria-pressed="${p.id === ap.src}">${esc(partLabel(p))}</button>`).join("");
   $("#ap-step1").hidden = true; $("#ap-step2").hidden = false; $("#ap-back").hidden = false;
   syncAp();
 }
@@ -2890,19 +2896,21 @@ function syncAp() {
   $$("#ap-role [data-role]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.role === ap.role)));
   $$("#ap-int button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.int === ap.int)));
   $$("#ap-show button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.show === ap.show)));
-  $("#ap-v2opts").hidden = ap.role !== "voice2";
+  $("#ap-v2opts").hidden = ap.role !== "voice2" && ap.role !== "voice3";
 }
 $("#ap-back").addEventListener("click", buildAddPartSheet);
 $$("#ap-role [data-role]").forEach(b => b.addEventListener("click", () => { ap.role = b.dataset.role; syncAp(); }));
+$("#ap-src").addEventListener("click", e => { const b = e.target.closest("[data-src]"); if (!b) return; ap.src = b.dataset.src; $$("#ap-src [data-src]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); });
 $$("#ap-int button").forEach(b => b.addEventListener("click", () => { ap.int = +b.dataset.int; syncAp(); }));
 $$("#ap-show button").forEach(b => b.addEventListener("click", () => { ap.show = b.dataset.show; syncAp(); }));
 /* the melody part: the first kept one that is not a piano */
 const melodyPart = () => (S.parts.find(p => p.keep && !(p.staves > 1 || PIANO_RE.test(p.name))) || S.parts[0]).id;
+function partLabel(p) { const own = partName(p.id) || p.name, solo = S.parts.find(x => !(x.staves > 1 || PIANO_RE.test(x.name))); return p === solo && S.piece.instrument && !/ (I|II|III|IV)$/.test(own) ? S.piece.instrument : own; }
 function addPart(xml, instrId, role, opts = {}) {
-  const ins = instrById(instrId), src = melodyPart();
+  const ins = instrById(instrId), src = opts.src || melodyPart();
   const before = new Set(analyseXml(xml).parts.map(p => p.id));
   const sameInstr = S.piece.instrument && ins.name.split(" ")[0] === S.piece.instrument.split(" ")[0];
-  let out = makePart(xml, src, { role, instr: ins, interval: opts.int || 0, keepClef: sameInstr && (role === "voice2" || role === "melody") });
+  let out = makePart(xml, src, { role, instr: ins, interval: opts.int || 0, keepClef: sameInstr && ["voice2", "voice3", "melody"].includes(role) });
   const newId = analyseXml(out).parts.map(p => p.id).find(id => !before.has(id));
   if (opts.same && newId) return { xml: mergeAsVoice2(out, src, newId), id: null };
   /* the first melody part takes the instrument's name before numbering (so "Puzon" becomes "Puzon I") */
@@ -2913,7 +2921,7 @@ function addPart(xml, instrId, role, opts = {}) {
 }
 $("#ap-go").addEventListener("click", () => {
   try {
-    const r = addPart(S.piece.xml, ap.instr, ap.role, { int: ap.int, same: ap.role === "voice2" && ap.show === "same" && !$("#ap-showbox").hidden });
+    const r = addPart(S.piece.xml, ap.instr, ap.role, { int: ap.int, src: ap.src, same: (ap.role === "voice2" || ap.role === "voice3") && ap.show === "same" && !$("#ap-showbox").hidden });
     const rep = ap.replace; ap.replace = null;
     if (rep && r.id) r.xml = replacePart(r.xml, rep, r.id);
     pushUndo(); closeSheetThen(() => { applyNewXml(r.xml, r.id); hudUndo(rep ? "Zmieniono partię" : "Dodano partię"); });

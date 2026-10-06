@@ -554,12 +554,11 @@
 <div class="sheet" id="sh-more" role="dialog" aria-modal="true" aria-labelledby="sh-more-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-more-t">Narzędzia</h2><button class="done" data-close>Gotowe</button></div>
-  <div class="tiles first">
+  <div class="tiles three first">
     <button class="tile" data-sheet="key"><svg class="i"><use href="#updown"/></svg><span>Tonacja</span></button>
     <button class="tile" data-sheet="clef"><svg class="i"><use href="#clef"/></svg><span>Klucz</span></button>
     <button class="tile" data-sheet="addpart"><svg class="i"><use href="#plus"/></svg><span>Dodaj partię</span></button>
     <button class="tile" data-sheet="orig" id="row-orig"><svg class="i"><use href="#image"/></svg><span>Oryginał</span></button>
-    <button class="tile" id="btn-share"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
     <button class="tile" data-sheet="tuner"><svg class="i"><use href="#fork"/></svg><span>Stroik</span></button>
     <button class="tile" data-sheet="tools"><svg class="i"><use href="#metronome"/></svg><span>Metronom</span></button>
   </div>
@@ -583,9 +582,8 @@
   </div>
   <h3 class="lbl">Plik</h3>
   <div class="list">
+    <button class="li tap" id="btn-share"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Wyślij</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" id="btn-pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" id="btn-xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-restore" hidden><span class="ic"><svg class="i"><use href="#undo"/></svg></span><span class="grow"><b>Przywróć odczyt</b></span></button>
     <button class="li tap" id="btn-report"><span class="ic"><svg class="i"><use href="#warn"/></svg></span><span class="grow"><b>Zgłoś problem</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap danger" id="btn-delete"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń</b></span></button>
@@ -605,15 +603,18 @@
   </div>
   <div id="ap-step2" hidden>
     <h3 class="lbl first" id="ap-for"></h3>
+    <div id="ap-srcbox"><h3 class="lbl">Względem</h3><div class="ichips" id="ap-src"></div></div>
+    <h3 class="lbl">Gra</h3>
     <div class="cards" id="ap-role">
       <button class="card2" data-role="voice2"><svg class="i"><use href="#n-eighth"/></svg><span><b>Drugi głos</b></span></button>
+      <button class="card2" data-role="voice3"><svg class="i"><use href="#n-16th"/></svg><span><b>Trzeci głos</b></span></button>
       <button class="card2" data-role="melody"><svg class="i"><use href="#music"/></svg><span><b>Unisono</b></span></button>
       <button class="card2" data-role="chords"><svg class="i"><use href="#piano"/></svg><span><b>Akordy</b></span></button>
       <button class="card2" data-role="bass"><svg class="i"><use href="#n-half"/></svg><span><b>Bas</b></span></button>
     </div>
     <div id="ap-v2opts">
-      <h3 class="lbl">Odstęp</h3>
-      <div class="seg" id="ap-int"><button data-int="0">Sam dobierze</button><button data-int="3">Tercje</button><button data-int="6">Seksty</button><button data-int="5">Kwinty</button></div>
+      <h3 class="lbl">Zasada</h3>
+      <div class="seg three" id="ap-int"><button data-int="0">Sam dobierze</button><button data-int="9">Akordowo</button><button data-int="3">Tercje</button><button data-int="6">Seksty</button><button data-int="5">Kwinty</button></div>
       <div id="ap-showbox"><h3 class="lbl">Jak pokazać</h3>
       <div class="seg" id="ap-show"><button data-show="staff">Osobna pięciolinia</button><button data-show="same">Na tej samej pięciolinii</button></div></div>
     </div>

@@ -184,7 +184,11 @@ function processedXml() {
   credit(S.piece.title || "Bez tytułu", 1050, 2850, "center");
   credit("\u00a0", 1050, 2780, "center");
   credit("\u00a0", 1050, 2740, "center");
-  [[150, "left", S.piece.instrument], [1950, "right", S.piece.composer]].forEach(([x, j, t]) => {
+  /* the instrument in the corner only when one part is shown (in a score each staff carries its own name) */
+  const shown = S.parts.filter(p => p.keep), single = shown.length === 1;
+  let corner = "";
+  if (single && pl) { const sp = kids(pl, "score-part").find(x => x.getAttribute("id") === shown[0].id), nm = sp ? txt(sp, "part-name").trim() : ""; corner = / (I|II|III|IV)$/.test(nm) ? nm : (S.piece.instrument || nm); }
+  [[150, "left", corner], [1950, "right", S.piece.composer]].forEach(([x, j, t]) => {
     credit("\u00a0", x, 2800, j); credit("\u00a0", x, 2760, j); credit(t || "\u00a0", x, 2700, j);
   });
   // the solo part is named after the instrument in the header, so the score never says two different things
