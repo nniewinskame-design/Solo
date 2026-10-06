@@ -207,7 +207,7 @@ function renderOnb() {
     const m = instrById(p.main);
     h = `<h2 class="h-l">Gotowe</h2>
       <div class="onb-sum"><b>${esc(m.name)}</b><span>${esc(profileSummary(p))}</span></div>
-      <div class="onb-own"><svg class="i"><use href="#mic"/></svg><div class="grow"><b>Twój dźwięk</b><small>Solo zagra nuty Twoim brzmieniem.</small></div><button class="btn small tinted" id="onb-own">Nagraj</button></div>`;
+      <div class="onb-own"><svg class="i"><use href="#mic"/></svg><div class="grow"><b>Twoje brzmienie</b><small>Solo zagra nuty Twoim brzmieniem.</small></div><button class="btn small tinted" id="onb-own">Nagraj</button></div>`;
     next = "Zacznij";
   }
   box.innerHTML = h; box.scrollTop = 0;
@@ -224,7 +224,7 @@ $("#onb-body").addEventListener("click", e => {
   if (b.dataset.read) { p.reading = b.dataset.read; renderOnb(); return; }
   if (b.dataset.role) { p.role = b.dataset.role; renderOnb(); return; }
   if (b.dataset.a4) { p.a4 = +b.dataset.a4; renderOnb(); return; }
-  if (b.id === "onb-own") { finishOnb(false); setTimeout(() => openSheet("tuner"), 300); }
+  if (b.id === "onb-own") { finishOnb(false); setTimeout(() => openOwnFlow(), 300); }      // straight to the recording (it no longer lives in the tuner)
 });
 $("#onb-next").addEventListener("click", () => { if (ONB_STEPS[onb.step] === "done") finishOnb(false); else onbGo(1); });
 $("#onb-back").addEventListener("click", () => onbGo(-1));

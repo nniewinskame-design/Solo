@@ -3527,7 +3527,7 @@ $("#in-backup").addEventListener("change", async e => {
   st.textContent = [`Wczytano ${n} ${plural(n, "utwór", "utwory", "utworów")}.`,
     newer ? `${newer} ${plural(newer, "utwór masz", "utwory masz", "utworów masz")} już w nowszej wersji.` : "",
     bad ? `Pominięte, bo uszkodzone: ${bad}.` : "",
-    snd ? `Twój dźwięk: ${snd} ${plural(snd, "instrument", "instrumenty", "instrumentów")}.` : "",
+    snd ? `Twoje brzmienia: ${snd} ${plural(snd, "instrument", "instrumenty", "instrumentów")}.` : "",
     prefs && fresh ? "Profil i ustawienia też." : ""].filter(Boolean).join(" ");
   syncSettings(); if (prefs && typeof renderProfile === "function") renderProfile();
 });
