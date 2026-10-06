@@ -1011,3 +1011,75 @@ body.onhome.sheet-add .fab{transform:rotate(45deg)}
 .pchip,.ichip,.tile,.ed-pane button,.tabbar button,.dock.transport .tool{transition:transform 300ms var(--spring),background-color 200ms ease,color 200ms ease}
 .pchip:active,.ichip:active,.tile:active,.ed-pane button:active,.tabbar button:active,.dock.transport .tool:active{transform:scale(.94);transition-duration:120ms}
 @media (prefers-reduced-motion:reduce){.card .thumb,.fab,.pchip,.ichip,.tile,.ed-pane button,.tabbar button,.dock.transport .tool{transition:none}}
+/* no text selection or callout from long presses (only fields can be selected) */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text}
+/* the title stays in the exact centre: equal columns left and right */
+#score .sbar{grid-template-columns:96px minmax(0,1fr) 96px}
+#btn-back{justify-self:start}
+.sbar-r{justify-self:end;display:flex;gap:8px}
+.stitle{text-align:center;justify-self:center;max-width:100%}
+.share-tiles{grid-template-columns:repeat(4,1fr);margin-top:6px}
+/* profile in "Ja" */
+.prof{display:flex;flex-direction:column;gap:14px}
+.prof .seg{margin:0}
+.prof .sub{font:600 13px var(--sans);color:var(--ink-3);margin:2px 2px -6px}
+#score .stitle .a:not(.editing){white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-align:center;line-height:1.15;overflow-wrap:anywhere}
+#score .stitle .b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* collections: chips under the search, a piece can be in several */
+.cols{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:2px -16px 14px;padding:2px 16px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 24px),transparent)}
+.cols::-webkit-scrollbar{display:none}
+.cchip{flex:none;display:flex;align-items:center;gap:6px;height:40px;padding:0 16px;border-radius:99px;background:var(--fill);color:var(--ink);font:600 15px var(--sans);transition:background-color 220ms ease,color 220ms ease,transform 300ms var(--spring)}
+.cchip .i{width:18px;height:18px}
+.cchip[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+.cchip:active{transform:scale(.94)}
+.cchip.add{padding:0 12px;color:var(--primary)}
+.emojis{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:14px 0}
+.emojis button{height:52px;border-radius:14px;background:var(--fill);font-size:24px;border:2px solid transparent}
+.emojis button[aria-pressed="true"]{background:var(--card);border-color:var(--primary)}
+.btn.danger{color:#C93A2E}
+#sh-card .tiles{grid-template-columns:repeat(3,1fr)}
+#tp-fill{transition:none}
+.cdot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+.emojis button{display:flex;align-items:center;justify-content:center}
+.emojis button i{width:24px;height:24px;border-radius:50%}
+#addto-list .li{gap:12px}
+/* own sound: a card in the tuner, and a full-screen guided recording */
+.owncard{background:var(--card);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow-1,0 1px 4px rgba(0,0,0,.06))}
+.own-head{display:flex;align-items:center;gap:12px}
+.own-head .grow{display:flex;flex-direction:column;gap:2px}.own-head b{font-size:17px}.own-head small{color:var(--ink-2);font-size:14px}
+.own-ic{width:44px;height:44px;border-radius:50%;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);display:flex;align-items:center;justify-content:center}
+.own-acts{display:grid;grid-template-columns:1fr auto;gap:8px}
+.own-acts .btn{justify-content:center}
+#own-play{width:52px;padding:0}
+#own-play[hidden]{display:none}
+.owncard .li{padding:0;background:none;min-height:44px}
+.ownf{background:var(--paper);color:var(--ink)}
+.ownf-panel{height:100%;max-width:520px;margin:0 auto;display:flex;flex-direction:column;padding:calc(14px + var(--safe-t)) 16px calc(16px + var(--safe-b))}
+.ownf-sp{width:44px}
+.onb-dots i.done{background:var(--tn-ok);opacity:1}
+.ownf-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px}
+.ownf-acts{display:flex;flex-direction:column;gap:10px}
+.of-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.of-row .btn{justify-content:center}
+.of-hero{width:96px;height:96px;border-radius:50%;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);display:flex;align-items:center;justify-content:center}
+.of-hero .i{width:44px;height:44px}
+.of-step{font:600 14px var(--sans);color:var(--ink-3);margin:0}
+.of-ringbox{position:relative;width:min(70vw,280px);aspect-ratio:1}
+.of-svg{width:100%;height:100%;transform:rotate(-90deg)}
+.of-track{fill:none;stroke:var(--fill);stroke-width:10}
+.of-fill{fill:none;stroke:var(--tn-ok);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 120ms linear}
+.of-note{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:color 200ms}
+.of-note b{font:800 96px/1 var(--sans);letter-spacing:-.02em}
+.of-note span{font-size:15px;color:var(--ink-2)}
+.of-note .i{width:96px;height:96px;color:var(--tn-ok);stroke-width:2.4}
+.of-note[data-st="ok"] b{color:var(--tn-ok)}.of-note[data-st="near"] b{color:var(--tn-near)}.of-note[data-st="far"] b{color:var(--tn-far)}
+.of-meter{position:relative;width:min(70vw,260px);height:6px;border-radius:3px;background:var(--fill)}
+.of-zone{position:absolute;left:calc(50% - 18px);width:36px;top:0;bottom:0;border-radius:3px;background:color-mix(in srgb,var(--tn-ok) 45%,transparent)}
+.of-dot{position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:var(--ink);transition:transform 120ms ease-out}
+.of-hint{font:700 20px var(--sans);margin:4px 0 0;min-height:26px}
+.of-pos{font-size:15px;color:var(--ink-2);margin:-8px 0 0}
+.of-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:100%}
+.of-tile{aspect-ratio:1;border-radius:16px;background:var(--fill);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--ink)}
+.of-tile b{font-size:22px}.of-tile .i{width:18px;height:18px}
+.of-tile.ok{background:color-mix(in srgb,var(--tn-ok) 14%,transparent);color:var(--tn-ok)}

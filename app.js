@@ -116,6 +116,7 @@ function tabShown(v, from) {
   if (from === "tunerv" && v !== "tunerv" && tuner.on) tunerStop();
   if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerStart(); }
   if (v === "metrov") { $("#metro-tab-host").appendChild($("#metro-ui")); buildToolsSheet(); }
+  if (v === "settings" && typeof renderProfile === "function") renderProfile();
 }
 function goTab(v) {
   if (v === S.view) { const el = $("#" + v); el && el.scrollTo({ top: 0, behavior: "smooth" }); return; }
@@ -244,7 +245,7 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet, share: buildShareSheet })[name]?.();
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet, share: buildShareSheet, instr: () => buildInstrSheet(), col: buildColSheet, addto: buildAddtoSheet, card: syncFavTile })[name]?.();
   openSheetId = name; document.body.classList.toggle("sheet-add", name === "add");
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
@@ -255,7 +256,7 @@ function hideSheet(instant, keepScrim) {
   if (openSheetId === "pdf" && pickPdfPages.cancel) { const c = pickPdfPages.cancel; setTimeout(c, 0); }
   if (!openSheetId) return;
   const name = openSheetId, el = $("#sh-" + name);
-  openSheetId = null; document.body.classList.remove("sheet-add");
+  openSheetId = null; document.body.classList.remove("sheet-add"); if (name === "addpart" && typeof ap !== "undefined") setTimeout(() => { if (openSheetId !== "addpart") ap.replace = null; }, 400);
   const v = sheetVelocity; sheetVelocity = undefined;
   if (instant) {
     ctl(el).spring.stop(); el.hidden = true; el.style.transform = ""; el.classList.remove("out", "pre");
@@ -412,10 +413,14 @@ async function refreshLibrary(animate) {
   try { all = await DB.all(); } catch {}
   const q = $("#lib-search").value.trim().toLowerCase();
   const sort = $("#lib-sort").value;
-  const list = all.filter(p => !q || ((p.title || "") + " " + (p.composer || "")).toLowerCase().includes(q));
+  renderCols(all);
+  const list = all.filter(p => q ? ((p.title || "") + " " + (p.composer || "")).toLowerCase().includes(q) : inCol(p, all));
   const by = { title: (a, b) => (a.title || "").localeCompare(b.title || "", "pl"), composer: (a, b) => (a.composer || "￿").localeCompare(b.composer || "￿", "pl"),
     created: (a, b) => (b.created || 0) - (a.created || 0), opened: (a, b) => (b.opened || b.updated || 0) - (a.opened || a.updated || 0) };
   list.sort(by[sort] || by.opened);
+  const uc = cols().find(c => c.id === libCol);
+  if (uc && !q) list.sort((a, b) => uc.items.indexOf(a.id) - uc.items.indexOf(b.id));     // a collection keeps its own order
+  $("#col-empty").hidden = !!(list.length || q || libCol === "all");
   const latest = all.length > 1 ? all.slice().sort(by.opened)[0].id : null;
   const G = $("#lib-grid"); G.innerHTML = "";
   G.classList.toggle("stagger", !refreshLibrary.done && canAnimate()); refreshLibrary.done = true;
@@ -1623,10 +1628,10 @@ function octForClef(from, to) {
   return t[g(from) + ">" + g(to)] || 0;
 }
 function buildClefSheet() {
-  const opts = [["bass", "Basowy", "F"], ["tenor", "Tenorowy", "C"], ["alto", "Altowy", "C"], ["treble", "Wiolinowy", "G"], ["keep", `Jak w oryginale (${CLEF_PL[S.srcClef] || "bez zmian"})`, null]];
+  const opts = [["bass", "Basowy", "F"], ["tenor", "Tenorowy", "C"], ["alto", "Altowy", "C"], ["treble", "Wiolinowy", "G"]];
   const L = $("#clef-list"); L.innerHTML = "";
   opts.forEach(([v, label, gl]) => {
-    const b = document.createElement("button"); b.className = "li tap" + (S.clef === v ? " on" : "");
+    const b = document.createElement("button"); b.className = "li tap" + (S.clef === v || (S.clef === "keep" && S.srcClef === v) ? " on" : "");
     b.innerHTML = `${gl ? glyph(gl) : `<span class="clefg">${icon("left")}</span>`}<span class="grow"><b>${esc(label)}</b></span><span class="radio"></span>`;
     b.addEventListener("click", () => {
       const prev = curClef(), next = v === "keep" ? S.srcClef : v;
@@ -2325,7 +2330,7 @@ $$("#themeseg button").forEach(b => b.addEventListener("click", () => {
 async function saveBackup() {
   const all = await DB.all();
   if (!all.length) return 0;
-  download(`solo-kopia-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: "solo", version: 2, saved: Date.now(), pieces: all }), "application/json");
+  download(`solo-kopia-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: "solo", version: 2, saved: Date.now(), pieces: all, cols: cols(), favs: favs() }), "application/json");
   store.set("backupAt", String(Date.now()));
   const el = $("#backup-nudge"); if (el) el.hidden = true;
   return all.length;
@@ -2357,6 +2362,8 @@ $("#in-backup").addEventListener("change", async e => {
   try {
     const j = JSON.parse(await f.text());
     if (!["solo", "pulpit-nutowy"].includes(j.app) || !Array.isArray(j.pieces)) throw new Error();
+    if (Array.isArray(j.cols)) { const mine = cols(); j.cols.forEach(c => { const m = mine.find(x => x.id === c.id); if (m) m.items = [...new Set([...m.items, ...c.items])]; else mine.push(c); }); saveCols(mine); }
+    if (Array.isArray(j.favs)) saveFavs([...new Set([...favs(), ...j.favs])]);
     const have = new Map((await DB.all()).map(p => [p.id, p]));
     let n = 0, newer = 0;
     for (const p of j.pieces) {
@@ -2372,7 +2379,9 @@ $("#in-backup").addEventListener("change", async e => {
   } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
 });
 
-const NEWS = { "3.8": ["Zakładki: Nuty, Stroik, Metronom, Ja. Nuty dodajesz jednym „+”: zdjęcie, galeria, plik, mail, nowa melodia.",
+const NEWS = { "3.8": ["Twój dźwięk: 5 dźwięków nagrywanych ze stroikiem, każdy zapisuje się sam, gdy jest czysty.",
+  "Kolekcje w bibliotece: Ulubione, Ostatnie, Moje i własne. Utwór może być w kilku.",
+  "Dotknij partii: tylko ta, wycisz, zmień, drukuj, wyślij, usuń.","Zakładki: Nuty, Stroik, Metronom, Ja. Nuty dodajesz jednym „+”: zdjęcie, galeria, plik, mail, nowa melodia.",
   "Przytrzymaj utwór: otwórz, wyślij, zmień nazwę, usuń.",
   "Ponad 50 instrumentów w rodzinach, z wyszukiwarką. Każda partia osobno do PDF.",
   "Na start kilka pytań: instrument (kilka), strój, rola. Zmienisz je w zakładce „Ty”.",
@@ -2594,48 +2603,7 @@ const setA4 = v => { tuner.a4 = Math.max(430, Math.min(450, v)); store.set("tune
 $("#t-a-down").addEventListener("click", () => setA4(tuner.a4 - 1));
 $("#t-a-up").addEventListener("click", () => setA4(tuner.a4 + 1));
 function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerStart(); }
-/* T31: record one long note, find its pitch, and use it as the playback sound (pitch-shifted) */
-const own = { rate: 0, f0: 0, data: null };
-(function loadOwn() { try { const j = JSON.parse(store.get("ownSound", "null")); if (j && j.f0 && j.b64) { const bin = atob(j.b64), a = new Int16Array(bin.length / 2); for (let i = 0; i < a.length; i++) a[i] = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); own.data = Float32Array.from(a, v => v / 32767); own.rate = j.rate; own.f0 = j.f0; } } catch {} })();
-function syncOwn() {
-  $("#own-use").checked = store.get("ownUse") === "1" && !!own.data; $("#own-use").disabled = !own.data;
-  $("#own-st").textContent = own.data ? `Nagrany dźwięk: ${NOTE_PL[((Math.round(69 + 12 * Math.log2(own.f0 / 440)) % 12) + 12) % 12]} (${Math.round(own.f0)} Hz)` : "Brak nagrania";
-}
-$("#own-use").addEventListener("change", e => store.set("ownUse", e.target.checked ? "1" : "0"));
-$("#own-rec").addEventListener("click", async () => {
-  if (tuner.on) tunerStop();
-  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }); }
-  catch (e) { hud("Brak zgody na mikrofon.", 3000); return; }
-  const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(); await ctx.resume?.();
-  const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1), chunks = [];
-  proc.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-  src.connect(proc); proc.connect(ctx.destination);
-  $("#own-st").textContent = "Nagrywam… graj!";
-  await new Promise(r => setTimeout(r, 2200));
-  proc.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop());
-  const all = new Float32Array(chunks.reduce((a, c) => a + c.length, 0)); let o = 0; chunks.forEach(c => { all.set(c, o); o += c.length; });
-  const rate = ctx.sampleRate; ctx.close();
-  /* the steady middle of the note, normalised */
-  const cut = all.slice(Math.floor(rate * 0.25), Math.floor(rate * 1.95)); let peak = 0; cut.forEach(v => { peak = Math.max(peak, Math.abs(v)); });
-  const f0 = detectPitch(cut.slice(Math.floor(cut.length / 2) - 1024, Math.floor(cut.length / 2) + 1024), rate);
-  if (peak < 0.02 || !(f0 > 40 && f0 < 1500)) { $("#own-st").textContent = "Nie usłyszałem wyraźnego dźwięku. Spróbuj jeszcze raz, bliżej telefonu."; return; }
-  own.data = cut.map(v => v / peak * .9); own.rate = rate; own.f0 = f0;
-  try {
-    const i16 = Int16Array.from(own.data, v => Math.round(v * 32767)); let s = ""; const u8 = new Uint8Array(i16.buffer);
-    for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
-    store.set("ownSound", JSON.stringify({ rate, f0, b64: btoa(s) })); store.set("ownUse", "1");
-  } catch {}
-  syncOwn(); hud("Gotowe: Solo zagra Twoim dźwiękiem", 2500);
-});
-/* one note from the recorded sound: pitch-shifted, looped in its steady middle, soft ends */
-function ownNote(ctx, out, f, st, en) {
-  if (!own._buf || own._ctx !== ctx) { own._buf = ctx.createBuffer(1, own.data.length, own.rate); own._buf.copyToChannel(own.data, 0); own._ctx = ctx; }
-  const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = own._buf; s.playbackRate.value = f / own.f0;
-  s.loop = true; s.loopStart = own._buf.duration * .35; s.loopEnd = own._buf.duration * .85;
-  g.gain.setValueAtTime(0, st); g.gain.linearRampToValueAtTime(1, st + .02); g.gain.setTargetAtTime(0, en, .05);
-  s.connect(g); g.connect(out); s.start(st); s.stop(en + .4);
-}
-const noteVoice = () => (store.get("ownUse") === "1" && own.data ? ownNote : typeof timbreNote === "function" ? timbreNote(mainInstr().voice) : synthNote);
+const noteVoice = () => (store.get("ownUse") === "1" && typeof own !== "undefined" && own.samples.length ? ownNote : typeof timbreNote === "function" ? timbreNote(mainInstr().voice) : synthNote);
 $$("#t-instr button").forEach(b => b.addEventListener("click", () => { tuner.tr = +b.dataset.tr; store.set("tunerTr", tuner.tr); syncTuner(); }));
 
 /* ---------------- T24 tutorial: five steps over the real screen, skippable ---------------- */
@@ -2797,10 +2765,9 @@ function renderPartStrip() {
   $("#pstrip").addEventListener("contextmenu", e => e.preventDefault());
   $("#pstrip").addEventListener("click", e => {
     const c = e.target.closest("[data-pid]"); if (!c || long) return;
-    if (S.parts.length < 2) { openPartSheet(c.dataset.pid); return; }
     const part = S.parts.find(p => p.id === c.dataset.pid);
     if (part && !part.keep && !S.only) { part.keep = true; changed(); renderPartStrip(); return; }     // a hidden part comes back
-    showOnly(S.only === c.dataset.pid ? null : c.dataset.pid);
+    openPartSheet(c.dataset.pid);
   });
 })();
 function showOnly(pid) {
@@ -2814,7 +2781,8 @@ function buildPartSheet() {
   const pid = partSheetId; $("#sh-part-t").textContent = partName(pid);
   $("#pp-mute").setAttribute("aria-pressed", String(pb.mute.has(pid)));
   $("#pp-only").setAttribute("aria-pressed", String(S.only === pid));
-  $("#pp-del").hidden = S.parts.length < 2; $("#pp-only").hidden = S.parts.length < 2;
+  $("#pp-del").disabled = S.parts.length < 2; $("#pp-only").disabled = S.parts.length < 2;
+  $("#pp-only span").textContent = S.only === pid ? "Wszystkie" : "Tylko ta";
 }
 $("#pp-only").addEventListener("click", () => { closeSheet(); showOnly(S.only === partSheetId ? null : partSheetId); });
 $("#pp-mute").addEventListener("click", () => { const id = partSheetId; if (pb.mute.has(id)) pb.mute.delete(id); else pb.mute.add(id); buildPartSheet(); renderPartStrip(); if (playState) play(playPos()); });
@@ -2854,7 +2822,8 @@ function numberParts(xml, base) {
 }
 function buildAddPartSheet() {
   instrPicker($("#ap-instr"), { onPick: id => { rememberInstr(id); apStep2(id); } });
-  $("#ap-step1").hidden = false; $("#ap-step2").hidden = true; $("#ap-back").hidden = true; $("#sh-addpart-t").textContent = "Dodaj partię";
+  $("#ap-step1").hidden = false; $("#ap-step2").hidden = true; $("#ap-back").hidden = true; $("#sh-addpart-t").textContent = ap.replace ? "Zmień partię" : "Dodaj partię";
+  $("#ap-quick").parentElement.querySelector(".lbl").hidden = $("#ap-quick").hidden = !!ap.replace;
 }
 function apStep2(id) {
   ap.instr = id; const ins = instrById(id), melodyName = S.piece.instrument || "";
@@ -2894,7 +2863,9 @@ function addPart(xml, instrId, role, opts = {}) {
 $("#ap-go").addEventListener("click", () => {
   try {
     const r = addPart(S.piece.xml, ap.instr, ap.role, { int: ap.int, same: ap.role === "voice2" && ap.show === "same" && !$("#ap-showbox").hidden });
-    pushUndo(); closeSheetThen(() => { applyNewXml(r.xml, r.id); hudUndo("Dodano partię"); });
+    const rep = ap.replace; ap.replace = null;
+    if (rep && r.id) r.xml = replacePart(r.xml, rep, r.id);
+    pushUndo(); closeSheetThen(() => { applyNewXml(r.xml, r.id); hudUndo(rep ? "Zmieniono partię" : "Dodano partię"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać tej partii"); }
 });
 /* quick ensembles: duo = melody + second voice, trio = + bass; for the player's own instrument */
@@ -2906,3 +2877,92 @@ $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
     pushUndo(); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać partii"); }
 }));
+
+/* "Zmień" a part: pick another instrument or what it plays; the new part takes the old one's place */
+$("#pp-change").addEventListener("click", () => { ap.replace = partSheetId; closeSheetThen(() => openSheet("addpart")); });
+function replacePart(xml, oldId, newId) {
+  const doc = parseXml(xml), root = doc.documentElement, parts = kids(root, "part"), pl = kid(root, "part-list");
+  const o = parts.find(p => p.getAttribute("id") === oldId), n = parts.find(p => p.getAttribute("id") === newId);
+  const osp = kids(pl, "score-part").find(x => x.getAttribute("id") === oldId), nsp = kids(pl, "score-part").find(x => x.getAttribute("id") === newId);
+  if (!o || !n) return xml;
+  o.replaceWith(n); if (osp && nsp) osp.replaceWith(nsp);
+  return new XMLSerializer().serializeToString(doc);
+}
+
+/* ---------------- collections (benchmark: Newzik, forScore, Spotify, iOS Photos, Apple Notes) ----------------
+   Chips under the search; a piece can be in several; automatic ones: Ulubione, Ostatnie, Moje, Ze zdjęć. */
+const COL_COLORS = ["#E5484D", "#F76B15", "#FFC53D", "#30A46C", "#12A594", "#0090FF", "#6E56CF", "#D6409F", "#8D8D8D", "#A18072", "#3E63DD", "#29A383"];
+const cols = () => { try { return JSON.parse(store.get("cols", "[]")) || []; } catch { return []; } };
+const saveCols = c => store.set("cols", JSON.stringify(c));
+const favs = () => { try { return JSON.parse(store.get("favs", "[]")) || []; } catch { return []; } };
+const saveFavs = f => store.set("favs", JSON.stringify(f));
+let libCol = store.get("libCol", "all");
+function inCol(p, all) {
+  if (libCol === "all") return true;
+  if (libCol === "fav") return favs().includes(p.id);
+  if (libCol === "recent") return all.slice().sort((a, b) => (b.opened || b.updated || 0) - (a.opened || a.updated || 0)).slice(0, 12).some(x => x.id === p.id);
+  if (libCol === "own") return p.sourceType === "own";
+  if (libCol === "photo") return p.sourceType === "device" || p.sourceType === "ai";
+  const c = cols().find(x => x.id === libCol); return !!(c && c.items.includes(p.id));
+}
+function renderCols(all) {
+  const box = $("#cols"); if (!box) return;
+  const auto = [["all", "Wszystko", ""], ["fav", "Ulubione", "heart"], ["recent", "Ostatnie", ""]];
+  if (all.some(p => p.sourceType === "own")) auto.push(["own", "Moje", "pencil"]);
+  if (all.some(p => p.sourceType === "device" || p.sourceType === "ai")) auto.push(["photo", "Ze zdjęć", "camera"]);
+  const mine = cols();
+  if (![...auto.map(a => a[0]), ...mine.map(c => c.id)].includes(libCol)) libCol = "all";
+  box.innerHTML = auto.map(([id, name, ic]) => `<button class="cchip" role="tab" data-col="${id}" aria-selected="${libCol === id}">${ic ? icon(ic) : ""}<span>${name}</span></button>`).join("") +
+    mine.map(c => `<button class="cchip" role="tab" data-col="${c.id}" data-user aria-selected="${libCol === c.id}"><i class="cdot" style="background:${esc(c.color || "#8D8D8D")}"></i><span>${esc(c.name)}</span></button>`).join("") +
+    `<button class="cchip add" id="col-add" aria-label="Nowa kolekcja">${icon("plus")}</button>`;
+}
+(() => {
+  const box = $("#cols"); let t = 0, long = false;
+  box.addEventListener("pointerdown", e => { const c = e.target.closest("[data-user]"); if (!c) return; long = false; t = setTimeout(() => { long = true; navigator.vibrate?.(10); editCol(c.dataset.col); }, 480); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => box.addEventListener(ev, () => clearTimeout(t)));
+  box.addEventListener("contextmenu", e => e.preventDefault());
+  box.addEventListener("click", e => {
+    if (e.target.closest("#col-add")) { colTarget = null; colPiece = null; openSheet("col"); return; }
+    const c = e.target.closest("[data-col]"); if (!c || long) return;
+    libCol = c.dataset.col; store.set("libCol", libCol); refreshLibrary();
+  });
+})();
+let colTarget = null, colPiece = null, colColor = COL_COLORS[5];
+function editCol(id) { colTarget = id; colPiece = null; openSheet("col"); }
+function buildColSheet() {
+  const c = cols().find(x => x.id === colTarget);
+  $("#sh-col-t").textContent = c ? "Kolekcja" : "Nowa kolekcja"; $("#col-name").value = c ? c.name : ""; colColor = c ? (c.color || COL_COLORS[5]) : COL_COLORS[cols().length % COL_COLORS.length];
+  $("#col-del").hidden = !c;
+  $("#col-emoji").innerHTML = COL_COLORS.map(c => `<button data-e="${c}" aria-pressed="${c === colColor}" aria-label="Kolor"><i style="background:${c}"></i></button>`).join("");
+}
+$("#col-emoji").addEventListener("click", e => { const b = e.target.closest("[data-e]"); if (!b) return; colColor = b.dataset.e; $$("#col-emoji button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); });
+$("#col-save").addEventListener("click", () => {
+  const name = $("#col-name").value.trim(); if (!name) { $("#col-name").focus(); return; }
+  const all = cols(); let c = all.find(x => x.id === colTarget);
+  if (c) Object.assign(c, { name, color: colColor });
+  else { c = { id: "c" + Date.now().toString(36), name, color: colColor, items: colPiece ? [colPiece] : [] }; all.push(c); }
+  saveCols(all); closeSheetThen(() => { hud(colPiece ? `Dodano do: ${name}` : "Gotowe", 1800); refreshLibrary(); });
+});
+$("#col-del").addEventListener("click", () => {
+  const all = cols(), c = all.find(x => x.id === colTarget); if (!c) return;
+  saveCols(all.filter(x => x !== c)); if (libCol === c.id) { libCol = "all"; store.set("libCol", "all"); }
+  closeSheetThen(() => { hud("Usunięto kolekcję. Utwory zostały.", 2500); refreshLibrary(); });
+});
+/* from a piece's long-press menu: ♥ and "Kolekcja" (tick the ones it belongs to) */
+function syncFavTile() { const on = cardPiece && favs().includes(cardPiece.id); $("#cd-fav").innerHTML = icon(on ? "heart-fill" : "heart") + `<span>Ulubione</span>`; $("#cd-fav").setAttribute("aria-pressed", String(!!on)); }
+$("#cd-fav").addEventListener("click", () => {
+  const f = favs(), id = cardPiece.id, on = f.includes(id);
+  saveFavs(on ? f.filter(x => x !== id) : [...f, id]); syncFavTile(); navigator.vibrate?.(8); refreshLibrary();
+});
+$("#cd-col").addEventListener("click", () => closeSheetThen(() => openSheet("addto")));
+function buildAddtoSheet() {
+  const id = cardPiece && cardPiece.id, all = cols();
+  $("#addto-list").innerHTML = all.length ? all.map(c => `<label class="li"><i class="cdot" style="background:${esc(c.color || "#8D8D8D")}"></i><span class="grow"><b>${esc(c.name)}</b></span><input type="checkbox" class="switch" data-c="${c.id}" ${c.items.includes(id) ? "checked" : ""}></label>`).join("") : `<p class="note">Nie masz jeszcze kolekcji.</p>`;
+}
+$("#addto-list").addEventListener("change", e => {
+  const cid = e.target.dataset.c, id = cardPiece && cardPiece.id; if (!cid || !id) return;
+  const all = cols(), c = all.find(x => x.id === cid); if (!c) return;
+  c.items = e.target.checked ? [...new Set([...c.items, id])] : c.items.filter(x => x !== id);
+  saveCols(all); navigator.vibrate?.(8); refreshLibrary();
+});
+$("#addto-new").addEventListener("click", () => { colTarget = null; colPiece = cardPiece && cardPiece.id; closeSheetThen(() => openSheet("col")); });

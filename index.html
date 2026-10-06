@@ -83,6 +83,12 @@
   <symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></symbol>
   <symbol id="fork" viewBox="0 0 24 24"><path d="M9 3v8a3 3 0 0 0 6 0V3M12 14v7"/></symbol>
   <symbol id="count" viewBox="0 0 24 24"><path d="M5 18V9M10 18V6M15 18v-6M20 18V9"/></symbol>
+  <symbol id="heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></symbol>
+  <symbol id="heart-fill" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z" fill="currentColor"/></symbol>
+  <symbol id="stack" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="2.5"/><path d="M7 5h10M9 2.5h6"/></symbol>
+  <symbol id="eye" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="mute" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></symbol>
+  <symbol id="swap" viewBox="0 0 24 24"><path d="M7 4L3.5 7.5 7 11M3.5 7.5H17M17 13l3.5 3.5L17 20M20.5 16.5H7"/></symbol>
   <symbol id="warn" viewBox="0 0 24 24"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4.5"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></symbol>
 </svg>
 
@@ -117,7 +123,9 @@
         <button class="link" id="nudge-save">Zapisz</button>
         <button class="x" id="nudge-x" aria-label="Później"><svg class="i"><use href="#x"/></svg></button>
       </div>
+      <div class="cols" id="cols" role="tablist" aria-label="Kolekcje"></div>
       <div class="grid" id="lib-grid"></div>
+      <p class="lib-none" id="col-empty" hidden>Pusto. Przytrzymaj okładkę i wybierz „Kolekcja”.</p>
       <p class="lib-none" id="lib-none" hidden></p>
     </section>
 
@@ -139,8 +147,10 @@
   <header class="sbar">
     <button class="pill round" id="btn-back" aria-label="Wróć"><svg class="i"><use href="#left"/></svg></button>
     <div class="stitle"><div class="a" id="s-title"></div><div class="b" id="s-sub"></div></div>
+    <div class="sbar-r">
     <button class="pill round" id="btn-edit" aria-pressed="false" aria-label="Popraw nuty" title="Popraw nuty"><svg class="i"><use href="#pencil"/></svg></button>
     <button class="pill round" id="btn-tools" data-sheet="more" aria-label="Narzędzia" title="Narzędzia"><svg class="i"><use href="#tools"/></svg></button>
+    </div>
     <div class="pstrip" id="pstrip" role="toolbar" aria-label="Partie"></div>
   </header>
   <div class="scroller" id="scroller">
@@ -209,8 +219,8 @@
   <div class="wrap narrow">
     <h1 class="h-l page-title tabtitle">Ja</h1>
 
-    <h3 class="lbl">Profil</h3>
-    <div class="group"><button class="li tap" id="btn-profile"><span class="ic"><svg class="i"><use href="#user"/></svg></span><span class="grow"><b>Twój instrument</b><small id="prof-sum"></small></span><svg class="i chev"><use href="#right"/></svg></button></div>
+    <h3 class="lbl">Instrumenty</h3>
+    <div class="prof" id="prof"></div>
 
     <h3 class="lbl">Wygląd</h3>
     <div class="group">
@@ -278,8 +288,7 @@
   <div class="list addlist first">
     <button class="li tap" data-act="camera"><span class="ic"><svg class="i"><use href="#camera"/></svg></span><span class="grow"><b>Zrób zdjęcie</b></span></button>
     <label class="li tap" for="in-gallery"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Z galerii</b></span></label>
-    <label class="li tap" for="in-files"><span class="ic"><svg class="i"><use href="#file"/></svg></span><span class="grow"><b>Z pliku</b><small>PDF, MusicXML</small></span></label>
-    <button class="li tap" data-sheet="mail"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Z maila</b></span></button>
+    <label class="li tap" for="in-files"><span class="ic"><svg class="i"><use href="#file"/></svg></span><span class="grow"><b>Z plików</b><small>Pliki, iCloud, Dysk Google, Dropbox</small></span></label>
     <button class="li tap" data-act="blank"><span class="ic"><svg class="i"><use href="#pencil"/></svg></span><span class="grow"><b>Nowa melodia</b></span></button>
   </div>
 </div>
@@ -290,6 +299,15 @@
   <button data-tab="metrov"><svg class="i"><use href="#metronome"/></svg><span>Metronom</span></button>
   <button data-tab="settings"><svg class="i"><use href="#user"/></svg><span>Ja</span></button>
 </nav>
+
+<!-- =============== OWN SOUND: guided recording =============== -->
+<section id="ownf" class="overlay ownf" role="dialog" aria-modal="true" aria-label="Twój dźwięk" hidden>
+  <div class="ownf-panel">
+    <div class="onb-top"><button class="pill round" id="ownf-x" aria-label="Zamknij"><svg class="i"><use href="#x"/></svg></button><div class="onb-dots" id="ownf-dots"></div><span class="ownf-sp"></span></div>
+    <div class="ownf-body" id="ownf-body"></div>
+    <div class="ownf-acts" id="ownf-acts"></div>
+  </div>
+</section>
 
 <!-- =============== FIRST START: PROFILE =============== -->
 <section id="onb" class="overlay onb" role="dialog" aria-modal="true" aria-label="Twój profil" hidden>
@@ -422,11 +440,9 @@
   <h3 class="lbl">Dokładność</h3>
   <div class="seg three" id="t-tol"><button data-tol="10">±10 ¢</button><button data-tol="5">±5 ¢</button><button data-tol="3">±3 ¢</button></div>
   <div class="list"><div class="li"><span class="grow"><b>A</b></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><span class="unit">Hz</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
-  <h3 class="lbl">Mój dźwięk</h3>
-  <div class="tuner" id="own">
-    <p class="txt">Zagraj jeden długi, równy dźwięk.</p>
-    <p class="tune-cents" id="own-st"></p>
-    <button class="btn tinted wide" id="own-rec"><svg class="i"><use href="#mic"/></svg><span>Nagraj mój dźwięk</span></button>
+  <div class="owncard" id="own">
+    <div class="own-head"><span class="own-ic"><svg class="i"><use href="#mic"/></svg></span><div class="grow"><b>Twój dźwięk</b><small id="own-st"></small></div></div>
+    <div class="own-acts"><button class="btn primary" id="own-rec"><span>Nagraj</span></button><button class="btn tinted" id="own-play" aria-label="Posłuchaj"><svg class="i"><use href="#play"/></svg></button></div>
     <label class="li" for="own-use"><span class="grow"><b>Graj moim dźwiękiem</b></span><input type="checkbox" id="own-use" class="switch"></label>
   </div>
   </div></div>
@@ -602,13 +618,14 @@
 <div class="sheet" id="sh-part" role="dialog" aria-modal="true" aria-labelledby="sh-part-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-part-t">Partia</h2><button class="done" data-close>Gotowe</button></div>
-  <div class="tiles first">
-    <button class="tile" id="pp-only"><svg class="i"><use href="#image"/></svg><span>Tylko ta</span></button>
-    <button class="tile" id="pp-mute" aria-pressed="false"><svg class="i"><use href="#x"/></svg><span>Wycisz</span></button>
+  <div class="tiles three first">
+    <button class="tile" id="pp-only"><svg class="i"><use href="#eye"/></svg><span>Tylko ta</span></button>
+    <button class="tile" id="pp-mute" aria-pressed="false"><svg class="i"><use href="#mute"/></svg><span>Wycisz</span></button>
+    <button class="tile" id="pp-change"><svg class="i"><use href="#swap"/></svg><span>Zmień</span></button>
     <button class="tile" id="pp-print"><svg class="i"><use href="#print"/></svg><span>Drukuj</span></button>
     <button class="tile" id="pp-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
+    <button class="tile danger" id="pp-del"><svg class="i"><use href="#trash"/></svg><span>Usuń</span></button>
   </div>
-  <div class="list"><button class="li tap danger" id="pp-del"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń tę partię</b></span></button></div>
 </div>
 
 <div class="sheet" id="sh-practice" role="dialog" aria-modal="true" aria-labelledby="sh-practice-t" hidden>
@@ -650,20 +667,43 @@
     <button class="tile" id="cd-open"><svg class="i"><use href="#music"/></svg><span>Otwórz</span></button>
     <button class="tile" id="cd-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
     <button class="tile" id="cd-rename"><svg class="i"><use href="#pencil"/></svg><span>Nazwa</span></button>
+    <button class="tile" id="cd-fav"><svg class="i"><use href="#heart"/></svg><span>Ulubione</span></button>
+    <button class="tile" id="cd-col"><svg class="i"><use href="#stack"/></svg><span>Kolekcja</span></button>
     <button class="tile danger" id="cd-del"><svg class="i"><use href="#trash"/></svg><span>Usuń</span></button>
   </div>
+</div>
+
+<div class="sheet" id="sh-instr" role="dialog" aria-modal="true" aria-labelledby="sh-instr-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-instr-t">Instrumenty</h2><button class="done" data-close>Gotowe</button></div>
+  <div id="instr-picker"></div>
+</div>
+
+<div class="sheet" id="sh-addto" role="dialog" aria-modal="true" aria-labelledby="sh-addto-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-addto-t">Kolekcja</h2><button class="done" data-close>Gotowe</button></div>
+  <div class="list first" id="addto-list"></div>
+  <button class="btn tinted wide" id="addto-new"><svg class="i"><use href="#plus"/></svg><span>Nowa kolekcja</span></button>
+</div>
+
+<div class="sheet" id="sh-col" role="dialog" aria-modal="true" aria-labelledby="sh-col-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-col-t">Nowa kolekcja</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <div class="list fields first"><label class="li"><span class="fk">Nazwa</span><input id="col-name" type="text" autocomplete="off" placeholder="np. Ania, Koncert"></label></div>
+  <div class="emojis" id="col-emoji"></div>
+  <button class="btn primary wide" id="col-save"><svg class="i"><use href="#check"/></svg><span>Gotowe</span></button>
+  <button class="btn ghost wide danger" id="col-del" hidden><svg class="i"><use href="#trash"/></svg><span>Usuń kolekcję</span></button>
 </div>
 
 <div class="sheet" id="sh-share" role="dialog" aria-modal="true" aria-labelledby="sh-share-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-share-t">Wyślij</h2><button class="done ghost" data-close>Anuluj</button></div>
   <div id="share-parts" hidden><h3 class="lbl first">Partie</h3><div class="ichips" id="share-chips"></div></div>
-  <div class="list">
-    <button class="li tap" data-act="send-pdf"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Wyślij PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" data-act="send-img"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Wyślij obraz</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" data-act="print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" data-act="pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" data-act="xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Plik MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>
+  <div class="tiles share-tiles">
+    <button class="tile" data-act="send-pdf"><svg class="i"><use href="#file"/></svg><span>PDF</span></button>
+    <button class="tile" data-act="send-img"><svg class="i"><use href="#image"/></svg><span>Obraz</span></button>
+    <button class="tile" data-act="xml"><svg class="i"><use href="#music"/></svg><span>MusicXML</span></button>
+    <button class="tile" data-act="print"><svg class="i"><use href="#print"/></svg><span>Drukuj</span></button>
   </div>
 </div>
 
@@ -690,6 +730,7 @@
 <script src="motion.js" defer></script>
 <script src="app.js" defer></script>
 <script src="profile.js" defer></script>
+<script src="ownsound.js" defer></script>
 <script src="vendor/verovio-toolkit-wasm.js" id="verovio-script" async></script>
 </body>
 </html>

@@ -192,7 +192,6 @@ $("#onb-body").addEventListener("click", e => {
 $("#onb-next").addEventListener("click", () => { if (ONB_STEPS[onb.step] === "done") finishOnb(false); else onbGo(1); });
 $("#onb-back").addEventListener("click", () => onbGo(-1));
 $("#onb-skip").addEventListener("click", () => finishOnb(true));
-$("#btn-profile").addEventListener("click", openOnboarding);
 
 /* ---------------- playback timbres for the main instrument (until the player records their own sound) ---------------- */
 function timbreNote(kind) {
@@ -222,3 +221,31 @@ function timbreNote(kind) {
   applyProfile();
   if (!profile().done) { $("#welcome").hidden = true; openOnboarding(); }
 })();
+
+/* "Ja": the same answers, changed in place (the questions are only for the very first start) */
+function renderProfile() {
+  const box = $("#prof"); if (!box) return;
+  const p = profile(), m = instrById(p.main);
+  box.innerHTML = `<div class="ichips">${p.instruments.map(id => `<button class="ichip" data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>
+    ${p.instruments.length > 1 ? `<p class="sub">Główny: ${esc(m.name)}</p>` : ""}
+    ${m.tr ? `<h3 class="lbl">Stroik pokazuje</h3><div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla instrumentu</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>` : ""}
+    <h3 class="lbl">Rola</h3><div class="seg three"><button data-role="teacher" aria-pressed="${p.role === "teacher"}">Uczę</button><button data-role="student" aria-pressed="${p.role === "student"}">Uczę się</button><button data-role="self" aria-pressed="${p.role === "self"}">Dla siebie</button></div>
+    <h3 class="lbl">Strój A</h3><div class="seg three">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>`;
+}
+$("#prof").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const p = profile();
+  if (b.hasAttribute("data-edit")) { openSheet("instr"); return; }
+  if (b.dataset.main) p.main = b.dataset.main;
+  if (b.dataset.read) p.reading = b.dataset.read;
+  if (b.dataset.role) p.role = b.dataset.role;
+  if (b.dataset.a4) p.a4 = +b.dataset.a4;
+  saveProfile({ ...p, done: true }); renderProfile();
+});
+function buildInstrSheet() {
+  const p = profile(), sel = [...p.instruments];
+  instrPicker($("#instr-picker"), { selected: sel, multi: true, onPick: () => {
+    if (!sel.length) return;
+    saveProfile({ ...p, instruments: [...sel], main: sel.includes(p.main) ? p.main : sel[0], done: true }); renderProfile();
+  } });
+}
