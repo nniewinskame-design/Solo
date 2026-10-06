@@ -223,7 +223,7 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet })[name]?.();
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, voice: buildVoiceSheet, partfor: buildPartForSheet })[name]?.();
   openSheetId = name;
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
@@ -451,7 +451,7 @@ function loadState(piece, settings) {
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
-  S.layout = S.hasLines ? "orig" : "fit";
+  S.layout = S.hasLines ? "orig" : "fit"; S.under = ""; S.swing = false;
   if (settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
@@ -461,6 +461,7 @@ function loadState(piece, settings) {
     if (settings.bpm >= 20 && settings.bpm <= 300) S.bpm = Math.round(settings.bpm);
     if (settings.zoom >= .5 && settings.zoom <= 2) S.zoom = settings.zoom;
     if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
+    S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
   }
   if (S.piece.instrument == null) S.piece.instrument = first && !PIANO_RE.test(first.name) ? first.name : "";
 }
@@ -512,7 +513,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, zoom: S.zoom, layout: S.layout },
+    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, zoom: S.zoom, layout: S.layout, under: S.under || "", swing: !!S.swing },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -829,6 +830,10 @@ async function play(fromMs = 0) {
     } catch {}
   }));
   if (!ev.length) { hud("Brak nut do odtworzenia"); return; }
+  if (S.swing) {         /* T29: eighths in pairs play long-short (about 2:1) */
+    const beat = 60 / curBpm(), half = beat / 2, eps = beat * 0.05, third = beat / 6;
+    ev.forEach(e => { const pos = ((e.t % beat) + beat) % beat; if (e.dur <= half * 1.1) { if (Math.abs(pos - half) < eps) { e.t += third; e.dur -= third; } else if (pos < eps || beat - pos < eps) e.dur += third; } });
+  }
   const end = Math.max(...ev.map(e => e.t + e.dur));
   setPlayUi(true);
   let url, peak;
@@ -1248,8 +1253,43 @@ $("#oct-up").addEventListener("click", () => { const { k, oct } = kOct(); setKOc
 /* ---------------- More sheet ---------------- */
 $$("#layoutseg button").forEach(b => b.addEventListener("click", () => { S.layout = b.dataset.layout; syncLayout(); S.loadedKey = null; changed(); }));
 function syncLayout() { $("#layout-box").hidden = !S.hasLines; $$("#layoutseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.layout === S.layout))); }
+$$("#underseg button").forEach(b => b.addEventListener("click", () => { S.under = b.dataset.u; syncArrange(); changed(); }));
+$("#swing").addEventListener("change", e => { S.swing = e.target.checked; S.dirty = true; autosave(); if (playState) { stopPlayback(); play(); } });
+function syncArrange() { $$("#underseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.u === (S.under || "")))); $("#swing").checked = !!S.swing; }
+/* T25 sheet */
+const voice = { i: 3, l: 1 };
+const VOICE_DESC = { 1: "Łatwy: drugi głos idzie równolegle, zawsze ten sam odstęp. Dobry dla dzieci.", 2: "Średni: gdy melodia skacze, drugi głos często zostaje na miejscu. Mniej ruchu, łatwiej grać.", 3: "Zaawansowany: drugi głos wybiera tercję albo sekstę tak, żeby poruszać się jak najmniej. Płynna, samodzielna linia." };
+function buildVoiceSheet() {
+  $$("#v-int button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.i === voice.i)));
+  $$("#v-lev button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.l === voice.l)));
+  $("#v-int").hidden = voice.l === 3; $("#v-desc").textContent = VOICE_DESC[voice.l];
+}
+$$("#v-int button").forEach(b => b.addEventListener("click", () => { voice.i = +b.dataset.i; buildVoiceSheet(); }));
+$$("#v-lev button").forEach(b => b.addEventListener("click", () => { voice.l = +b.dataset.l; buildVoiceSheet(); }));
+$("#v-go").addEventListener("click", () => {
+  const first = S.parts.find(p => p.keep); if (!first) return;
+  const xml = secondVoiceXml(S.piece.xml, first.id, { interval: voice.i, level: voice.l });
+  const settings = recordFromState().settings; S.piece.xml = xml; S.piece.origXml = S.piece.origXml || null;
+  loadState(S.piece, { ...settings, keep: [...settings.keep, ...analyseXml(xml).parts.map(p => p.id).filter(id => !settings.keep.includes(id)).slice(-1)] });
+  closeSheetThen(() => { changed(); hud("Dodano drugi głos. Odtwarzanie gra oba.", 3000); });
+});
+/* T27 sheet */
+function buildPartForSheet() {
+  const L = $("#partfor-list"); L.innerHTML = "";
+  [0, 1, 2, 3].forEach(idx => {
+    const p = PRESETS[idx], b = document.createElement("button"); b.className = "li tap";
+    b.innerHTML = `<span class="grow"><b>${esc(p.t)}</b><small>${esc(p.s)}</small></span><svg class="i chev"><use href="#right"/></svg>`;
+    b.addEventListener("click", async () => {
+      const name = p.t.split(",")[0];
+      const xml = partForInstrument(processedXml(), p.iv, S.srcKey.fifths);
+      const piece = { xml, sourceType: "file", title: `${S.piece.title || "Nuty"} (${name})`, composer: S.piece.composer || "", instrument: name };
+      closeSheetThen(() => { openPiece(piece); S.dirty = true; savePiece(); hud(`Gotowe: partia dla ${name.toLowerCase()}`, 3000); });
+    });
+    L.appendChild(b);
+  });
+}
 function buildMoreSheet() {
-  syncLayout();
+  syncLayout(); syncArrange();
   $("#btn-restore").hidden = !(S.piece && S.piece.origXml);
   const P = $("#parts"); P.innerHTML = "";
   const isPiano = p => p.staves > 1 || PIANO_RE.test(p.name);
@@ -1793,7 +1833,8 @@ const NEWS = { "3.7": ["Kilka pytań przed czytaniem: klucz, metrum i znaki przy
   "Pusta pięciolinia: napisz własną melodię.",
   "Wyślij PDF lub obraz przez WhatsApp, e-mail i inne.",
   "PDF z Gmaila: Udostępnij → Solo (gdy Solo jest zainstalowane).",
-  "Metronom i stroik."] };
+  "Metronom i stroik.",
+  "Aranżacja w Więcej: drugi głos (tercje, seksty, trzy poziomy), akordy lub funkcje pod nutami, partia dla trąbki, saksofonu, waltorni, skrzypiec, swing."] };
 /* ---------------- T22 metronome, T23 tuner ---------------- */
 const metro = { on: false, bpm: 100, beats: 4, ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [] };
 function buildToolsSheet() {

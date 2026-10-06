@@ -322,6 +322,24 @@
   </div>
 </div>
 
+<div class="sheet" id="sh-voice" role="dialog" aria-modal="true" aria-labelledby="sh-voice-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-voice-t">Drugi głos</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <h3 class="lbl first">Odstęp</h3>
+  <div class="seg" id="v-int"><button data-i="3">Tercje</button><button data-i="6">Seksty</button></div>
+  <h3 class="lbl">Poziom</h3>
+  <div class="seg" id="v-lev"><button data-l="1">Łatwy</button><button data-l="2">Średni</button><button data-l="3">Zaawansowany</button></div>
+  <p class="note" id="v-desc"></p>
+  <button class="btn primary wide" id="v-go"><svg class="i"><use href="#plus"/></svg><span>Dodaj drugi głos</span></button>
+</div>
+
+<div class="sheet" id="sh-partfor" role="dialog" aria-modal="true" aria-labelledby="sh-partfor-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-partfor-t">Partia dla instrumentu</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <p class="note">Solo zrobi nowe nuty dla wybranego instrumentu: przeniesione o właściwy interwał i w kluczu wiolinowym. Oryginał zostaje bez zmian.</p>
+  <div class="list" id="partfor-list"></div>
+</div>
+
 <div class="sheet" id="sh-pdf" role="dialog" aria-modal="true" aria-labelledby="sh-pdf-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-pdf-t">Które strony?</h2><button class="done ghost" data-close>Anuluj</button></div>
@@ -368,6 +386,13 @@
   <div class="shead"><h2 class="h-m" id="sh-more-t">Więcej</h2><button class="done" data-close>Gotowe</button></div>
   <h3 class="lbl first">Partie</h3>
   <div class="list" id="parts"></div>
+  <h3 class="lbl">Aranżacja</h3>
+  <div class="list">
+    <button class="li tap" data-sheet="voice"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Dodaj drugi głos</b><small>Tercje lub seksty, trzy poziomy</small></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" data-sheet="partfor"><span class="ic"><svg class="i"><use href="#music"/></svg></span><span class="grow"><b>Partia dla instrumentu</b><small>Nowe nuty, przeniesione i w kluczu wiolinowym</small></span><svg class="i chev"><use href="#right"/></svg></button>
+    <div class="li col"><span class="grow"><b>Pod nutami</b></span><div class="seg" id="underseg"><button data-u="">Nic</button><button data-u="chord">Akordy</button><button data-u="fn">Funkcje</button></div></div>
+    <label class="li" for="swing"><span class="grow"><b>Swing</b><small>Ósemki grane długo-krótko</small></span><input type="checkbox" id="swing" class="switch"></label>
+  </div>
   <div id="layout-box" hidden>
     <h3 class="lbl">Układ</h3>
     <div class="seg" id="layoutseg"><button data-layout="orig">Jak w oryginale</button><button data-layout="fit">Dopasuj do ekranu</button></div>
@@ -433,6 +458,7 @@
 <script src="vendor/pdf.min.js" defer></script>
 <script src="clefs.js" defer></script>
 <script src="core.js" defer></script>
+<script src="arrange.js" defer></script>
 <script src="motion.js" defer></script>
 <script src="app.js" defer></script>
 <script src="vendor/verovio-toolkit-wasm.js" id="verovio-script" async></script>

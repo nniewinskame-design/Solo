@@ -228,6 +228,7 @@ function processedXml() {
       }
     });
   }
+  if (S.under && typeof withChords === "function") { const first = S.parts.find(p => p.keep); withChords(doc, first && first.id, S.under, intervalFifths(S.iv)); }
   return new XMLSerializer().serializeToString(doc);
 }
 
