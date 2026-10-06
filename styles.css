@@ -5,23 +5,26 @@
    tools = slate), used as translucent tints with same-hue ink. Type: Geist, tight at large sizes.
    Contrast (measured): text 16.8:1, text-2 6.2:1, text-3 4.9:1 on canvas; every ink on its tint ≥ 5:1. */
 :root{
-  --canvas:#F5F7FD; --surface:#FFFFFF; --surface-2:#ECF0FA; --hairline:rgba(15,24,60,.08);
-  --text:#0F1733; --text-2:#4A5373; --text-3:#626C8C;
-  --brand:#3D5BFF; --brand-2:#9A4DFF; --brand-ink:#2A43DB; --brand-tint:#E9EDFF;
-  --grad-brand:linear-gradient(125deg,#2D8CFF 0%,#4F5BFF 45%,#9A4DFF 100%);
-  /* each hue: solid, its gradient partner (-2), ink (text on its tint), tint, and the text on the solid (-on) */
-  --amber:#FFB21E; --amber-2:#FF8A1E; --amber-ink:#8A4600; --amber-tint:#FFF3DA; --amber-on:#2B1500;
-  --green:#1CCB82; --green-2:#10AE73; --green-ink:#0A6A43; --green-tint:#DDF7EC; --green-on:#03291B;
-  --coral:#FF7B5C; --coral-2:#FF4F72; --coral-ink:#B12A20; --coral-tint:#FFE9E3; --coral-on:#3A0B0B;
-  --blue:#2E8DFF;  --blue-2:#3C5CFF;  --blue-ink:#1946C9;  --blue-tint:#E3EEFF;  --blue-on:#FFFFFF;
-  --violet:#A070FF;--violet-2:#7448FF;--violet-ink:#5A2DCF;--violet-tint:#EFE8FF;--violet-on:#FFFFFF;
-  --pink:#FF70C8;  --pink-2:#F0479F;  --pink-ink:#A0186C;  --pink-tint:#FFE6F4;  --pink-on:#3A0526;
-  --teal:#1BD3C6;  --teal-2:#0FB2CC;  --teal-ink:#06666F;  --teal-tint:#DCF7F5;  --teal-on:#032B2E;
-  --lime:#B9E62E;  --lime-2:#79D23A;  --lime-ink:#3D6300;  --lime-tint:#F0F9D8;  --lime-on:#1B2D00;
-  --sky:#4CCBFF;   --sky-2:#2FA2FF;   --sky-ink:#075A8C;   --sky-tint:#E0F4FF;   --sky-on:#032338;
-  --slate:#8E98B5; --slate-2:#6C7695; --slate-ink:#3D4662; --slate-tint:#ECEFF6; --slate-on:#FFFFFF;
+  --canvas:#F5F7FD; --surface:#FFFFFF; --surface-2:#EEF1FA; --hairline:#E3E7F2; --hairline-2:#D3D9E8;
+  --text:#0F1733; --text-2:#4A5373; --text-3:#626C8C; --disabled:#A9B1C7;
+  /* palette v3: Solo Blue carries the actions, the gradient is a line (and one hero button per screen), coral a spark */
+  --brand:#2A62F0; --brand-2:#9A4DFF; --brand-ink:#1F5BE0; --brand-tint:#EAF1FF; --brand-hover:#2456D6; --brand-press:#1F4BC0;
+  --accent:#FF7A59; --accent-ink:#B4471F; --accent-tint:#FFF1EC;
+  --grad-brand:linear-gradient(135deg,#2D8CFF 0%,#6774FC 55%,#9A4DFF 100%);
+  /* instrument families, one OKLCH recipe (hue only changes): -tint, -ink (5.7-6.5:1 on tint), the dot (solid), -bd (chosen border) */
+  --amber:#D49824;  --amber-2:#DEB77A;  --amber-ink:#7C5100;  --amber-tint:#FCF2E3;  --amber-bd:#DEB77A;  --amber-on:#7C5100;
+  --green:#3FBF86;  --green-2:#89D0AA;  --green-ink:#006D45;  --green-tint:#E8F8EE;  --green-bd:#89D0AA;  --green-on:#006D45;
+  --coral:#EF7F72;  --coral-2:#F2A89D;  --coral-ink:#8E3F36;  --coral-tint:#FFEEEB;  --coral-bd:#F2A89D;  --coral-on:#8E3F36;
+  --blue:#65A7FA;   --blue-2:#97C1F7;   --blue-ink:#2B5C97;   --blue-tint:#EAF5FF;   --blue-bd:#97C1F7;   --blue-on:#2B5C97;
+  --violet:#B28FEF; --violet-2:#C6B1F0; --violet-ink:#654A8F; --violet-tint:#F5F0FF; --violet-bd:#C6B1F0; --violet-on:#654A8F;
+  --teal:#00BDCE;   --teal-2:#71CFD9;   --teal-ink:#006B78;   --teal-tint:#E3F8FA;   --teal-bd:#71CFD9;   --teal-on:#006B78;
+  --pink:#E57DB1;   --pink-2:#EBA6C6;   --pink-ink:#873E63;   --pink-tint:#FFEEF5;   --pink-bd:#EBA6C6;   --pink-on:#873E63;
+  --lime:#91B349;   --lime-2:#B0C888;   --lime-ink:#4D6510;   --lime-tint:#F0F6E6;   --lime-bd:#B0C888;   --lime-on:#4D6510;
+  --sky:#2A62F0;    --sky-2:#97C1F7;    --sky-ink:#1F5BE0;    --sky-tint:#EAF1FF;    --sky-bd:#97C1F7;    --sky-on:#1F5BE0;
+  --slate:#9BA5B8;  --slate-2:#B7BECB;  --slate-ink:#535B6C;  --slate-tint:#F1F3F9;  --slate-bd:#B7BECB;  --slate-on:#535B6C;
   --on-solid:#FFFFFF; --tint-mix:16%;
-  --in-tune:#12B76A; --off-tune:#FF5A4E; --near-tune:#FFAA1F; --cursor:#3D5BFF;
+  --in-tune:#12A26E; --off-tune:#F0525F; --near-tune:#F5A524; --cursor:#2A62F0;
+  --ok:#12A26E; --ok-tint:#E6F7EF; --ok-ink:#0B7A52; --warn:#F5A524; --warn-tint:#FFF5E0; --warn-ink:#8A5A00; --bad:#F0525F; --bad-tint:#FFEDEF; --bad-ink:#C02637;
   --scrim:rgb(14 14 20 / .3);
   /* older names, mapped so every screen follows the new palette */
   --paper:var(--canvas); --paper-2:var(--surface-2); --card:var(--surface); --score-page:#FFFFFF;
@@ -33,7 +36,7 @@
   --cobalt:var(--blue); --cobalt-tint:var(--blue-tint);
   --pos-1:var(--amber); --pos-2:var(--blue); --pos-3:var(--green); --pos-4:var(--coral); --pos-5:var(--violet); --pos-6:var(--teal); --pos-7:var(--pink);
   --primary:var(--brand); --on-primary:#FFFFFF; --accent-ink:var(--brand-ink);
-  --danger:#E5383B;
+  --danger:#C02637;
   --shadow-1:0 1px 2px rgba(16,16,32,.04),0 1px 1px rgba(16,16,32,.03);
   --shadow-2:0 10px 30px -8px rgba(16,16,32,.18),0 2px 6px rgba(16,16,32,.06);
   --shadow-3:0 -8px 40px rgba(16,16,32,.12);
@@ -1623,7 +1626,7 @@ a,.link{color:var(--brand-ink)}
   --fade-g:linear-gradient(180deg,#000 0%,rgb(0 0 0/.96) 10%,rgb(0 0 0/.84) 20%,rgb(0 0 0/.67) 30%,rgb(0 0 0/.49) 40%,rgb(0 0 0/.33) 50%,rgb(0 0 0/.2) 60%,rgb(0 0 0/.11) 70%,rgb(0 0 0/.05) 80%,rgb(0 0 0/.02) 90%,transparent 100%);
 }
 @supports (background:linear-gradient(in oklch 90deg,red,blue)){
-  :root{--grad-brand:linear-gradient(in oklch 120deg,#2D8CFF,#9A4DFF)}
+  :root{--grad-brand:linear-gradient(in oklch 135deg,#2D8CFF 0%,#6774FC 55%,#9A4DFF 100%)}
 }
 /* the wash: opaque, light, three neighbouring tints, faded with the Gaussian mask */
 .aura{background:linear-gradient(100deg,#D6E6FF,#E0DCFF 50%,#F0DDFF)}
@@ -1685,58 +1688,6 @@ a,.link{color:var(--brand-ink)}
 .me-foot{margin-bottom:calc(120px + var(--safe-b))}
 #sh-new .li .grow{display:flex;align-items:center;gap:6px;font:600 18px var(--font)}
 
-/* ===== a broad palette (Nat, 7 Oct): blue-violet leads, every place has its own clear colour, like the Microsoft
-   apps. Tabs: Nuty blue→violet, Stroik teal→green, Metronom amber→coral, Ja pink→violet. List icons sit on colour
-   tiles (as in iOS Settings), cycling through the hues. ===== */
-:root{
-  --g-notes:linear-gradient(120deg,#2D8CFF,#9A4DFF);
-  --g-tuner:linear-gradient(120deg,#12C2D6,#19C47E);
-  --g-metro:linear-gradient(120deg,#FFAE1F,#FF5E5B);
-  --g-me:linear-gradient(120deg,#FF5FB4,#9A4DFF);
-}
-@supports (background:linear-gradient(in oklch 90deg,red,blue)){
-  :root{
-    --g-notes:linear-gradient(in oklch 120deg,#2D8CFF,#9A4DFF);
-    --g-tuner:linear-gradient(in oklch 120deg,#12C2D6,#19C47E);
-    --g-metro:linear-gradient(in oklch 120deg,#FFAE1F,#FF5E5B);
-    --g-me:linear-gradient(in oklch 120deg,#FF5FB4,#9A4DFF);
-  }
-}
-.tabbar .slide{background:var(--g-notes);transition:transform var(--spring-snappy-d) var(--spring-snappy),width var(--spring-snappy-d) var(--spring-snappy),background 300ms var(--ease-out)}
-.tabbar:has([data-tab="tunerv"][aria-current]) .slide{background:var(--g-tuner);box-shadow:0 8px 20px -10px #19C47E}
-.tabbar:has([data-tab="metrov"][aria-current]) .slide{background:var(--g-metro);box-shadow:0 8px 20px -10px #FF5E5B}
-.tabbar:has([data-tab="settings"][aria-current]) .slide{background:var(--g-me);box-shadow:0 8px 20px -10px #C454E0}
-#t-go{background:var(--g-tuner)!important;box-shadow:0 10px 24px -12px #19C47E!important}
-#m-go{background:var(--g-metro)!important;box-shadow:0 10px 24px -12px #FF5E5B!important}
-
-/* list icons on colour tiles */
-.group .li .ic,.list .li .ic{--t:var(--blue),var(--blue-2);background:linear-gradient(135deg,var(--t));color:#fff;border-radius:9px}
-.group .li:nth-child(6n+2) .ic,.list .li:nth-child(6n+2) .ic{--t:var(--green),var(--green-2)}
-.group .li:nth-child(6n+3) .ic,.list .li:nth-child(6n+3) .ic{--t:var(--coral),var(--coral-2)}
-.group .li:nth-child(6n+4) .ic,.list .li:nth-child(6n+4) .ic{--t:var(--violet),var(--violet-2)}
-.group .li:nth-child(6n+5) .ic,.list .li:nth-child(6n+5) .ic{--t:var(--teal),var(--teal-2)}
-.group .li:nth-child(6n+6) .ic,.list .li:nth-child(6n+6) .ic{--t:var(--pink),var(--pink-2)}
-.li-det:nth-child(2) summary .ic{--t:var(--amber),var(--amber-2);background:linear-gradient(135deg,var(--t));color:#fff}
-.group .li.danger .ic{--t:#FF5E5B,#E5383B}
-#sh-add .addlist .ic{width:48px;height:48px;border-radius:14px;color:#fff!important}
-#sh-add .addlist .li:nth-child(1) .ic{background:linear-gradient(135deg,var(--sky),var(--blue-2))!important}
-#sh-add .addlist .li:nth-child(2) .ic{background:linear-gradient(135deg,var(--pink),var(--violet-2))!important}
-#sh-add .addlist .li:nth-child(3) .ic{background:linear-gradient(135deg,var(--amber),var(--coral-2))!important}
-#sh-add .addlist .li:nth-child(4) .ic{background:linear-gradient(135deg,var(--teal),var(--green-2))!important}
-
-/* library filters: each its own colour when chosen */
-.cols .cchip:nth-child(2)[aria-selected="true"]{background:linear-gradient(120deg,var(--pink),var(--coral-2))}
-.cols .cchip:nth-child(3)[aria-selected="true"]{background:linear-gradient(120deg,var(--teal),var(--green-2))}
-.cols .cchip:nth-child(4)[aria-selected="true"]{background:linear-gradient(120deg,var(--sky),var(--blue-2))}
-.cols .cchip:nth-child(5)[aria-selected="true"]{background:linear-gradient(120deg,var(--amber),var(--coral))}
-.cols .cchip:nth-child(6)[aria-selected="true"]{background:linear-gradient(120deg,var(--violet),var(--pink-2))}
-.cols .cchip:nth-child(2) .i{color:var(--pink-2)} .cols .cchip:nth-child(3) .i{color:var(--green-2)} .cols .cchip:nth-child(4) .i{color:var(--blue-2)}
-.cols .cchip[aria-selected="true"] .i{color:#fff}
-/* metronome in its own colours: amber → coral */
-.metro .beats>button[data-acc="1"]::before{box-shadow:inset 0 0 0 3px #FF7A3D}
-.metro .beats>button.on::before{background:#FFB21E}
-.metro .beats>button.on[data-acc="1"]::before{background:var(--g-metro)}
-.m-name{color:#E8590C}
 /* the name: typed once at the start, shown (and edited) on the Ja card */
 .onb-name{display:block;width:100%;margin-top:22px;height:56px;padding:0 18px;border:0;border-radius:16px;background:var(--surface);box-shadow:var(--shadow-1),0 0 0 .5px var(--hairline);font:600 22px var(--font);letter-spacing:-.02em;color:var(--text);text-align:center}
 .onb-name:focus{outline:none;box-shadow:0 0 0 2px var(--brand)}
@@ -1764,3 +1715,93 @@ input.me-name[type=text]:focus{box-shadow:0 2px 0 var(--brand)!important}
 #splash .sp-tile svg.mark{width:64px;height:80px;color:#fff;filter:drop-shadow(0 10px 24px rgb(40 20 140/.25))}
 #splash .sp-word{color:#fff;font-size:32px}
 #splash .sp-word{display:none}
+
+/* =====================================================================================================
+   Palette v3 (7 Oct; spec: notatki/badania-2026-10-06/palette-v3.md). Neutrals ~90 %, Solo Blue ~6 %, the
+   gradient ~3 % (a 1.5 px line, and a fill on one hero button per screen: Play, tuner Start, metronome Start, "+"),
+   coral ~1 % (accent beat). Instrument families: white chip with a dot; chosen = tint + family border.
+   ===================================================================================================== */
+:root{--grad-line:linear-gradient(135deg,rgb(45 140 255/.7),rgb(103 116 252/.7),rgb(154 77 255/.7));
+  --card-shadow:0 1px 2px rgba(15,23,51,.04),0 4px 16px rgba(15,23,51,.04);--float-shadow:0 8px 32px rgba(15,23,51,.08)}
+
+/* solid actions: Solo Blue */
+.btn.primary,.done:not(.ghost),.shead .done:not(.ghost),.pill.text[aria-pressed=true]{background:var(--brand)!important;color:#fff!important;box-shadow:none!important}
+.btn.primary:active,.done:not(.ghost):active{background:var(--brand-press)!important}
+.btn.primary{border-radius:14px;font-weight:600}
+/* hero: the one gradient fill of a screen */
+.dock .play,.dock .play.on,.fab,#t-go,#m-go,#onb-next{background:var(--grad-brand)!important;color:#fff!important;box-shadow:0 6px 20px rgba(103,116,252,.28)!important}
+#t-go,#m-go,#onb-next{border-radius:16px}
+.pill.text{background:var(--brand-tint);color:var(--brand-ink)}
+a,.link{color:var(--brand-ink)}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+/* gradient as a line: chosen non-family chips, library filters, segmented choice, editor tab, tab bar pill */
+.chips>button:not([style])[aria-pressed="true"],.cols .cchip[aria-selected="true"],.ed-tabs button[aria-selected="true"],.meter .mt-own.on{
+  border:1.5px solid transparent!important;background:linear-gradient(var(--brand-tint),var(--brand-tint)) padding-box,var(--grad-line) border-box!important;color:var(--brand-ink)!important;box-shadow:none!important}
+.chips>button:not([style])[aria-pressed="true"]::before{background:var(--brand-ink)}
+.cols .cchip[aria-selected="true"] .i{color:var(--brand-ink)}
+.chips>button:not([style]){background:var(--surface);box-shadow:inset 0 0 0 1px var(--hairline);color:var(--text)}
+.tabbar{background:rgba(255,255,255,.78)!important;-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);box-shadow:var(--float-shadow),inset 0 0 0 1px var(--hairline)!important}
+.tabbar .slide{background:linear-gradient(var(--brand-tint),var(--brand-tint)) padding-box,var(--grad-line) border-box!important;border:1.5px solid transparent!important;box-shadow:none!important;transition:transform 220ms var(--ease-out),width 220ms var(--ease-out)}
+.tabbar button{color:var(--text-3)!important;font:500 11px var(--font)!important}
+.tabbar button[aria-current]{color:var(--brand-ink)!important;font-weight:600!important}
+
+/* instrument family chips: white with a dot; chosen = the family tint + its border, ink label, check */
+.ichip,.pchip{background:var(--surface)!important;box-shadow:inset 0 0 0 1px var(--hairline)!important;color:var(--text)!important;padding:0 14px 0 12px;font:500 15px var(--font)!important;height:36px;min-height:36px}
+.ichip[style]::before,.pchip[style]::before{content:"";display:block!important;width:8px;height:8px;border-radius:50%;background:var(--h);-webkit-mask:none;mask:none;flex:none}
+.ichip[aria-pressed="true"],.pchip.only,.pchip:not(.off):not(.muted)[aria-current],.pchip.on{background:var(--h-tint,var(--brand-tint))!important;box-shadow:inset 0 0 0 1.5px var(--h-bd,var(--hairline-2))!important;color:var(--h-ink,var(--text))!important;font-weight:600!important}
+.ichip[aria-pressed="true"]::before{width:14px;height:14px;border-radius:0;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat}
+.pchip.off{color:var(--text-3)!important}
+.pchip.off::before{opacity:.45}
+.ichip.add,.pchip.add,.ichip:not([style]){color:var(--text-2)!important}
+
+/* lists: plain outline icons, no tiles */
+.ic,.sheet .ic,.group .li .ic,.list .li .ic,.li-det summary .ic{background:none!important;color:var(--text-2)!important;width:28px}
+.li.danger .ic,.li.danger b{color:var(--bad-ink)!important}
+.chev{color:var(--disabled)}
+.group,.list:not(.addlist),.me-card,.keypick,.meter .mt-own{box-shadow:var(--card-shadow),inset 0 0 0 1px var(--hairline)!important}
+#sh-add .addlist .ic{background:var(--brand-tint)!important;color:var(--brand-ink)!important}
+
+/* Ja card: the main instrument's tint as a soft circle */
+.me-tile{border-radius:50%!important;background:var(--h-tint,var(--brand-tint))!important;color:var(--h-ink,var(--brand-ink))!important;box-shadow:none!important}
+
+/* cards, badges, banners */
+.card .key,.key{background:var(--brand-tint);color:var(--brand-ink)}
+.notice{background:var(--brand-tint)!important;box-shadow:inset 0 0 0 1px rgb(42 98 240/.24)!important;border-radius:14px}
+.notice>svg.i{color:var(--brand)!important}
+.mast .brand svg.mark{background:var(--grad-brand)}
+
+/* metronome: blue beat, coral downbeat */
+.metro .beats>button::before{width:14px!important;height:14px!important;background:var(--hairline)!important;box-shadow:none!important}
+.metro .beats>button[data-acc="1"]::before{background:#fff!important;box-shadow:inset 0 0 0 1.5px var(--accent)!important}
+.metro .beats>button.on::before{background:var(--brand)!important;transform:scale(1.25);box-shadow:0 0 0 6px rgb(42 98 240/.14)!important}
+.metro .beats>button.on[data-acc="1"]::before{background:var(--accent)!important;transform:scale(1.35);box-shadow:0 0 0 8px rgb(255 122 89/.18)!important}
+.m-name{color:var(--brand-ink)!important}
+
+/* tuner: soft orb, neutral gauge with only the in-tune band coloured, a white needle */
+.lx-orb{opacity:1}
+.tuner2.lx .tn-zones{background:#EEF1FA!important;box-shadow:inset 0 0 0 1px var(--hairline);height:8px!important;border-radius:4px!important;opacity:1!important}
+.tuner2.lx .tn-dot::after{width:16px!important;height:16px!important;border-radius:50%!important;background:#fff!important;border:2px solid var(--text-2);opacity:1!important;box-shadow:0 2px 6px rgba(15,23,51,.18);margin-top:12px}
+.tuner2.lx[data-st="ok"] .tn-dot::after{border-color:var(--ok)!important;background:var(--ok-tint)!important}
+.tuner2.lx[data-st="near"] .tn-dot::after,.tuner2.lx[data-st="far"] .tn-dot::after{background:#fff!important;border-color:var(--text-2)!important}
+.tuner2.lx .tn-ticks i{background:#C9D0E3}
+.tuner2.lx .tn-ticks i.c{background:var(--ok);width:2px}
+.tuner2.lx .tn-note b{font:600 clamp(60px,22vw,88px)/1 var(--font)!important;letter-spacing:-.045em;color:var(--text)}
+.tuner2.lx .tn-read b{font:500 17px/1.2 var(--font)!important;color:var(--text-2)}
+.tuner2.lx[data-st="ok"] .tn-read b,.tuner2.lx[data-st="ok"] .tn-note b{color:var(--ok-ink)!important}
+.tn-hz{font:400 13px var(--font)!important;color:var(--text-3)!important}
+.tuner2.lx .tn-scale{font:400 12px var(--font);color:var(--text-3)}
+/* no solid colour behind icons anywhere (Nat, 7 Oct): plain icons */
+.mast .brand svg.mark{background:none!important;box-shadow:none!important;padding:0!important;width:22px!important;height:26px!important;color:var(--brand)!important}
+#sh-add .addlist .ic{background:none!important;color:var(--brand-ink)!important;width:40px!important;height:40px!important}
+#sh-add .addlist .ic svg.i{width:30px;height:30px}
+body.immersive .loopbar{display:none}
+#btn-loop[aria-pressed="true"]{border:1.5px solid transparent;background:linear-gradient(var(--brand-tint),var(--brand-tint)) padding-box,var(--grad-line) border-box!important;color:var(--brand-ink)!important}
+.lb-fill{background:var(--brand)}
+.lb-th{background:#fff;color:var(--brand-ink);box-shadow:0 2px 8px rgba(15,23,51,.18),inset 0 0 0 1.5px var(--brand)}
+.loopband{background:rgb(42 98 240/.07)!important;box-shadow:inset 0 0 0 1px rgb(42 98 240/.28)!important}
+.snd-wave{background:var(--surface)!important;color:var(--lime-ink)!important;box-shadow:0 0 0 1px var(--lime-bd),0 0 0 3px var(--surface)!important}
+.snd-sq{background:var(--h-tint,var(--surface-2))!important;border-radius:50%!important}
+.snd-tile{box-shadow:var(--card-shadow),inset 0 0 0 1px var(--hairline)!important}

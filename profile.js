@@ -74,7 +74,7 @@ const INSTR_GROUPS = ["Dęte blaszane", "Dęte drewniane", "Smyczkowe", "Klawisz
 /* one colour per instrument family, everywhere (Clear Stage: colour = meaning, never a part's index) */
 /* (FAMILY_HUE, the family → colour map, lives in orb.js, which loads first) */
 function hueOf(instr) { const i = typeof instr === "string" ? instrById(instr) : instr; return (i && FAMILY_HUE[i.group]) || "slate"; }
-const hueStyle = instr => { const h = hueOf(instr); return `style="--h:var(--${h});--h2:var(--${h}-2);--h-ink:var(--${h}-ink);--h-on:var(--${h}-on);--h-tint:var(--${h}-tint)"`; };
+const hueStyle = instr => { const h = hueOf(instr); return `style="--h:var(--${h});--h2:var(--${h}-2);--h-ink:var(--${h}-ink);--h-on:var(--${h}-on);--h-tint:var(--${h}-tint);--h-bd:var(--${h}-bd)"`; };
 /* the instrument picker (benchmark: MuseScore, StaffPad, Dorico, BandLab): search, "yours" first, then families */
 const recentInstr = () => { try { const r = JSON.parse(store.get("recentInstr", "[]")); return Array.isArray(r) ? r : []; } catch { return []; } };
 function instrPicker(box, { selected = [], multi = false, onPick }) {

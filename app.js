@@ -1432,8 +1432,11 @@ document.addEventListener("keydown", e => {
 $("#pages").addEventListener("click", e => {
   if (!S.piece) return;
   if (S.editMode) { editTap(e); return; }
+  /* full screen (the bars hidden): any tap brings them back first; with a loop on, a tap anywhere near the music moves
+     the loop, so full screen could never be left (Nat: "the page hangs, only the notes and the loop line") */
+  if (document.body.classList.contains("immersive")) { document.body.classList.remove("immersive"); return; }
   const m = e.target.closest("g.measure") || measureAt(e.clientX, e.clientY);
-  if (!m) { if (S.fromMs) clearFromBar(); else if (e.target.closest(".page") && !playState) document.body.classList.toggle("immersive"); return; }
+  if (!m) { if (S.fromMs) clearFromBar(); else if (e.target.closest(".page") && !playState && !pb.loop) document.body.classList.add("immersive"); return; }
   const di = measureEls().indexOf(m);
   if (pb.loop) { setLoopBar(di); return; }
   if (m.classList.contains("sel") && !playState) { clearFromBar(); return; }
@@ -3556,10 +3559,11 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Twoje brzmienia są w zakładce Ja: plus dodaje nowe. Nagrywanie i stroik z kulą, która słucha.",
   "Odsłuch nuty przy edycji gra jak w zapisie: tonacja, długość, dynamika, instrument.",
   "Mikrofon włącza się dopiero, gdy go potrzebujesz, i gaśnie po wyjściu ze stroika.",
+  "Naprawione: po pętli i dotknięciu strony znikały przyciski.",
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
   "Nowa melodia: wybierasz klucz, tonację (dur albo moll) i dowolne metrum.",
-  "Każda zakładka ma swój kolor, ikonki na kolorowych kafelkach. Zakładka Ja z Twoim imieniem i uporządkowana. Tylko jasny wygląd.",
+  "Spokojniejsze kolory: niebieski na przyciskach, gradient jako cienka linia, delikatne kolory instrumentów i miękka kula stroika. Zakładka Ja z Twoim imieniem.",
   "Metronom ze stukaniem tempa i akcentami. Stroik z wielką nutą.",
   "Tonacje molowe z właściwymi akordami. Przedtakt wyrównany we wszystkich partiach.",
   "Partie dla instrumentów transponujących brzmią poprawnie, także po eksporcie.",
@@ -3691,8 +3695,8 @@ function syncTuner() {
   $("#t-a").textContent = String(tuner.a4);
   const z = tuner.tol, pc = v => 50 + v;            // the meter spans −50…+50 cents
   /* one smooth gradient (no hard bands): coral far off, amber near, green inside the tolerance */
-  $("#t-zones").style.background = `linear-gradient(90deg, var(--tn-far) 0%, var(--tn-near) ${pc(-15)}%, var(--tn-ok) ${pc(-z)}%, var(--tn-ok) ${pc(z)}%, var(--tn-near) ${pc(15)}%, var(--tn-far) 100%)`;
-  $("#t-zones").style.opacity = ".55";
+  $("#t-zones").style.background = `linear-gradient(90deg, #EEF1FA ${pc(-15)}%, rgb(42 98 240/.07) ${pc(-15)}%, rgb(42 98 240/.07) ${pc(-z)}%, #CFF1E2 ${pc(-z)}%, #CFF1E2 ${pc(z)}%, rgb(42 98 240/.07) ${pc(z)}%, rgb(42 98 240/.07) ${pc(15)}%, #EEF1FA ${pc(15)}%)`;
+  $("#t-zones").style.setProperty("background", $("#t-zones").style.background, "important"); $("#t-zones").style.opacity = "1";
   $("#t-go").innerHTML = `${icon(tuner.on ? "stop" : "mic")}<span>${tuner.on ? "Wyłącz stroik" : "Włącz stroik"}</span>`;
   const letterPc = ((tuner.tr % 12) + 12) % 12, sum = $("#t-set-sum");
   if (sum) sum.textContent = `Strój ${({ 0: "C", 2: "B", 9: "Es", 7: "F" })[letterPc] || "C"} · ±${tuner.tol} ¢ · A ${tuner.a4} Hz`;
@@ -3891,7 +3895,7 @@ function writtenName(midi, tr = tuner.tr) {
 /* the listening orb behind the note (orb.js): sky, leaning flat/sharp, green with a ring once in tune
    (enter at the chosen accuracy, leave 3 cents wider, "locked" after 300 ms, so it does not flicker) */
 function tnOrb() {
-  if (!tn.orb && typeof createOrb === "function" && $("#t-orb")) tn.orb = createOrb($("#t-orb"), { hue: "teal", drift: "x", hollow: true });
+  if (!tn.orb && typeof createOrb === "function" && $("#t-orb")) tn.orb = createOrb($("#t-orb"), { hue: "brand", drift: "x", hollow: true });
   return tn.orb;
 }
 function tnOrbFrame(t, held, live, c) {
