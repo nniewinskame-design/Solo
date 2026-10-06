@@ -890,11 +890,28 @@ function xmlNoteAt(doc, sel) {
 /* run once the music is on the screen (the first drawing loads the engine and can take a few seconds) */
 function whenDrawn(fn, tries = 40) { if ($("#pages g.measure")) setTimeout(fn, 250); else if (tries) setTimeout(() => whenDrawn(fn, tries - 1), 200); }
 /* Correcting mode shows the notes as written (no transposition or other clef), so a tap on a line is that note */
+/* "Anuluj": the piece as it was when editing began comes back (Gotowe keeps the changes) */
+function editSnap() { if (S.piece) S.editStart = { xml: S.piece.xml, roles: S.piece.partRoles ? { ...S.piece.partRoles } : null, tr: S.piece.trShift || 0, undo: (S.undo || []).length }; }
+function cancelEdit() {
+  const st = S.editStart;
+  const back = () => {
+    if (st && S.piece.xml !== st.xml) {
+      S.piece.partRoles = st.roles; S.piece.trShift = st.tr;
+      S.undo = (S.undo || []).slice(0, st.undo); S.redo = [];
+      restoreXml(st.xml);
+    }
+    S.editStart = null; setEditMode(false);
+  };
+  if (!st || S.piece.xml === st.xml) { back(); return; }
+  askConfirm("Odrzucić zmiany?", "Nuty wrócą do stanu sprzed edycji.", "Odrzuć zmiany", back, "Edytuj dalej", null);
+}
+$("#btn-cancel").addEventListener("click", cancelEdit);
 function setEditMode(on) {
   on = !!on; if (on === !!S.editMode && on) return;
   S.editMode = on;
   /* editing keeps the page as it is (Nat, 7 Oct: no zoom when editing starts); only the notes are shown as written */
   if (on) {
+    editSnap();
     const moved = S.iv.d || S.iv.s || S.clef !== "keep" || S.readOct;
     S.editView = { iv: S.iv, clef: S.clef, preset: S.preset, page: S.page, zoom: S.zoom, readOct: S.readOct };
     S.iv = { d: 0, s: 0 }; S.clef = "keep"; S.preset = -1; S.readOct = 0;
@@ -914,7 +931,7 @@ function edTab(name) {
   if (name === "bar") buildBarSheet(); else markBarSel();          // Takt sits in the tool panel like the other tools (the music stays in view)
 }
 function selectNote(sel) {
-  S.editSel = sel; if (sel) S.editMode = true;
+  S.editSel = sel; if (sel && !S.editMode) { S.editMode = true; editSnap(); }
   const on = !!S.editMode;
   document.body.classList.toggle("editing", on); document.body.classList.toggle("editmode", on);
   syncEditButton(on);

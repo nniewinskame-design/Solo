@@ -1994,3 +1994,5 @@ body.editing #score .scroller{padding-bottom:calc(var(--ed-h,170px) + 16px)!impo
 body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,72px) + 96px)!important}
 .toast{z-index:60}
 .ed-tabs{gap:2px!important;justify-content:space-between!important}.ed-tabs button{min-width:36px!important;padding:0 7px!important}.ed-tabs button[aria-selected="true"]{padding:0 11px!important}.ed-tabs .ed-bar{margin-right:6px!important}
+/* edit mode top bar: Anuluj on the left, Gotowe on the right */
+#score .ed-cancel{background:var(--surface-2)!important;color:var(--text)!important;height:38px;padding:0 14px;font:600 14.5px var(--font)}
