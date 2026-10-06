@@ -735,7 +735,7 @@ function previewNote(n) {
   try {
     const AC = window.AudioContext || window.webkitAudioContext; previewCtx = previewCtx || new AC(); previewCtx.resume?.();
     const g = previewCtx.createGain(); g.gain.value = 0.16; g.connect(previewCtx.destination);
-    const t = previewCtx.currentTime + 0.02; noteVoice()(previewCtx, g, 440 * Math.pow(2, (midiOf(p) - 69) / 12), t, t + 0.4);
+    const t = previewCtx.currentTime + 0.02; voiceForPart(S.editSel && S.editSel.pid)(previewCtx, g, 440 * Math.pow(2, (midiOf(p) - 69) / 12), t, t + 0.4);
   } catch {}
 }
 /* which written note a height on the staff means: the five lines of the tapped staff give the steps */
@@ -1208,7 +1208,8 @@ async function play(fromMs) {
       const end = Math.min(e.tstamp + v.duration, B); if (end <= fromMs + 20) return;
       const start = Math.max(e.tstamp, fromMs);      // resuming mid-note: the note keeps sounding
       const el = document.getElementById(id);
-      ev.push({ id, el, t: (start - fromMs) / 1000 * k, dur: Math.max(0.08, (end - start) / 1000 * k), pitch: v.pitch, silent: pb.mute.size && pb.mute.has(partOfEl(el)) });
+      const pid = partOfEl(el);
+      ev.push({ id, el, pid, t: (start - fromMs) / 1000 * k, dur: Math.max(0.08, (end - start) / 1000 * k), pitch: v.pitch, silent: pb.mute.size && pb.mute.has(pid) });
     } catch {}
   }));
   if (!ev.length) { hud("Brak nut do odtworzenia"); return; }
@@ -1236,8 +1237,8 @@ async function play(fromMs) {
     const sr = 44100, Off = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const off = new Off(1, Math.ceil((fileLen + LEAD) * sr), sr);
     const bus = off.createGain(); bus.gain.value = 0.18; bus.connect(off.destination);
-    const voiceFn = noteVoice();
-    ev.forEach(e => { if (!e.silent) voiceFn(off, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), LEAD + e.t, LEAD + e.t + e.dur * 0.95); });
+    const voices = {};          // every part sounds like its own instrument (its recording, or its timbre)
+    ev.forEach(e => { if (!e.silent) (voices[e.pid] = voices[e.pid] || voiceForPart(e.pid))(off, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), LEAD + e.t, LEAD + e.t + e.dur * 0.95); });
     clicks.forEach(c => clickNote(off, bus, LEAD + c.t, c.acc));
     const buf = await off.startRendering();
     /* private windows add noise to rendered audio against fingerprinting: then the notes are played live */
@@ -1264,8 +1265,8 @@ async function playLive(ev, clicks, total, token, k, fromMs, countLen) {
   const AC = window.AudioContext || window.webkitAudioContext; const ctx = new AC();
   try { await ctx.resume(); } catch {}
   const bus = ctx.createGain(); bus.gain.value = 0.18; bus.connect(ctx.destination);
-  const t0 = ctx.currentTime + 0.12, voiceFn = noteVoice();
-  ev.forEach(e => { if (!e.silent) voiceFn(ctx, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95); });
+  const t0 = ctx.currentTime + 0.12, voices = {};
+  ev.forEach(e => { if (!e.silent) (voices[e.pid] = voices[e.pid] || voiceForPart(e.pid))(ctx, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95); });
   clicks.forEach(c => clickNote(ctx, bus, t0 + LEAD + c.t, c.acc));
   const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > total + LEAD + 0.3; }, get paused() { return false; }, pause() { try { ctx.close(); } catch {} } };
   if (token !== playToken) { src.pause(); return; }
@@ -2563,15 +2564,28 @@ function detectPitch(buf, sr, minF = 40, maxF = 1500) {
 /* The microphone first, then an audio context at the microphone's own rate. The other order fails on phones:
    iPhone switches its audio mode when the mic starts and an earlier context hears silence; Chrome and Firefox
    refuse to connect a mic running at another rate. Every failure is said on screen, not swallowed. */
+const micKeep = { stream: null, timer: 0 };
+/* the tuner or a recording is done: the microphone stays ready for 3 minutes (no new permission prompt when the
+   player comes back), then it is really turned off; leaving the app turns it off at once */
+function releaseMic() {
+  clearTimeout(micKeep.timer);
+  micKeep.timer = setTimeout(() => { if (tuner.on || (typeof of !== "undefined" && of.stream)) return; try { micKeep.stream && micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; micDone(); }, 180000);
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden && !tuner.on && !(typeof of !== "undefined" && of.stream) && micKeep.stream) { try { micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; } });
 async function openMic() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("Ta przeglądarka nie daje dostępu do mikrofonu."), { name: "NoMic" });
   /* iPhone: playback sets the audio session to "playback" (music with the silent switch on), and in that mode iOS
      refuses the microphone ("audio session category is not compatible with audio capture"). Recording needs
      "play-and-record"; micDone() gives the session back. */
   try { if (navigator.audioSession) navigator.audioSession.type = "play-and-record"; } catch {}
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
-  catch (e) { if (e && e.name === "OverconstrainedError") stream = await navigator.mediaDevices.getUserMedia({ audio: true }); else throw e; }
+  /* one microphone for the whole visit: asking again would make the phone ask for permission again */
+  clearTimeout(micKeep.timer);
+  let stream = micKeep.stream && micKeep.stream.getAudioTracks().some(t => t.readyState === "live") ? micKeep.stream : null;
+  if (!stream) {
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
+    catch (e) { if (e && e.name === "OverconstrainedError") stream = await navigator.mediaDevices.getUserMedia({ audio: true }); else throw e; }
+    micKeep.stream = stream;
+  }
   const AC = window.AudioContext || window.webkitAudioContext, rate = stream.getAudioTracks()[0]?.getSettings?.().sampleRate;
   let ctx; try { ctx = rate ? new AC({ sampleRate: rate }) : new AC(); } catch { ctx = new AC(); }
   try { await ctx.resume(); } catch {}
@@ -2579,7 +2593,7 @@ async function openMic() {
   catch { try { ctx.close(); } catch {} ctx = new AC(); try { await ctx.resume(); } catch {} src = ctx.createMediaStreamSource(stream); }
   return { stream, ctx, src };
 }
-function micDone() { try { if (navigator.audioSession && !tuner.on && !(typeof of !== "undefined" && of.stream)) navigator.audioSession.type = "auto"; } catch {} }
+function micDone() { try { if (navigator.audioSession && !tuner.on && !(typeof of !== "undefined" && of.stream) && !micKeep.stream) navigator.audioSession.type = "auto"; } catch {} }
 function micError(e) {
   return e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Zezwól w ustawieniach strony (ikona obok adresu)." :
     e && e.name === "NotFoundError" ? "Nie znaleziono mikrofonu." : e && e.name === "NotReadableError" ? "Mikrofon jest zajęty przez inną aplikację." :
@@ -2649,7 +2663,7 @@ function drawTrace(t) {
 }
 function tunerStop() {
   tuner.on = false; cancelAnimationFrame(tuner.raf);
-  try { tuner.stream && tuner.stream.getTracks().forEach(t => t.stop()); } catch {} try { tuner.ctx && tuner.ctx.close(); } catch {}
+  try { tuner.ctx && tuner.ctx.close(); } catch {} releaseMic();
   tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; $("#tuner2").dataset.st = "off"; micDone();
   $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = "";
   $("#t-dot").style.transform = ""; tuner.x = 0; drawTrace(performance.now()); syncTuner();
@@ -2662,7 +2676,21 @@ const setA4 = v => { tuner.a4 = Math.max(430, Math.min(450, v)); store.set("tune
 $("#t-a-down").addEventListener("click", () => setA4(tuner.a4 - 1));
 $("#t-a-up").addEventListener("click", () => setA4(tuner.a4 + 1));
 function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerStart(); }
-const noteVoice = () => (store.get("ownUse") === "1" && typeof own !== "undefined" && own.samples.length ? ownNote : typeof timbreNote === "function" ? timbreNote(mainInstr().voice) : synthNote);
+/* which instrument a part is: its name (Puzon II → Puzon), a piano by its two staves, the melody by the piece's instrument */
+function instrOfPart(pid) {
+  const p = S.parts && S.parts.find(x => x.id === pid); if (!p) return mainInstr().id;
+  if (p.staves > 1 || PIANO_RE.test(p.name)) return "fortepian";
+  const name = (typeof partLabel === "function" ? partLabel(p) : p.name || "").replace(/ (I|II|III|IV|V)$/, "").trim().toLowerCase();
+  const hit = INSTRUMENTS.find(i => i.name.toLowerCase() === name) || INSTRUMENTS.find(i => name && i.name.toLowerCase().split(" ")[0] === name.split(" ")[0] && i.name.split(" ").length === 1) || INSTRUMENTS.find(i => name.startsWith(i.name.toLowerCase()));
+  return hit ? hit.id : mainInstr().id;
+}
+/* the player's recording of exactly this instrument, otherwise this instrument's own timbre (never another's recording) */
+function voiceFor(instrId) {
+  if (store.get("ownUse") === "1" && typeof ownVoice === "function") { const v = ownVoice(instrId); if (v) return v; }
+  return typeof timbreNote === "function" ? timbreNote(instrById(instrId).voice) : synthNote;
+}
+const voiceForPart = pid => voiceFor(instrOfPart(pid));
+const noteVoice = () => voiceFor(mainInstr().id);
 $$("#t-instr button").forEach(b => b.addEventListener("click", () => { tuner.tr = +b.dataset.tr; store.set("tunerTr", tuner.tr); syncTuner(); }));
 
 /* ---------------- T24 tutorial: five steps over the real screen, skippable ---------------- */
@@ -2871,7 +2899,7 @@ function hudUndo(msg) {
 /* parts are numbered when an instrument appears twice: Puzon → Puzon I, the new one Puzon II */
 function numberParts(xml, base) {
   const doc = parseXml(xml), sps = [...doc.getElementsByTagName("score-part")];
-  const same = sps.filter(sp => { const n = txt(sp, "part-name").trim(); return n === base || n.startsWith(base + " "); });
+  const same = sps.filter(sp => { const n = txt(sp, "part-name").trim(); return n === base || new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} (I|II|III|IV|V)$`).test(n); });
   if (same.length > 1) same.forEach((sp, i) => { kid(sp, "part-name").textContent = `${base} ${["I", "II", "III", "IV", "V"][i] || i + 1}`; });
   if (same.length > 1 && S.piece.instrument === base) {
     const first = same[0].getAttribute("id"); kids(doc.documentElement, "part"); // the melody keeps "I"
@@ -2885,7 +2913,7 @@ function buildAddPartSheet() {
 }
 function apStep2(id) {
   ap.instr = id; const ins = instrById(id), melodyName = S.piece.instrument || "";
-  const sameInstr = melodyName && instrById(id).name.split(" ")[0] === melodyName.split(" ")[0];
+  const srcP = S.parts.find(p => p.id === (ap.src || melodyPart())), sameInstr = !!srcP && instrOfPart(srcP.id) === id;
   ap.role = ["Klawiszowe", "Szarpane"].includes(ins.group) && !["ukulele", "mandolina"].includes(id) ? "chords" : ins.lo < 36 ? "bass" : "voice2";
   ap.show = "staff";
   $("#ap-for").textContent = ins.name; $("#sh-addpart-t").textContent = "Co ma grać?";
@@ -2914,13 +2942,13 @@ function partLabel(p) { const own = partName(p.id) || p.name, solo = S.parts.fin
 function addPart(xml, instrId, role, opts = {}) {
   const ins = instrById(instrId), src = opts.src || melodyPart();
   const before = new Set(analyseXml(xml).parts.map(p => p.id));
-  const sameInstr = S.piece.instrument && ins.name.split(" ")[0] === S.piece.instrument.split(" ")[0];
+  const sameInstr = instrOfPart(src) === instrId;          // the very same instrument (Puzon ≠ Puzon altowy)
   let out = makePart(xml, src, { role, instr: ins, interval: opts.int || 0, keepClef: sameInstr && ["voice2", "voice3", "melody"].includes(role) });
   const newId = analyseXml(out).parts.map(p => p.id).find(id => !before.has(id));
   if (opts.same && newId) return { xml: mergeAsVoice2(out, src, newId), id: null };
   /* the first melody part takes the instrument's name before numbering (so "Puzon" becomes "Puzon I") */
   const d = parseXml(out), sp = [...d.getElementsByTagName("score-part")].find(x => x.getAttribute("id") === src);
-  const base = ins.name; if (sp && S.piece.instrument && instrById(instrId).name.split(" ")[0] === S.piece.instrument.split(" ")[0]) kid(sp, "part-name").textContent = base;
+  const base = ins.name; if (sp && sameInstr) kid(sp, "part-name").textContent = base;
   out = numberParts(new XMLSerializer().serializeToString(d), base);
   return { xml: out, id: newId };
 }
@@ -2935,7 +2963,7 @@ $("#ap-go").addEventListener("click", () => {
 /* quick ensembles: duo = melody + second voice, trio = + bass; for the player's own instrument */
 $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
   try {
-    const me = INSTRUMENTS.find(i => i.name.split(" ")[0] === (S.piece.instrument || "").split(" ")[0]) || mainInstr();
+    const me = instrById(instrOfPart(melodyPart()));
     let r = addPart(S.piece.xml, me.id, "voice2"), xml = r.xml, ids = [r.id];
     if (b.dataset.quick === "trio") { const bass = ["puzon", "eufonium", "puzon-b"].includes(me.id) ? "tuba" : "puzon"; const r2 = addPart(xml, bass, "bass"); xml = r2.xml; ids.push(r2.id); }
     pushUndo(); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });

@@ -1095,3 +1095,4 @@ body.editmode .loopbar{display:none}
 .of-target{font-size:18px;color:var(--ink-2);margin:0}
 .of-target b{color:var(--ink);font-size:22px}
 .of-note b.dim{color:var(--ink-3)}
+.of-instr{justify-content:center}

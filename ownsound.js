@@ -5,11 +5,11 @@
    The steady middle is looped seamlessly (whole periods, ends on zero crossings, a crossfade baked in). */
 "use strict";
 
-const own = { samples: [] };          // { midi (float, measured), rate, data: Float32Array, ls, le } per anchor note
+/* recordings per instrument: { instrumentId: [ { midi (float, measured), rate, data: Float32Array, ls, le } … ] } */
+const own = { byInstr: {} };
 const OWN_HOLD = 1500, OWN_TOL = 15, OWN_RATE = 24000;
 /* the anchor notes (sounding MIDI): trombones on open first-position notes, others spread over their range */
-function ownTargets() {
-  const m = mainInstr();
+function ownTargets(m = instrById(of.instr || mainInstr().id)) {
   if (["puzon", "puzon-alt", "eufonium", "baryton"].includes(m.id)) return [41, 46, 53, 58, 65];       // F, B, f, b, f1
   if (m.id === "puzon-b" || m.id === "tuba" || m.id === "suzafon") return [m.lo + 3, m.lo + 8, m.lo + 15, m.lo + 20, m.lo + 27];
   const lo = m.lo + 3, hi = m.hi - 8, step = (hi - lo) / 4;
@@ -22,18 +22,22 @@ function noteLabel(midi) { const w = midi + (tuner.tr || 0), oct = Math.floor(w 
 function packF32(f) { const i16 = Int16Array.from(f, v => Math.max(-32767, Math.min(32767, Math.round(v * 32767)))); let s = ""; const u8 = new Uint8Array(i16.buffer); for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return btoa(s); }
 function unpackF32(b64) { const bin = atob(b64), a = new Int16Array(bin.length / 2); for (let i = 0; i < a.length; i++) a[i] = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); return Float32Array.from(a, v => v / 32767); }
 function saveOwn() {
-  try { store.set("ownSamples", JSON.stringify(own.samples.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, b64: packF32(x.data) })))); }
-  catch { hud("Za mało miejsca, żeby zapisać dźwięk", 3000); }
+  try {
+    const out = {}; Object.entries(own.byInstr).forEach(([id, list]) => { if (list.length) out[id] = list.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, b64: packF32(x.data) })); });
+    store.set("ownSamples2", JSON.stringify(out));
+  } catch { hud("Za mało miejsca, żeby zapisać dźwięk", 3000); }
 }
 (function loadOwn() {
-  try { const j = JSON.parse(store.get("ownSamples", "null")); if (Array.isArray(j)) own.samples = j.map(x => ({ ...x, data: unpackF32(x.b64) })); } catch {}
-  try { localStorage.removeItem("solo:ownSound"); } catch {}          // the old one-note recording
+  try { const j = JSON.parse(store.get("ownSamples2", "null")); if (j) Object.entries(j).forEach(([id, list]) => { own.byInstr[id] = list.map(x => ({ ...x, data: unpackF32(x.b64) })); }); } catch {}
+  /* an earlier recording (one set, before instruments were told apart) belongs to the main instrument */
+  try { const old = JSON.parse(store.get("ownSamples", "null")); if (Array.isArray(old) && old.length && !own.byInstr[mainInstr().id]) { own.byInstr[mainInstr().id] = old.map(x => ({ ...x, data: unpackF32(x.b64) })); saveOwn(); } localStorage.removeItem("solo:ownSamples"); } catch {}
+  try { localStorage.removeItem("solo:ownSound"); } catch {}
 })();
-
 /* ---------------- playback: the nearest anchor, shifted, looping its steady middle ---------------- */
-function ownNote(ctx, out, f, st, en) {
+function ownVoice(instrId) { const list = own.byInstr[instrId]; return list && list.length ? (ctx, out, f, st, en) => samplerNote(list, ctx, out, f, st, en) : null; }
+function samplerNote(list, ctx, out, f, st, en) {
   const midi = 69 + 12 * Math.log2(f / 440);
-  const smp = own.samples.reduce((a, b) => Math.abs(b.midi - midi) < Math.abs(a.midi - midi) ? b : a);
+  const smp = list.reduce((a, b) => Math.abs(b.midi - midi) < Math.abs(a.midi - midi) ? b : a);
   smp._b = smp._b || new WeakMap();
   let buf = smp._b.get(ctx); if (!buf) { buf = ctx.createBuffer(1, smp.data.length, smp.rate); buf.copyToChannel(smp.data, 0); smp._b.set(ctx, buf); }
   const s = ctx.createBufferSource(), g = ctx.createGain();
@@ -68,17 +72,18 @@ function makeSample(raw, sr, targetMidi) {
 }
 
 /* ---------------- the guided recording ---------------- */
-const of = { step: 0, targets: [], done: [], ctx: null, stream: null, proc: null, ring: null, rp: 0, sr: 48000, raf: 0, holdFrom: 0, reads: [], hint: "", state: "idle", last: null };
+const of = { instr: null, step: 0, targets: [], done: [], ctx: null, stream: null, proc: null, ring: null, rp: 0, sr: 48000, raf: 0, holdFrom: 0, reads: [], hint: "", state: "idle", last: null };
 function syncOwn() {
-  const n = own.samples.length;
-  $("#own-st").textContent = n ? `${n} ${plural(n, "dźwięk", "dźwięki", "dźwięków")} nagrane` : "Nagraj kilka dźwięków swojego instrumentu";
-  $("#own-rec span").textContent = n ? "Nagraj od nowa" : "Nagraj";
-  $("#own-play").hidden = !n; $("#own-use").disabled = !n; $("#own-use").checked = !!n && store.get("ownUse") === "1";
+  const rec = Object.entries(own.byInstr).filter(([, l]) => l.length);
+  $("#own-st").textContent = rec.length ? rec.map(([id, l]) => `${instrById(id).name}: ${l.length}`).join(" · ") : "Nagraj kilka dźwięków swojego instrumentu";
+  $("#own-rec span").textContent = "Nagraj";
+  $("#own-play").hidden = !rec.length; $("#own-use").disabled = !rec.length; $("#own-use").checked = !!rec.length && store.get("ownUse") === "1";
 }
 $("#own-use").addEventListener("change", e => store.set("ownUse", e.target.checked ? "1" : "0"));
 $("#own-rec").addEventListener("click", () => { if (tuner.on) tunerStop(); openOwnFlow(); });
-$("#own-play").addEventListener("click", () => playScale());
+$("#own-play").addEventListener("click", () => { const id = own.byInstr[mainInstr().id] ? mainInstr().id : Object.keys(own.byInstr)[0]; if (id) playScale(own.byInstr[id]); });
 function openOwnFlow() {
+  of.instr = of.instr && profile().instruments.includes(of.instr) ? of.instr : mainInstr().id;
   of.targets = ownTargets(); of.done = of.targets.map(() => null); of.step = 0; of.state = "intro";
   $("#ownf").hidden = false; renderOwn();
 }
@@ -96,8 +101,8 @@ async function startListening() {
   return true;
 }
 function stopListening() {
-  try { of.proc && of.proc.disconnect(); } catch {} try { of.stream && of.stream.getTracks().forEach(t => t.stop()); } catch {} try { of.ctx && of.ctx.close(); } catch {}
-  of.proc = of.stream = of.ctx = null; micDone();
+  try { of.proc && of.proc.disconnect(); } catch {} try { of.ctx && of.ctx.close(); } catch {}
+  of.proc = of.stream = of.ctx = null; releaseMic();
 }
 /* the last `sec` seconds from the rolling buffer */
 function lastAudio(sec) { const n = Math.min(of.ring.length, Math.floor(sec * of.sr)), out = new Float32Array(n); for (let i = 0; i < n; i++) out[i] = of.ring[(of.rp - n + i + of.ring.length) % of.ring.length]; return out; }
@@ -132,6 +137,13 @@ function capture() {
   const smp = makeSample(lastAudio(OWN_HOLD / 1000 + 0.15), of.sr, of.targets[of.step]);
   of.done[of.step] = smp; renderOwn();
 }
+/* after a note: the next one not recorded yet (notes already recorded are never asked again), else the summary */
+function goNextMissing() {
+  const n = of.targets.length; let i = of.step + 1;
+  while (i < n && of.done[i]) i++;
+  if (i < n && !of.revisit) { of.step = i; of.state = "listen"; } else { of.state = "sum"; of.revisit = false; stopListening(); }
+  renderOwn();
+}
 function drawRing(prog, cents, hint, played) {
   const r = $("#of-ring"); if (!r) return;
   r.style.strokeDashoffset = String(691 * (1 - prog));
@@ -145,10 +157,14 @@ function drawRing(prog, cents, hint, played) {
 }
 /* ---------------- screens ---------------- */
 function renderOwn() {
-  const body = $("#ownf-body"), acts = $("#ownf-acts"), n = of.targets.length, m = mainInstr();
+  const body = $("#ownf-body"), acts = $("#ownf-acts"), n = of.targets.length, m = instrById(of.instr || mainInstr().id);
   $("#ownf-dots").innerHTML = of.targets.map((_, i) => `<i class="${of.state !== "intro" && of.state !== "sum" && i === of.step ? "on" : of.done[i] ? "done" : ""}"></i>`).join("");
   if (of.state === "intro") {
-    body.innerHTML = `<div class="of-hero">${icon("mic")}</div><h1 class="h-xl">Twój ${esc(m.name.toLowerCase())}</h1><p class="onb-lead">${n} dźwięków · cichy pokój · telefon metr od instrumentu</p>`;
+    const mine = profile().instruments, has = own.byInstr[of.instr];
+    body.innerHTML = `<div class="of-hero">${icon("mic")}</div><h1 class="h-xl">${esc(m.name)}</h1>
+      ${mine.length > 1 ? `<div class="ichips of-instr">${mine.map(id => `<button class="ichip" data-oi="${id}" aria-pressed="${id === of.instr}">${esc(instrById(id).name)}</button>`).join("")}</div>` : ""}
+      <p class="onb-lead">${n} dźwięków · cichy pokój · telefon metr od instrumentu</p>${has ? `<p class="note">Masz już nagranie tego instrumentu. Nowe je zastąpi.</p>` : ""}`;
+    body.querySelectorAll("[data-oi]").forEach(b => b.addEventListener("click", () => { of.instr = b.dataset.oi; of.targets = ownTargets(); of.done = of.targets.map(() => null); renderOwn(); }));
     acts.innerHTML = `<button class="btn primary wide" id="of-go"><span>Zaczynamy</span></button>`;
     $("#of-go").addEventListener("click", async () => { if (!(await startListening())) return; of.state = "listen"; renderOwn(); });
   } else if (of.state === "listen" || of.state === "got") {
@@ -163,10 +179,10 @@ function renderOwn() {
       acts.innerHTML = `<div class="of-row"><button class="btn tinted" id="of-again">${icon("undo")}<span>Jeszcze raz</span></button><button class="btn tinted" id="of-hear">${icon("play")}<span>Posłuchaj</span></button></div><button class="btn primary wide" id="of-next"><span>${of.step + 1 < n ? "Dalej" : "Gotowe"}</span></button>`;
       $("#of-again").addEventListener("click", () => { of.done[of.step] = null; of.holdFrom = 0; of.reads = []; of.state = "listen"; renderOwn(); });
       $("#of-hear").addEventListener("click", () => hearSample(of.done[of.step]));
-      $("#of-next").addEventListener("click", () => { of.holdFrom = 0; of.reads = []; if (of.step + 1 < n) { of.step++; of.state = "listen"; } else { of.state = "sum"; stopListening(); } renderOwn(); });
+      $("#of-next").addEventListener("click", () => { of.holdFrom = 0; of.reads = []; goNextMissing(); });
     } else {
       acts.innerHTML = `<button class="btn ghost wide" id="of-skip"><span>Pomiń ten dźwięk</span></button>`;
-      $("#of-skip").addEventListener("click", () => { of.holdFrom = 0; of.reads = []; if (of.step + 1 < n) of.step++; else { of.state = "sum"; stopListening(); } renderOwn(); });
+      $("#of-skip").addEventListener("click", () => { of.holdFrom = 0; of.reads = []; goNextMissing(); });
       cancelAnimationFrame(of.raf); of.raf = requestAnimationFrame(listenLoop);
     }
   } else if (of.state === "sum") {
@@ -175,26 +191,24 @@ function renderOwn() {
       <div class="of-tiles">${of.targets.map((tg, i) => { const l = noteLabel(tg); return `<button class="of-tile${of.done[i] ? " ok" : ""}" data-i="${i}"><b>${l.name}</b><small>${of.done[i] ? icon("check") : "–"}</small></button>`; }).join("")}</div>
       <p class="note">Dotknij dźwięku, żeby nagrać go jeszcze raz.</p>`;
     acts.innerHTML = got ? `<div class="of-row"><button class="btn tinted" id="of-scale">${icon("play")}<span>Posłuchaj gamy</span></button></div><button class="btn primary wide" id="of-save"><span>Zapisz mój dźwięk</span></button>` : `<button class="btn primary wide" id="of-close"><span>Zamknij</span></button>`;
-    body.querySelectorAll(".of-tile").forEach(b => b.addEventListener("click", async () => { if (!(await startListening())) return; of.step = +b.dataset.i; of.state = "listen"; renderOwn(); }));
+    body.querySelectorAll(".of-tile").forEach(b => b.addEventListener("click", async () => { if (!(await startListening())) return; of.step = +b.dataset.i; of.revisit = true; of.state = "listen"; renderOwn(); }));
     if (got) {
       $("#of-scale").addEventListener("click", () => playScale(of.done.filter(Boolean)));
-      $("#of-save").addEventListener("click", () => { own.samples = of.done.filter(Boolean).sort((a, b) => a.midi - b.midi); saveOwn(); store.set("ownUse", "1"); closeOwnFlow(); hud("Solo zagra Twoim dźwiękiem", 2500); });
+      $("#of-save").addEventListener("click", () => { own.byInstr[of.instr] = of.done.filter(Boolean).sort((a, b) => a.midi - b.midi); saveOwn(); store.set("ownUse", "1"); closeOwnFlow(); hud(`${m.name}: Solo zagra Twoim dźwiękiem`, 2500); });
     } else $("#of-close").addEventListener("click", closeOwnFlow);
   }
 }
-/* listening back: one note, or a B♭ major scale over the recorded notes */
-function withSamples(list, fn) { const keep = own.samples; own.samples = list; try { fn(); } finally { own.samples = keep; } }
+/* listening back: one note, or a major scale over the recorded notes */
 function hearSample(smp) {
   const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), out = ctx.createGain(); out.gain.value = 0.5; out.connect(ctx.destination);
-  withSamples([smp], () => ownNote(ctx, out, 440 * Math.pow(2, (Math.round(smp.midi) - 69) / 12), ctx.currentTime + 0.05, ctx.currentTime + 1.2));
+  samplerNote([smp], ctx, out, 440 * Math.pow(2, (Math.round(smp.midi) - 69) / 12), ctx.currentTime + 0.05, ctx.currentTime + 1.2);
   setTimeout(() => ctx.close(), 1800);
 }
-function playScale(list = own.samples) {
-  if (!list.length) return;
+function playScale(list) {
+  if (!list || !list.length) return;
   const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), out = ctx.createGain(); out.gain.value = 0.5; out.connect(ctx.destination);
-  const lo = Math.round(Math.min(...list.map(x => x.midi))), base = lo + ((46 - lo) % 12 + 12) % 12 - (((46 - lo) % 12 + 12) % 12 > 6 ? 12 : 0);
-  const steps = [0, 2, 4, 5, 7, 9, 11, 12], t0 = ctx.currentTime + 0.1;
-  withSamples(list, () => steps.forEach((s, i) => ownNote(ctx, out, 440 * Math.pow(2, (Math.max(lo, base) + s - 69) / 12), t0 + i * 0.42, t0 + i * 0.42 + 0.38)));
+  const lo = Math.round(Math.min(...list.map(x => x.midi))), steps = [0, 2, 4, 5, 7, 9, 11, 12], t0 = ctx.currentTime + 0.1;
+  steps.forEach((s, i) => samplerNote(list, ctx, out, 440 * Math.pow(2, (lo + 5 + s - 69) / 12), t0 + i * 0.42, t0 + i * 0.42 + 0.38));
   setTimeout(() => ctx.close(), 4500);
 }
 syncOwn();
