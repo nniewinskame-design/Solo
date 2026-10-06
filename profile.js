@@ -72,7 +72,7 @@ function instrPicker(box, { selected = [], multi = false, onPick }) {
   const p = profile(), mine = [...new Set([...(p.instruments || []), ...JSON.parse(store.get("recentInstr", "[]"))])].filter(id => INSTRUMENTS.some(i => i.id === id)).slice(0, 8);
   const chip = i => `<button class="ichip" data-i="${i.id}" aria-pressed="${selected.includes(i.id)}">${esc(i.name)}</button>`;
   const draw = q => {
-    const f = (q || "").trim().toLowerCase(), hit = i => !f || i.name.toLowerCase().includes(f);
+    const f = fold((q || "").trim()), hit = i => !f || fold(i.name).includes(f);          // "trabka" finds "Trąbka"
     let h = "";
     if (!f && mine.length) h += `<h3 class="lbl">Twoje</h3><div class="ichips">${mine.map(id => chip(instrById(id))).join("")}</div>`;
     INSTR_GROUPS.forEach(g => { const list = INSTRUMENTS.filter(i => i.group === g && hit(i)); if (list.length) h += `<h3 class="lbl">${g}</h3><div class="ichips">${list.map(chip).join("")}</div>`; });
@@ -97,7 +97,9 @@ function profile() {
   let p = null; try { p = JSON.parse(store.get("profile", "null")); } catch {}
   return { ...PROFILE_DEFAULT, ...(p || {}) };
 }
-function saveProfile(p) { store.set("profile", JSON.stringify(p)); applyProfile(); }
+function saveProfile(p) { if (!store.set("profile", JSON.stringify(p))) hud("Nie udało się zapisać ustawień. Pamięć urządzenia może być pełna.", 4000); applyProfile(); }
+/* the written note of C for a transposing instrument, within an octave (piccolo, guitar: none; E♭ clarinet: A) */
+const trPc = m => ((m.tr % 12) + 12) % 12;
 const mainInstr = () => instrById(profile().main);
 /* what the tuner shows: the written note for a transposing instrument (as the player reads it) */
 function applyProfile() {
@@ -109,7 +111,7 @@ function applyProfile() {
 function profileSummary(p = profile()) {
   const m = instrById(p.main), more = p.instruments.filter(i => i !== p.main).map(i => instrById(i).name);
   const role = { teacher: "uczę", student: "uczę się", self: "gram dla siebie" }[p.role];
-  return [m.name + (more.length ? ` (+ ${more.join(", ")})` : ""), m.tr ? (p.reading === "written" ? "nuty dla instrumentu" : "dźwięki rzeczywiste") : "", role, `A = ${p.a4} Hz`].filter(Boolean).join(" · ");
+  return [m.name + (more.length ? ` (+ ${more.join(", ")})` : ""), trPc(m) ? (p.reading === "written" ? "nuty dla instrumentu" : "dźwięki rzeczywiste") : "", role, `A = ${p.a4} Hz`].filter(Boolean).join(" · ");
 }
 
 /* ---------------- onboarding: one question per screen, big tiles, always "Pomiń" ---------------- */
@@ -122,7 +124,7 @@ function openOnboarding() {
 function onbSkipStep(name) {
   const p = onb.p;
   if (name === "main") return p.instruments.length < 2;
-  if (name === "reading") return !instrById(p.main).tr;
+  if (name === "reading") return !trPc(instrById(p.main));          // an octave apart only: C is still C
   return false;
 }
 function onbGo(d) {
@@ -130,8 +132,8 @@ function onbGo(d) {
   while (s > 0 && s < ONB_STEPS.length - 1 && onbSkipStep(ONB_STEPS[s])) s += d;
   onb.step = Math.max(0, Math.min(ONB_STEPS.length - 1, s)); renderOnb();
 }
-function finishOnb(skipped) {
-  const p = skipped && !onb.p.done ? { ...PROFILE_DEFAULT, done: true } : { ...onb.p, done: true };
+function finishOnb() {
+  const p = { ...onb.p, done: true };             // "Pomiń" keeps what was already chosen
   if (!p.instruments.includes(p.main)) p.main = p.instruments[0] || "puzon";
   saveProfile(p); store.set("welcomed", "1");
   fadeOut($("#onb"), 220);
@@ -154,7 +156,7 @@ function renderOnb() {
     h = `<h2 class="h-l">Główny instrument</h2><div class="onb-grid one">` +
       p.instruments.map(id => tile(p.main === id, instrById(id).name, `data-main="${id}"`)).join("") + `</div>`;
   } else if (name === "reading") {
-    const m = instrById(p.main), w = NOTE_PL[(0 + m.tr) % 12];
+    const m = instrById(p.main), w = NOTE_PL[trPc(m)];
     h = `<h2 class="h-l">Stroik pokazuje</h2><div class="onb-grid one">` +
       tile(p.reading === "written", `Zapis dla instrumentu`, `data-read="written"`, `<b class="onb-ex">C → ${w}</b>`) +
       tile(p.reading === "concert", `Dźwięki rzeczywiste`, `data-read="concert"`, `<b class="onb-ex">C → C</b>`) + `</div>`;
@@ -194,7 +196,9 @@ $("#onb-body").addEventListener("click", e => {
 });
 $("#onb-next").addEventListener("click", () => { if (ONB_STEPS[onb.step] === "done") finishOnb(false); else onbGo(1); });
 $("#onb-back").addEventListener("click", () => onbGo(-1));
-$("#onb-skip").addEventListener("click", () => finishOnb(true));
+/* the instrument is the one answer everything else follows (clef, tuner, playback): "Pomiń" on the greeting leads
+   to it instead of making everyone a trombonist */
+$("#onb-skip").addEventListener("click", () => { if (ONB_STEPS[onb.step] === "hello") onbGo(1); else finishOnb(); });
 
 /* ---------------- playback timbres for the main instrument (until the player records their own sound) ---------------- */
 function timbreNote(kind) {
@@ -231,14 +235,16 @@ function renderProfile() {
   const p = profile(), m = instrById(p.main);
   box.innerHTML = `<div class="ichips">${p.instruments.map(id => `<button class="ichip" data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>
     ${p.instruments.length > 1 ? `<p class="sub">Główny: ${esc(m.name)}</p>` : ""}
-    ${m.tr ? `<h3 class="lbl">Stroik pokazuje</h3><div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla instrumentu</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>` : ""}
+    ${trPc(m) ? `<h3 class="lbl">Stroik pokazuje</h3><div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla instrumentu</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>` : ""}
     <h3 class="lbl">Rola</h3><div class="seg three"><button data-role="teacher" aria-pressed="${p.role === "teacher"}">Uczę</button><button data-role="student" aria-pressed="${p.role === "student"}">Uczę się</button><button data-role="self" aria-pressed="${p.role === "self"}">Dla siebie</button></div>
-    <h3 class="lbl">Strój A</h3><div class="seg three">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>`;
+    <h3 class="lbl">Strój A</h3><div class="seg three">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>
+    <button class="btn tinted wide" data-again>Pytania na start jeszcze raz</button>`;
 }
 $("#prof").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   const p = profile();
   if (b.hasAttribute("data-edit")) { openSheet("instr"); return; }
+  if (b.hasAttribute("data-again")) { openOnboarding(); return; }
   if (b.dataset.main) p.main = b.dataset.main;
   if (b.dataset.read) p.reading = b.dataset.read;
   if (b.dataset.role) p.role = b.dataset.role;
