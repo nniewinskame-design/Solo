@@ -469,9 +469,10 @@
   <div class="thumbs" id="pending"></div>
   <p class="note" id="crop-hint" hidden>Dotknij strony, żeby obciąć jej górę lub dół.</p>
   <p class="note" id="first-model" hidden>Pierwszy odczyt pobierze ok. 150 MB. Najlepiej przez Wi-Fi.</p>
-  <p class="note" id="slow-read" hidden>Ta przeglądarka czyta nuty wolniej (bez przyspieszenia grafiki), może to potrwać kilka minut. Szybciej będzie w Chrome lub Safari.</p>
+  <p class="note" id="slow-read" hidden></p>
   <details class="ask" id="ask">
-    <summary>Kilka pytań o nuty</summary>
+    <summary><span class="grow"><b>Pomóż w odczycie</b><small>Nieobowiązkowe: klucz, metrum i znaki, jeśli je znasz</small></span><svg class="i chev"><use href="#down"/></svg></summary>
+    <div class="ask-body"><h3 class="lbl">Klucz</h3><div class="chips clefchips" id="ask-clef-c"></div><h3 class="lbl">Metrum</h3><div class="chips" id="ask-time-c"></div><h3 class="lbl">Znaki przy kluczu</h3><div class="ask-key-c" id="ask-key-c"></div></div>
     <label class="ask-row" for="ask-clef"><span>Klucz w nutach</span><select id="ask-clef"><option value="">Nie wiem</option><option value="F">Basowy w całym utworze</option><option value="G">Wiolinowy w całym utworze</option><option value="C4">Tenorowy w całym utworze</option><option value="C3">Altowy w całym utworze</option></select></label>
     <label class="ask-row" for="ask-time"><span>Metrum</span><select id="ask-time"><option value="">Nie wiem</option><option value="4/4">4/4 (C)</option><option value="2/2">2/2 (¢)</option><option value="3/4">3/4</option><option value="2/4">2/4</option><option value="6/8">6/8</option><option value="3/8">3/8</option><option value="9/8">9/8</option><option value="12/8">12/8</option></select></label>
     <label class="ask-row" for="ask-key"><span>Znaki przy kluczu</span><select id="ask-key"><option value="">Nie wiem</option><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label>

@@ -3287,12 +3287,33 @@ function showReadError(msg, page) {
 
 function preparePages() {
   $("#first-model").hidden = !!store.get("modelReady");
-  $("#slow-read").hidden = !!navigator.gpu && readerBackend() === "webgpu";
+  /* reading without the graphics chip takes longer: said in a way that fits the device (never "try Safari" on Safari) */
+  const slow = !(navigator.gpu && readerBackend() === "webgpu"), ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const other = !ios && !/Chrome|CriOS|Edg\//.test(ua) && !/Safari/.test(ua);
+  $("#slow-read").textContent = other ? "W tej przeglądarce odczyt może potrwać kilka minut. W Chrome będzie szybciej." : "Odczyt na tym urządzeniu może potrwać kilka minut. Zostaw Solo na ekranie, aż skończy.";
+  $("#slow-read").hidden = !slow;
+  buildAsk();
   ["clef", "time", "key"].forEach(k => { $("#ask-" + k).value = store.get("ask-" + k, ""); });
   $("#ask").open = ["clef", "time", "key"].some(k => store.get("ask-" + k, ""));
 }
 ["clef", "time", "key"].forEach(k => $("#ask-" + k).addEventListener("change", e => store.set("ask-" + k, e.target.value)));
 const readAnswers = () => ({ clef: $("#ask-clef").value, time: $("#ask-time").value, key: $("#ask-key").value });
+/* "Pomóż w odczycie": chips instead of drop-down lists (the lists stay as the stored answers) */
+function buildAsk() {
+  const CL = { G: "g", F: "f", C4: "c", C3: "c" }, NAME = { G: "Wiolinowy", F: "Basowy", C4: "Tenorowy", C3: "Altowy" };
+  const chips = (sel, box, label) => {
+    const s = $(sel), b = $(box); if (!s || !b) return;
+    b.innerHTML = [...s.options].map(o => `<button type="button" data-v="${esc(o.value)}" aria-pressed="${o.value === s.value}">${label(o)}</button>`).join("");
+    b.onclick = e => { const x = e.target.closest("[data-v]"); if (!x) return; s.value = x.dataset.v; s.dispatchEvent(new Event("change", { bubbles: true })); buildAsk(); };
+  };
+  chips("#ask-clef", "#ask-clef-c", o => !o.value ? "Nie wiem" : CL[o.value] ? `<svg class="cl ${CL[o.value]}"><use href="#clef-${CL[o.value]}"/></svg>${NAME[o.value]}` : esc(o.textContent.replace(/ w całym utworze/, "")));
+  chips("#ask-time", "#ask-time-c", o => esc(o.value || "Nie wiem"));
+  const k = $("#ask-key"), kb = $("#ask-key-c"); if (!k || !kb) return;
+  const vals = [...k.options].map(o => o.value).filter(Boolean).map(Number).sort((a, b) => a - b), cur = k.value === "" ? null : +k.value;
+  const name = v => v == null ? "Nie wiem" : !v ? "Bez znaków" : `${Math.abs(v)} ${v > 0 ? plural(Math.abs(v), "krzyżyk", "krzyżyki", "krzyżyków") : plural(Math.abs(v), "bemol", "bemole", "bemoli")}`;
+  kb.innerHTML = `<button type="button" class="pill round sm" data-k="-1" aria-label="Więcej bemoli" ${cur != null && cur <= vals[0] ? "disabled" : ""}><svg class="i"><use href="#minus"/></svg></button><b class="ak-val">${name(cur)}</b><button type="button" class="pill round sm" data-k="1" aria-label="Więcej krzyżyków" ${cur != null && cur >= vals[vals.length - 1] ? "disabled" : ""}><svg class="i"><use href="#plus"/></svg></button>${cur != null ? `<button type="button" class="ak-x" data-k="0">Nie wiem</button>` : ""}`;
+  kb.onclick = e => { const x = e.target.closest("[data-k]"); if (!x) return; const d = +x.dataset.k; k.value = d === 0 ? "" : String(Math.max(vals[0], Math.min(vals[vals.length - 1], (cur ?? 0) + (cur == null ? 0 : d)))); k.dispatchEvent(new Event("change", { bubbles: true })); buildAsk(); };
+}
 
 /* ---- Reading on the device: homr (open-source optical music recognition), free and offline ----
    The engine runs in a worker. Solo never waits on it forever: a page with no progress for 150 s is stopped,
