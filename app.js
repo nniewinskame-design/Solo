@@ -244,7 +244,7 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet })[name]?.();
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet })[name]?.();
   openSheetId = name;
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
@@ -618,7 +618,7 @@ async function doRender() {
     if (doubt.size) { const order = drawnBars(xml); $$("#pages g.measure").forEach((g, i) => g.classList.toggle("doubt", doubt.has(order[i]))); }
     S.fromMs = 0; S.fromBar = -1;
     if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
-    S.mode = mode; S.loadedKey = "view"; applyPageZoom();
+    S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip();
     requestAnimationFrame(drawLoop);
     S.baseBpm = scoreBpm();
     if (openSheetId === "more") syncTempo();
@@ -2334,7 +2334,8 @@ const NEWS = { "3.8": ["Zakładki na dole: Nuty, Stroik, Metronom, Ty.",
   "Strona A4 jak na papierze, powiększanie dwoma palcami jak w PDF.",
   "Nowy odtwarzacz: takt odliczania, płynny kursor, przewijanie linia po linii, pauza, pętla zmieniana w trakcie grania, metronom w odsłuchu, wyciszanie partii.",
   "Poprawianie nut: wybierz długość i dotknij pięciolinii; zakładki z ikonami; przesuwanie nut w bok; kropka; dźwięk przy każdej zmianie.",
-  "Nowa melodia zaczyna się od instrumentu, metrum, tonacji i tempa."],
+  "Nowa melodia zaczyna się od instrumentu, metrum, tonacji i tempa.",
+  "Partie pod tytułem: „+” dopisuje drugi głos, unisono, akordy albo bas dla wybranego instrumentu, z transpozycją. Duet i trio jednym dotknięciem. Puzon I / Puzon II."],
   "3.7": ["Przycisk „Popraw”: dotknij w pobliżu nuty, żeby ją zmienić. „Takt”: metrum, klucz, znaki, dodawanie i usuwanie taktów, tempo.",
   "Kilka pytań przed czytaniem: klucz, metrum i znaki przy kluczu poprawiają odczyt.",
   "Takty, które się nie zgadzają, są zaznaczone na czerwono, z licznikiem do sprawdzenia.",
@@ -2728,3 +2729,137 @@ $("#new-go").addEventListener("click", () => {
     whenDrawn(() => { setEditMode(true); edTab("len"); selectNote(null); });
   });
 });
+
+/* ---------------- 3.8 parts: chips under the title, "+" adds a part written automatically ----------------
+   (benchmark: MuseScore, Flat, StaffPad, BandLab, Logic Session Players, Soundslice, iReal Pro) */
+const AP_INSTR = ["puzon", "trabka", "klarnet", "sax-a", "flet", "fortepian", "tuba", "waltornia", "eufonium", "puzon-b", "sax-t", "kornet"];
+const ap = { instr: null, role: "voice2", int: 0, show: "staff" };
+const partName = id => { const sp = [...parseXml(S.piece.xml).getElementsByTagName("score-part")].find(x => x.getAttribute("id") === id); return sp ? txt(sp, "part-name") : id; };
+function renderPartStrip() {
+  const box = $("#pstrip"); if (!box || !S.piece) return;
+  const only = S.only;
+  box.innerHTML = S.parts.map(p => {
+    const own = partName(p.id) || p.name, solo = S.parts.find(x => !(x.staves > 1 || PIANO_RE.test(x.name)));
+    const nm = p === solo && S.piece.instrument && !/ (I|II|III|IV)$/.test(own) ? S.piece.instrument : own;
+    return `<button class="pchip${only === p.id ? " only" : ""}${pb.mute.has(p.id) ? " muted" : ""}${p.keep ? "" : " off"}" data-pid="${p.id}">${icon(p.staves > 1 || PIANO_RE.test(nm) ? "piano" : "trombone")}<span>${esc(nm)}</span></button>`;
+  }).join("") + `<button class="pchip add" data-sheet="addpart" aria-label="Dodaj partię">${icon("plus")}</button>`;
+}
+/* a tap shows only that part (again: all of them); a long press opens what can be done with it */
+(() => {
+  let t = 0, long = false;
+  $("#pstrip").addEventListener("pointerdown", e => { const c = e.target.closest("[data-pid]"); if (!c) return; long = false; t = setTimeout(() => { long = true; openPartSheet(c.dataset.pid); }, 500); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => $("#pstrip").addEventListener(ev, () => clearTimeout(t)));
+  $("#pstrip").addEventListener("contextmenu", e => e.preventDefault());
+  $("#pstrip").addEventListener("click", e => {
+    const c = e.target.closest("[data-pid]"); if (!c || long) return;
+    if (S.parts.length < 2) { openPartSheet(c.dataset.pid); return; }
+    const part = S.parts.find(p => p.id === c.dataset.pid);
+    if (part && !part.keep && !S.only) { part.keep = true; changed(); renderPartStrip(); return; }     // a hidden part comes back
+    showOnly(S.only === c.dataset.pid ? null : c.dataset.pid);
+  });
+})();
+function showOnly(pid) {
+  if (pid) { S.keepBefore = S.keepBefore || S.parts.filter(p => p.keep).map(p => p.id); S.parts.forEach(p => (p.keep = p.id === pid)); }
+  else if (S.keepBefore) { S.parts.forEach(p => (p.keep = S.keepBefore.includes(p.id))); S.keepBefore = null; }
+  S.only = pid; changed(); renderPartStrip();
+}
+let partSheetId = null;
+function openPartSheet(pid) { partSheetId = pid; openSheet("part"); }
+function buildPartSheet() {
+  const pid = partSheetId; $("#sh-part-t").textContent = partName(pid);
+  $("#pp-mute").setAttribute("aria-pressed", String(pb.mute.has(pid)));
+  $("#pp-only").setAttribute("aria-pressed", String(S.only === pid));
+  $("#pp-del").hidden = S.parts.length < 2; $("#pp-only").hidden = S.parts.length < 2;
+}
+$("#pp-only").addEventListener("click", () => { closeSheet(); showOnly(S.only === partSheetId ? null : partSheetId); });
+$("#pp-mute").addEventListener("click", () => { const id = partSheetId; if (pb.mute.has(id)) pb.mute.delete(id); else pb.mute.add(id); buildPartSheet(); renderPartStrip(); if (playState) play(playPos()); });
+async function withOnly(pid, fn) { const prev = S.only; showOnly(pid); await new Promise(r => setTimeout(r, 300)); try { await fn(); } finally { showOnly(prev); } }
+$("#pp-print").addEventListener("click", () => closeSheetThen(() => withOnly(partSheetId, printScore)));
+$("#pp-send").addEventListener("click", () => closeSheetThen(() => withOnly(partSheetId, () => savePdf(true))));
+$("#pp-del").addEventListener("click", () => {
+  const id = partSheetId, doc = parseXml(S.piece.xml), root = doc.documentElement;
+  kids(root, "part").forEach(p => { if (p.getAttribute("id") === id) p.remove(); });
+  kids(kid(root, "part-list"), "score-part").forEach(sp => { if (sp.getAttribute("id") === id) sp.remove(); });
+  pushUndo(); applyNewXml(new XMLSerializer().serializeToString(doc), null); closeSheet();
+  hudUndo("Usunięto partię");
+});
+/* the score changed shape (a part added or removed): parts are read again, the view keeps its settings */
+function applyNewXml(xml, addId) {
+  const settings = recordFromState().settings; S.piece.xml = xml; S.only = null; S.keepBefore = null;
+  const ids = analyseXml(xml).parts.map(p => p.id);
+  loadState(S.piece, { ...settings, keep: [...settings.keep.filter(id => ids.includes(id)), ...(addId ? [addId] : [])] });
+  S.parts.forEach(p => { if (p.id === addId) p.keep = true; });
+  S.loadedKey = null; changed(); renderPartStrip();
+}
+function hudUndo(msg) {
+  hud(msg, 4000);
+  const h = $("#toast"); const b = document.createElement("button"); b.className = "toast-act"; b.textContent = "Cofnij";
+  b.addEventListener("click", () => { if (S.undo && S.undo.length) { applyNewXml(S.undo.pop(), null); h.classList.remove("show"); } });
+  h.appendChild(b);
+}
+/* parts are numbered when an instrument appears twice: Puzon → Puzon I, the new one Puzon II */
+function numberParts(xml, base) {
+  const doc = parseXml(xml), sps = [...doc.getElementsByTagName("score-part")];
+  const same = sps.filter(sp => { const n = txt(sp, "part-name").trim(); return n === base || n.startsWith(base + " "); });
+  if (same.length > 1) same.forEach((sp, i) => { kid(sp, "part-name").textContent = `${base} ${["I", "II", "III", "IV", "V"][i] || i + 1}`; });
+  if (same.length > 1 && S.piece.instrument === base) {
+    const first = same[0].getAttribute("id"); kids(doc.documentElement, "part"); // the melody keeps "I"
+  }
+  return new XMLSerializer().serializeToString(doc);
+}
+function buildAddPartSheet() {
+  const p = profile(), list = [...new Set([...p.instruments, ...AP_INSTR])].slice(0, 12);
+  $("#ap-instr").innerHTML = list.map(id => `<button class="tile" data-i="${id}">${icon(id === "fortepian" ? "piano" : "trombone")}<span>${esc(instrById(id).name)}</span></button>`).join("");
+  $("#ap-step1").hidden = false; $("#ap-step2").hidden = true; $("#ap-back").hidden = true; $("#sh-addpart-t").textContent = "Dodaj partię";
+}
+function apStep2(id) {
+  ap.instr = id; const ins = instrById(id), melodyName = S.piece.instrument || "";
+  const sameInstr = melodyName && instrById(id).name.split(" ")[0] === melodyName.split(" ")[0];
+  ap.role = id === "fortepian" ? "chords" : ["tuba", "puzon-b"].includes(id) ? "bass" : "voice2";
+  ap.show = "staff";
+  $("#ap-for").textContent = ins.name; $("#sh-addpart-t").textContent = "Co ma grać?";
+  $("#ap-showbox").hidden = !sameInstr;
+  $("#ap-step1").hidden = true; $("#ap-step2").hidden = false; $("#ap-back").hidden = false;
+  syncAp();
+}
+function syncAp() {
+  $$("#ap-role [data-role]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.role === ap.role)));
+  $$("#ap-int button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.int === ap.int)));
+  $$("#ap-show button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.show === ap.show)));
+  $("#ap-v2opts").hidden = ap.role !== "voice2";
+}
+$("#ap-instr").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if (b) apStep2(b.dataset.i); });
+$("#ap-back").addEventListener("click", buildAddPartSheet);
+$$("#ap-role [data-role]").forEach(b => b.addEventListener("click", () => { ap.role = b.dataset.role; syncAp(); }));
+$$("#ap-int button").forEach(b => b.addEventListener("click", () => { ap.int = +b.dataset.int; syncAp(); }));
+$$("#ap-show button").forEach(b => b.addEventListener("click", () => { ap.show = b.dataset.show; syncAp(); }));
+/* the melody part: the first kept one that is not a piano */
+const melodyPart = () => (S.parts.find(p => p.keep && !(p.staves > 1 || PIANO_RE.test(p.name))) || S.parts[0]).id;
+function addPart(xml, instrId, role, opts = {}) {
+  const ins = instrById(instrId), src = melodyPart();
+  const before = new Set(analyseXml(xml).parts.map(p => p.id));
+  const sameInstr = S.piece.instrument && ins.name.split(" ")[0] === S.piece.instrument.split(" ")[0];
+  let out = makePart(xml, src, { role, instr: ins, interval: opts.int || 0, keepClef: sameInstr && (role === "voice2" || role === "melody") });
+  const newId = analyseXml(out).parts.map(p => p.id).find(id => !before.has(id));
+  if (opts.same && newId) return { xml: mergeAsVoice2(out, src, newId), id: null };
+  /* the first melody part takes the instrument's name before numbering (so "Puzon" becomes "Puzon I") */
+  const d = parseXml(out), sp = [...d.getElementsByTagName("score-part")].find(x => x.getAttribute("id") === src);
+  const base = ins.name; if (sp && S.piece.instrument && instrById(instrId).name.split(" ")[0] === S.piece.instrument.split(" ")[0]) kid(sp, "part-name").textContent = base;
+  out = numberParts(new XMLSerializer().serializeToString(d), base);
+  return { xml: out, id: newId };
+}
+$("#ap-go").addEventListener("click", () => {
+  try {
+    const r = addPart(S.piece.xml, ap.instr, ap.role, { int: ap.int, same: ap.role === "voice2" && ap.show === "same" && !$("#ap-showbox").hidden });
+    pushUndo(); closeSheetThen(() => { applyNewXml(r.xml, r.id); hudUndo("Dodano partię"); });
+  } catch (e) { console.error(e); hud("Nie udało się dopisać tej partii"); }
+});
+/* quick ensembles: duo = melody + second voice, trio = + bass; for the player's own instrument */
+$$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
+  try {
+    const me = INSTRUMENTS.find(i => i.name.split(" ")[0] === (S.piece.instrument || "").split(" ")[0]) || mainInstr();
+    let r = addPart(S.piece.xml, me.id, "voice2"), xml = r.xml, ids = [r.id];
+    if (b.dataset.quick === "trio") { const bass = ["puzon", "eufonium", "puzon-b"].includes(me.id) ? "tuba" : "puzon"; const r2 = addPart(xml, bass, "bass"); xml = r2.xml; ids.push(r2.id); }
+    pushUndo(); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });
+  } catch (e) { console.error(e); hud("Nie udało się dopisać partii"); }
+}));

@@ -146,6 +146,7 @@
     <div class="stitle"><div class="a" id="s-title"></div><div class="b" id="s-sub"></div></div>
     <button class="pill round" id="btn-edit" aria-pressed="false" aria-label="Popraw nuty" title="Popraw nuty"><svg class="i"><use href="#pencil"/></svg></button>
     <button class="pill round" id="btn-tools" data-sheet="more" aria-label="Narzędzia" title="Narzędzia"><svg class="i"><use href="#tools"/></svg></button>
+    <div class="pstrip" id="pstrip" role="toolbar" aria-label="Partie"></div>
   </header>
   <div class="scroller" id="scroller">
     <div class="notice" id="notice" hidden>
@@ -366,7 +367,7 @@
   <details class="ask" id="ask">
     <summary>Kilka pytań <small>(nieobowiązkowe, poprawiają odczyt)</small></summary>
     <label class="ask-row" for="ask-clef"><span>Klucz w nutach</span><select id="ask-clef"><option value="">Nie wiem</option><option value="F">Basowy w całym utworze</option><option value="G">Wiolinowy w całym utworze</option><option value="C4">Tenorowy w całym utworze</option><option value="C3">Altowy w całym utworze</option></select></label>
-    <label class="ask-row" for="ask-time"><span>Metrum</span><select id="ask-time"><option value="">Nie wiem</option><option value="4/4">4/4 (także „C”)</option><option value="2/2">2/2 (także „¢”)</option><option value="3/4">3/4</option><option value="2/4">2/4</option><option value="6/8">6/8</option><option value="3/8">3/8</option></select></label>
+    <label class="ask-row" for="ask-time"><span>Metrum</span><select id="ask-time"><option value="">Nie wiem</option><option value="4/4">4/4</option><option value="2/2">2/2</option><option value="3/4">3/4</option><option value="2/4">2/4</option><option value="6/8">6/8</option><option value="3/8">3/8</option></select></label>
     <label class="ask-row" for="ask-key"><span>Znaki przy kluczu</span><select id="ask-key"><option value="">Nie wiem</option><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option></select></label>
   </details>
   <p class="err" id="read-error" hidden></p>
@@ -381,7 +382,7 @@
     <div class="beats" id="m-beats" aria-hidden="true"></div>
     <div class="metro-row">
       <button class="pill round" id="m-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button>
-      <div class="metro-bpm"><b id="m-bpm">100</b><small>uderzeń na minutę</small></div>
+      <div class="metro-bpm"><b id="m-bpm">100</b><small>BPM</small></div>
       <button class="pill round" id="m-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button>
     </div>
     <div class="seg" id="m-meter"><button data-b="2">2/4</button><button data-b="3">3/4</button><button data-b="4">4/4</button><button data-b="6">6/8</button></div>
@@ -409,14 +410,14 @@
     <button class="btn primary wide" id="t-go"><svg class="i"><use href="#mic"/></svg><span>Włącz stroik</span></button>
     <p class="note">Słucha przez mikrofon tylko na tym urządzeniu. Nic nie jest nagrywane ani wysyłane.</p>
   </div>
-  <h3 class="lbl">Instrument</h3>
-  <div class="seg" id="t-instr"><button data-tr="0">W stroju C (puzon)</button><button data-tr="2">W stroju B</button><button data-tr="-3">W stroju Es</button><button data-tr="7">W stroju F</button></div>
+  <h3 class="lbl">Strój instrumentu</h3>
+  <div class="seg" id="t-instr"><button data-tr="0">C</button><button data-tr="2">B</button><button data-tr="9">Es</button><button data-tr="7">F</button></div>
   <h3 class="lbl">Dokładność</h3>
-  <div class="seg three" id="t-tol"><button data-tol="10">Łagodna ±10</button><button data-tol="5">Zwykła ±5</button><button data-tol="3">Dokładna ±3</button></div>
-  <div class="list"><div class="li"><span class="grow"><b>Strój A</b><small>Zwykle 440 Hz, w orkiestrach często 442</small></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
+  <div class="seg three" id="t-tol"><button data-tol="10">±10 ¢</button><button data-tol="5">±5 ¢</button><button data-tol="3">±3 ¢</button></div>
+  <div class="list"><div class="li"><span class="grow"><b>A</b></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><span class="unit">Hz</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
   <h3 class="lbl">Mój dźwięk</h3>
   <div class="tuner" id="own">
-    <p class="txt">Zagraj jeden długi, równy dźwięk (2 sekundy). Solo zagra potem nuty Twoim brzmieniem.</p>
+    <p class="txt">Zagraj jeden długi, równy dźwięk.</p>
     <p class="tune-cents" id="own-st"></p>
     <button class="btn tinted wide" id="own-rec"><svg class="i"><use href="#mic"/></svg><span>Nagraj mój dźwięk</span></button>
     <label class="li" for="own-use"><span class="grow"><b>Graj moim dźwiękiem</b></span><input type="checkbox" id="own-use" class="switch"></label>
@@ -492,9 +493,9 @@
   <h3 class="lbl">Metrum</h3>
   <div class="seg three" id="new-time"><button data-v="4/4">4/4</button><button data-v="3/4">3/4</button><button data-v="2/4">2/4</button><button data-v="6/8">6/8</button><button data-v="2/2">2/2</button><button data-v="3/8">3/8</button></div>
   <h3 class="lbl">Tonacja</h3>
-  <label class="ask-row" for="new-key"><span>Znaki przy kluczu</span><select id="new-key"><option value="0">Bez znaków (C-dur / a-moll)</option><option value="-1">1 bemol (F-dur / d-moll)</option><option value="-2">2 bemole (B-dur / g-moll)</option><option value="-3">3 bemole (Es-dur / c-moll)</option><option value="-4">4 bemole (As-dur / f-moll)</option><option value="1">1 krzyżyk (G-dur / e-moll)</option><option value="2">2 krzyżyki (D-dur / h-moll)</option><option value="3">3 krzyżyki (A-dur / fis-moll)</option><option value="4">4 krzyżyki (E-dur / cis-moll)</option></select></label>
+  <label class="ask-row" for="new-key"><span>Znaki przy kluczu</span><select id="new-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option></select></label>
   <h3 class="lbl">Tempo</h3>
-  <div class="list"><div class="li"><span class="ic"><svg class="i"><use href="#metronome"/></svg></span><span class="grow"><b id="new-bpm">90</b> <small>ćwierćnut na minutę</small></span><button class="pill round sm" id="new-bpm-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><button class="pill round sm" id="new-bpm-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div></div>
+  <div class="list"><div class="li"><span class="ic"><svg class="i"><use href="#metronome"/></svg></span><span class="grow"><svg class="q"><use href="#quarter"/></svg> = <b id="new-bpm">90</b></span><button class="pill round sm" id="new-bpm-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><button class="pill round sm" id="new-bpm-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div></div>
   <button class="btn primary wide" id="new-go"><svg class="i"><use href="#pencil"/></svg><span>Zacznij pisać</span></button>
 </div>
 
@@ -506,18 +507,18 @@
   <div class="seg three" id="bar-time"><button data-v="4/4">4/4</button><button data-v="3/4">3/4</button><button data-v="2/4">2/4</button><button data-v="2/2">2/2</button><button data-v="6/8">6/8</button><button data-v="3/8">3/8</button></div>
   <h3 class="lbl">Klucz zapisany w nutach</h3>
   <div class="seg" id="bar-clef"><button data-v="F">Basowy</button><button data-v="G">Wiolinowy</button><button data-v="C4">Tenorowy</button><button data-v="C3">Altowy</button></div>
-  <p class="note">Nuty zostają na swoich liniach: tak poprawisz źle odczytany klucz. Żeby tylko czytać w innym kluczu, użyj przycisku „Klucz” na dole.</p>
+  <p class="note">Nuty zostają na swoich liniach.</p>
   <h3 class="lbl">Znaki przy kluczu</h3>
-  <label class="ask-row" for="bar-key"><span>Bemole lub krzyżyki</span><select id="bar-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label>
+  <label class="ask-row" for="bar-key"><span>Znaki przy kluczu</span><select id="bar-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label>
   <h3 class="lbl">Takty</h3>
   <div class="list">
-    <button class="li tap" id="bar-add"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Dodaj pusty takt</b><small>Za tym taktem</small></span></button>
-    <button class="li tap" id="bar-addbefore"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Dodaj pusty takt przed</b><small>Przed tym taktem</small></span></button>
+    <button class="li tap" id="bar-add"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt za</b></span></button>
+    <button class="li tap" id="bar-addbefore"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt przed</b></span></button>
     <button class="li tap danger" id="bar-del"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń ten takt</b></span></button>
   </div>
   <h3 class="lbl">Tempo odsłuchu</h3>
   <div class="list">
-    <div class="li"><span class="ic"><svg class="i"><use href="#metronome"/></svg></span><span class="grow"><b id="bar-bpm">120</b> <small>ćwierćnut na minutę</small></span><button class="pill round sm" id="bar-bpm-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><button class="pill round sm" id="bar-bpm-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div>
+    <div class="li"><span class="ic"><svg class="i"><use href="#metronome"/></svg></span><span class="grow"><svg class="q"><use href="#quarter"/></svg> = <b id="bar-bpm">120</b></span><button class="pill round sm" id="bar-bpm-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><button class="pill round sm" id="bar-bpm-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div>
   </div>
 </div>
 
@@ -527,12 +528,12 @@
   <div class="tiles first">
     <button class="tile" data-sheet="key"><svg class="i"><use href="#updown"/></svg><span>Tonacja</span></button>
     <button class="tile" data-sheet="clef"><svg class="i"><use href="#clef"/></svg><span>Klucz</span></button>
-    <button class="tile" data-sheet="voice"><svg class="i"><use href="#plus"/></svg><span>2. głos</span></button>
-    <button class="tile" data-sheet="partfor"><svg class="i"><use href="#trombone"/></svg><span>Partia</span></button>
+    <button class="tile" data-sheet="addpart"><svg class="i"><use href="#plus"/></svg><span>Dodaj partię</span></button>
     <button class="tile" data-sheet="orig" id="row-orig"><svg class="i"><use href="#image"/></svg><span>Oryginał</span></button>
     <button class="tile" id="btn-share"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
     <button class="tile" data-sheet="tuner"><svg class="i"><use href="#fork"/></svg><span>Stroik</span></button>
     <button class="tile" data-sheet="tools"><svg class="i"><use href="#metronome"/></svg><span>Metronom</span></button>
+    <button class="tile" data-sheet="partfor"><svg class="i"><use href="#trombone"/></svg><span>Osobny plik</span></button>
   </div>
   <h3 class="lbl">Partie</h3>
   <div class="list" id="parts"></div>
@@ -557,10 +558,52 @@
     <button class="li tap" id="btn-print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Plik MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" id="btn-restore" hidden><span class="ic"><svg class="i"><use href="#undo"/></svg></span><span class="grow"><b>Przywróć odczyt</b><small>Cofa wszystkie poprawki nut</small></span></button>
+    <button class="li tap" id="btn-restore" hidden><span class="ic"><svg class="i"><use href="#undo"/></svg></span><span class="grow"><b>Przywróć odczyt</b></span></button>
     <button class="li tap" id="btn-report"><span class="ic"><svg class="i"><use href="#warn"/></svg></span><span class="grow"><b>Zgłoś problem</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap danger" id="btn-delete"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń z biblioteki</b></span></button>
   </div>
+</div>
+
+<div class="sheet" id="sh-addpart" role="dialog" aria-modal="true" aria-labelledby="sh-addpart-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><button class="pill round sm" id="ap-back" aria-label="Wstecz" hidden><svg class="i"><use href="#left"/></svg></button><h2 class="h-m" id="sh-addpart-t">Dodaj partię</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <div id="ap-step1">
+    <h3 class="lbl first">Szybki zespół</h3>
+    <div class="tiles two" id="ap-quick">
+      <button class="tile wide" data-quick="duo"><svg class="i"><use href="#user"/></svg><span>Duet</span></button>
+      <button class="tile wide" data-quick="trio"><svg class="i"><use href="#music"/></svg><span>Trio</span></button>
+    </div>
+    <h3 class="lbl">Instrument</h3>
+    <div class="tiles three" id="ap-instr"></div>
+  </div>
+  <div id="ap-step2" hidden>
+    <h3 class="lbl first" id="ap-for"></h3>
+    <div class="cards" id="ap-role">
+      <button class="card2" data-role="voice2"><svg class="i"><use href="#n-eighth"/></svg><span><b>Drugi głos</b></span></button>
+      <button class="card2" data-role="melody"><svg class="i"><use href="#music"/></svg><span><b>Unisono</b></span></button>
+      <button class="card2" data-role="chords"><svg class="i"><use href="#piano"/></svg><span><b>Akordy</b></span></button>
+      <button class="card2" data-role="bass"><svg class="i"><use href="#n-half"/></svg><span><b>Bas</b></span></button>
+    </div>
+    <div id="ap-v2opts">
+      <h3 class="lbl">Odstęp</h3>
+      <div class="seg" id="ap-int"><button data-int="0">Sam dobierze</button><button data-int="3">Tercje</button><button data-int="6">Seksty</button><button data-int="5">Kwinty</button></div>
+      <div id="ap-showbox"><h3 class="lbl">Jak pokazać</h3>
+      <div class="seg" id="ap-show"><button data-show="staff">Osobna pięciolinia</button><button data-show="same">Na tej samej pięciolinii</button></div></div>
+    </div>
+    <button class="btn primary wide" id="ap-go"><svg class="i"><use href="#plus"/></svg><span>Dodaj</span></button>
+  </div>
+</div>
+
+<div class="sheet" id="sh-part" role="dialog" aria-modal="true" aria-labelledby="sh-part-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-part-t">Partia</h2><button class="done" data-close>Gotowe</button></div>
+  <div class="tiles first">
+    <button class="tile" id="pp-only"><svg class="i"><use href="#image"/></svg><span>Tylko ta</span></button>
+    <button class="tile" id="pp-mute" aria-pressed="false"><svg class="i"><use href="#x"/></svg><span>Wycisz</span></button>
+    <button class="tile" id="pp-print"><svg class="i"><use href="#print"/></svg><span>Drukuj</span></button>
+    <button class="tile" id="pp-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
+  </div>
+  <div class="list"><button class="li tap danger" id="pp-del"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń tę partię</b></span></button></div>
 </div>
 
 <div class="sheet" id="sh-practice" role="dialog" aria-modal="true" aria-labelledby="sh-practice-t" hidden>
@@ -576,7 +619,7 @@
   <div class="list"><button class="li tap" id="loop-row"><span class="ic"><svg class="i"><use href="#loop"/></svg></span><span class="grow"><b id="loop-t">Powtarzaj kilka taktów</b><small id="loop-s">Dotknij pierwszego i ostatniego taktu</small></span></button></div>
   <h3 class="lbl">Co słychać</h3>
   <div class="list" id="mix"></div>
-  <div class="list"><label class="li" for="swing"><span class="grow"><b>Swing</b><small>Ósemki grane długo-krótko</small></span><input type="checkbox" id="swing" class="switch"></label></div>
+  <div class="list"><label class="li" for="swing"><span class="grow"><b>Swing</b></span><input type="checkbox" id="swing" class="switch"></label></div>
 </div>
 
 <div class="sheet" id="sh-orig" role="dialog" aria-modal="true" aria-labelledby="sh-orig-t" hidden>

@@ -951,3 +951,34 @@ body.editing .scroller{padding-bottom:calc(200px + var(--safe-b))}
 .lbl small{font-weight:500;color:var(--ink-3);margin-left:6px;text-transform:none;letter-spacing:0}
 #sh-new .btn.wide{margin-top:16px}
 .ed-info .i{width:18px;height:18px;vertical-align:-4px}
+/* parts strip under the title: one chip per part, "+" adds one */
+.pstrip{grid-column:1/-1;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0}
+.pstrip::-webkit-scrollbar{display:none}
+.pchip{flex:none;display:flex;align-items:center;gap:6px;height:38px;padding:0 14px 0 10px;border-radius:99px;background:var(--card);box-shadow:var(--shadow-1,0 1px 3px rgba(0,0,0,.08));font:600 14px var(--sans);color:var(--ink);border:2px solid transparent}
+.pchip .i{width:18px;height:18px}
+.pchip.only{border-color:var(--primary)}
+.pchip.muted{opacity:.5;text-decoration:line-through}
+.pchip.add{padding:0 12px;color:var(--primary)}
+body.playing .pstrip{opacity:0;pointer-events:none}
+.tiles.two{grid-template-columns:1fr 1fr}.tiles.three{grid-template-columns:repeat(3,1fr)}
+.tile.wide{flex-direction:row;justify-content:flex-start;padding:12px 14px;gap:12px;text-align:left}
+.tile.wide span{display:flex;flex-direction:column;font-size:15px}.tile.wide small{font-weight:500;color:var(--ink-2);font-size:12.5px}
+.tile[aria-pressed="true"]{background:var(--primary);color:var(--on-primary)}
+.cards{display:flex;flex-direction:column;gap:8px}
+.card2{display:flex;align-items:center;gap:14px;padding:14px;border-radius:18px;background:var(--fill);color:var(--ink);text-align:left;border:2px solid transparent}
+.card2 .i{width:28px;height:28px;flex:none}
+.card2 span{display:flex;flex-direction:column;gap:2px}.card2 b{font-size:16px}.card2 small{color:var(--ink-2);font-size:13px}
+.card2[aria-pressed="true"]{background:var(--card);border-color:var(--primary)}
+.seg[id="ap-int"]{grid-template-columns:repeat(4,1fr)}
+#sh-addpart .btn.wide{margin-top:16px}
+#ap-back[hidden]{display:none}
+.unit{color:var(--ink-3);font-size:13px;margin-left:-4px}
+.toast .toast-act{margin-left:14px;color:var(--brass,#E6C27A);font-weight:700;pointer-events:auto}
+.toast.show:has(.toast-act){pointer-events:auto}
+/* one icon scale across the app: 20 in lists and chips, 24 in bars and tabs, 28 in big tool buttons */
+:root{--ic-s:20px;--ic-m:24px;--ic-l:28px}
+.li .ic .i,.pchip .i,.chips .i{width:var(--ic-s);height:var(--ic-s)}
+.tabbar button .i,.ed-tabs button .i,.dock.transport .tool svg.i,.sbar .pill .i,.tile .i{width:var(--ic-m);height:var(--ic-m)}
+.ed-pane button .i,.card2 .i,.dock.transport .play svg.i{width:var(--ic-l);height:var(--ic-l)}
+.sbar .pill.round{width:44px;height:44px}
+.pchip.off{opacity:.45;background:var(--fill);box-shadow:none}

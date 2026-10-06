@@ -194,7 +194,8 @@ function processedXml() {
     if (sp) {
       let pn = kid(sp, "part-name");
       if (!pn) { pn = doc.createElement("part-name"); sp.insertBefore(pn, sp.firstChild); }
-      pn.textContent = S.piece.instrument;
+      /* a numbered part (Puzon I, Puzon II) keeps its own name */
+      if (!/ (I|II|III|IV)$/.test(pn.textContent.trim())) pn.textContent = S.piece.instrument;
       ["part-abbreviation", "part-name-display", "part-abbreviation-display"].forEach(t => { const e = kid(sp, t); if (e) e.remove(); });
     }
   }

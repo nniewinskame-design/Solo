@@ -86,24 +86,23 @@ function renderOnb() {
       ["Blaszane", "Drewniane", "Inne"].map(g => `<h3 class="lbl">${g}</h3><div class="onb-grid">` +
         INSTRUMENTS.filter(i => i.group === g).map(i => tile(p.instruments.includes(i.id), i.name, `data-instr="${i.id}"`)).join("") + `</div>`).join("");
   } else if (name === "main") {
-    h = `<h2 class="h-l">Główny instrument?</h2><p class="onb-lead">Na nim Solo będzie grać i według niego stroić.</p><div class="onb-grid one">` +
+    h = `<h2 class="h-l">Główny instrument</h2><div class="onb-grid one">` +
       p.instruments.map(id => tile(p.main === id, instrById(id).name, `data-main="${id}"`)).join("") + `</div>`;
   } else if (name === "reading") {
     const m = instrById(p.main), w = NOTE_PL[(0 + m.tr) % 12];
-    h = `<h2 class="h-l">Jak czytasz nuty?</h2><p class="onb-lead">${esc(m.name)} brzmi inaczej, niż jest zapisany.</p><div class="onb-grid one">` +
-      tile(p.reading === "written", `Jak w nutach dla mojego instrumentu`, `data-read="written"`, `<b class="onb-ex">C → ${w}</b>`) +
-      tile(p.reading === "concert", `Dźwięki rzeczywiste (strój C)`, `data-read="concert"`, `<b class="onb-ex">C → C</b>`) + `</div>
-      <p class="note">Przykład: gdy zabrzmi C jak na fortepianie, stroik pokaże ${w} (jak w Twoich nutach) albo C.</p>`;
+    h = `<h2 class="h-l">Stroik pokazuje</h2><div class="onb-grid one">` +
+      tile(p.reading === "written", `Zapis dla instrumentu`, `data-read="written"`, `<b class="onb-ex">C → ${w}</b>`) +
+      tile(p.reading === "concert", `Dźwięki rzeczywiste`, `data-read="concert"`, `<b class="onb-ex">C → C</b>`) + `</div>`;
   } else if (name === "role") {
     h = `<h2 class="h-l">Kim jesteś?</h2><div class="onb-grid one">` +
       tile(p.role === "teacher", "Uczę gry", `data-role="teacher"`) + tile(p.role === "student", "Uczę się", `data-role="student"`) + tile(p.role === "self", "Gram dla siebie", `data-role="self"`) + `</div>
       <h3 class="lbl">Strój A</h3><div class="seg three" id="onb-a4">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>
-      <p class="note">Nie wiesz? Zostaw 440.</p>`;
+      `;
   } else {
     const m = instrById(p.main);
     h = `<h2 class="h-l">Gotowe</h2>
       <div class="onb-sum"><b>${esc(m.name)}</b><span>${esc(profileSummary(p))}</span></div>
-      <div class="onb-own"><svg class="i"><use href="#mic"/></svg><div class="grow"><b>Twój dźwięk</b><small>Nagraj jeden długi dźwięk, a Solo zagra nuty Twoim brzmieniem.</small></div><button class="btn small tinted" id="onb-own">Nagraj</button></div>`;
+      <div class="onb-own"><svg class="i"><use href="#mic"/></svg><div class="grow"><b>Twój dźwięk</b><small>Solo zagra nuty Twoim brzmieniem.</small></div><button class="btn small tinted" id="onb-own">Nagraj</button></div>`;
     next = "Zacznij";
   }
   box.innerHTML = h; box.scrollTop = 0;
