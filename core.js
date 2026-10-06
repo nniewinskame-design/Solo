@@ -682,7 +682,7 @@ function exampleXml() {
     if (i === mel.length - 1) q += `<barline location="right"><bar-style>light-heavy</bar-style></barline>`;
     pno += q + "</measure>";
   });
-  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>Wlazł kotek na płotek</work-title></work><identification><creator type="composer">Melodia ludowa</creator></identification><part-list><part-group type="start" number="1"><group-symbol>bracket</group-symbol></part-group><score-part id="P1"><part-name>Głos solowy</part-name></score-part><score-part id="P2"><part-name>Fortepian</part-name></score-part><part-group type="stop" number="1"/></part-list><part id="P1">${solo}</part><part id="P2">${pno}</part></score-partwise>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>Wlazł kotek na płotek</work-title></work><part-list><part-group type="start" number="1"><group-symbol>bracket</group-symbol></part-group><score-part id="P1"><part-name>Głos solowy</part-name></score-part><score-part id="P2"><part-name>Fortepian</part-name></score-part><part-group type="stop" number="1"/></part-list><part id="P1">${solo}</part><part id="P2">${pno}</part></score-partwise>`;
 }
 
 
@@ -1014,16 +1014,16 @@ function attachTexts(xml, pages) {
    Notes at concert pitch, durations in sixteenths; Solo writes them for the chosen instrument (its octave,
    transposition and clef) and adds the piano, like the example. Copyrighted children's songs are never shipped. */
 const READY_TUNES = {
-  kotek: { title: "Wlazł kotek na płotek", composer: "Melodia ludowa", fifths: 0, time: [3, 4], tempo: 112,
+  kotek: { title: "Wlazł kotek na płotek", composer: "", fifths: 0, time: [3, 4], tempo: 112,
     bars: "G4:4 E4:4 E4:4|F4:4 D4:4 D4:4|C4:2 E4:2 G4:8|G4:4 E4:4 E4:4|F4:4 D4:4 D4:4|C4:2 E4:2 C4:8" },
-  janie: { title: "Panie Janie", composer: "Melodia ludowa", fifths: -1, time: [4, 4], tempo: 100,
+  janie: { title: "Panie Janie", composer: "", fifths: -1, time: [4, 4], tempo: 100,
     bars: "F4:4 G4:4 A4:4 F4:4|F4:4 G4:4 A4:4 F4:4|A4:4 Bb4:4 C5:8|A4:4 Bb4:4 C5:8|C5:2 D5:2 C5:2 Bb4:2 A4:4 F4:4|C5:2 D5:2 C5:2 Bb4:2 A4:4 F4:4|F4:4 C4:4 F4:8|F4:4 C4:4 F4:8" },
   oda: { title: "Oda do radości", composer: "Ludwig van Beethoven", fifths: 2, time: [4, 4], tempo: 100,
     bars: "F#4:4 F#4:4 G4:4 A4:4|A4:4 G4:4 F#4:4 E4:4|D4:4 D4:4 E4:4 F#4:4|F#4:6 E4:2 E4:8|F#4:4 F#4:4 G4:4 A4:4|A4:4 G4:4 F#4:4 E4:4|D4:4 D4:4 E4:4 F#4:4|E4:6 D4:2 D4:8" }
 };
 function readyTuneXml(id) {
   const t = READY_TUNES[id], typ = { 1: "16th", 2: "eighth", 3: "eighth", 4: "quarter", 6: "quarter", 8: "half", 12: "half", 16: "whole" }, n = t.bars.split("|").length;
-  let s = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(t.title)}</work-title></work><identification><creator type="composer">${xesc(t.composer)}</creator></identification><part-list><score-part id="P1"><part-name>Melodia</part-name></score-part></part-list><part id="P1">`;
+  let s = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(t.title)}</work-title></work>${t.composer ? `<identification><creator type="composer">${xesc(t.composer)}</creator></identification>` : ""}<part-list><score-part id="P1"><part-name>Melodia</part-name></score-part></part-list><part id="P1">`;
   t.bars.split("|").forEach((b, i) => {
     s += `<measure number="${i + 1}">` + (i ? "" : `<attributes><divisions>4</divisions><key><fifths>${t.fifths}</fifths></key><time><beats>${t.time[0]}</beats><beat-type>${t.time[1]}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><direction placement="above"><direction-type><words></words></direction-type><sound tempo="${t.tempo}"/></direction>`);
     b.trim().split(/\s+/).forEach(tok => { const [p, d] = tok.split(":"), m = p.match(/^([A-G])(#|b)?(\d)$/), dd = +d;

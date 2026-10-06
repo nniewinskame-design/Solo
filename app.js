@@ -704,6 +704,8 @@ function autosave() { clearTimeout(saveTimer); saveTimer = setTimeout(savePiece,
 async function savePiece() {
   clearTimeout(saveTimer); saveTimer = null;
   if (!S.piece) return false;
+  /* the example, once changed, is the player's own piece: nothing may ever replace it again */
+  if (S.piece.sourceType === "example" && S.dirty) S.piece.sourceType = "own";
   const piece = S.piece, rec = recordFromState(), job = putRecord(rec);
   saving = job; job.finally(() => { if (saving === job) saving = null; });
   if (!(await job)) return false;
@@ -3823,24 +3825,7 @@ $("#btn-install").addEventListener("click", async () => {
 function hideWelcome() { if (!$("#welcome").hidden) { fadeOut($("#welcome"), 220); store.set("welcomed", "1"); } }
 
 /* Earlier versions saved another tune as the example; swap it for the current one, keeping clef and parts. */
-async function migrateExample() {
-  try {
-    const all = await DB.all();
-    /* an example saved by an older version (wrong 2/4 metre, "meow" as composer) is replaced by the current one */
-    const olds = all.filter(p => p.sourceType === "example" && (!/<beats>3<\/beats>/.test(p.xml || "") || /<lyric\b/.test(p.xml || "")));
-    if (!olds.length) return;
-    await engineReady;
-    for (const p of olds) {
-      /* 3/4 already: only the words go (parts added by the player stay); older ones get the whole new example */
-      const rec = { ...p, xml: /<beats>3<\/beats>/.test(p.xml) ? p.xml.replace(/<lyric\b[\s\S]*?<\/lyric>/g, "") : exampleXml(), title: /^(Oda do radości|Meow meow meow)$/.test(p.title) ? "Wlazł kotek na płotek" : p.title,
-        composer: !p.composer || /beethoven|meow/i.test(p.composer) ? "Melodia ludowa" : p.composer, settings: /<beats>3<\/beats>/.test(p.xml) ? p.settings : { ...(p.settings || {}), iv: { d: 0, s: 0 }, preset: -1 }, thumb: null };
-      if (rec.settings && rec.settings.preset === undefined) rec.settings.preset = -1;
-      await DB.put(rec);
-      try { const src = thumbXml(rec); await saveThumb(rec.id, await makeThumb(src), { keyLabel: src.key }); } catch (e) { console.warn(e); }
-    }
-    if (S.view === "home") refreshLibrary();
-  } catch (e) { console.warn(e); }
-}
+/* (migrateExample, which rewrote saved examples, is gone: it overwrote melodies people had built from the example) */
 
 /* T21: files shared to Solo from another app wait in a cache; open them like picked files */
 async function openShared() {
@@ -3861,7 +3846,7 @@ async function openShared() {
   const sort = store.get("sort", "opened"); if ([...$("#lib-sort").options].some(o => o.value === sort)) $("#lib-sort").value = sort;
   history.replaceState({ v: null }, "");
   setupHero(); measureGlyphs(); setPlayUi(false); drawPending();
-  migrateExample(); restorePending().finally(openShared);          // pages left unread last time first, then a shared file
+  restorePending().finally(openShared);          // pages left unread last time first, then a shared file
   show("home");
   if (!store.get("welcomed")) {
     DB.all().then(all => { if (!all.length) $("#welcome").hidden = false; else store.set("welcomed", "1"); }).catch(e => console.warn(e));   // unreadable is not "new here"
