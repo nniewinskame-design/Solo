@@ -1625,10 +1625,10 @@ function fxCtx() {
   if (fx.ctx.state !== "running") { const r = fx.ctx.resume?.(); if (r) r.catch(() => {}); }
   fxIdle(); return fx.ctx;
 }
-function fxIdle(ms = 8000) {
-  clearTimeout(fx.idle);
-  fx.idle = setTimeout(fxSleep, ms);
-}
+/* no sleep on a timer (Nat, 7 Oct: "the phone vibrates slightly for no reason"): on iPhone every suspend of the
+   context re-routes the audio hardware, felt as a soft tick some seconds after the last sound. The context now
+   sleeps only when Solo is left (hidden), when nothing can be felt */
+function fxIdle() { clearTimeout(fx.idle); }
 function fxSleep() { clearTimeout(fx.idle); if (metro.on || !fx.ctx || fx.ctx.state !== "running") return; const r = fx.ctx.suspend?.(); if (r) r.catch(() => {}); }
 document.addEventListener("visibilitychange", () => { if (document.hidden) fxSleep(); });
 const yieldNow = () => (globalThis.scheduler && typeof scheduler.yield === "function") ? scheduler.yield() : new Promise(r => setTimeout(r, 0));
