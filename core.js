@@ -304,7 +304,10 @@ function homrToSolo(xmlPages, title) {
   const sameShape = pages.every(p => p.parts.length === base.parts.length);
   let parts = sameShape ? base.parts : [base.parts[0]];
   pages.slice(1).forEach(pg => {
-    parts.forEach((part, i) => kids(pg.parts[i], "measure").forEach(m => part.appendChild(base.doc.importNode(m, true))));
+    parts.forEach((part, i) => kids(pg.parts[i], "measure").forEach((m, k) => {
+      const nm = part.appendChild(base.doc.importNode(m, true));
+      if (k === 0 && !nm.getElementsByTagName("print").length) { const pr = base.doc.createElement("print"); pr.setAttribute("new-system", "yes"); nm.insertBefore(pr, nm.firstChild); }
+    }));
   });
   const root = base.doc.documentElement;
   kids(root, "part").forEach(p => p.remove());

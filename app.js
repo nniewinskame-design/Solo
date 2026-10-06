@@ -472,6 +472,7 @@ function openPiece(piece, settings) {
     $("#notice-text").textContent = n ? `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
   }
   updateTitles();
+  $("#peek").hidden = true;
   $("#pages").innerHTML = `<div class="loading-page"><span class="spinner"></span></div>`;
   $("#scroller").scrollTop = 0;
   if (S.view !== "score") go("score");
@@ -506,7 +507,7 @@ function recordFromState() {
     id: S.piece.id || ("p" + now.toString(36) + Math.random().toString(36).slice(2, 7)),
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
-    issues: S.piece.issues || [], created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
+    issues: S.piece.issues || [], lines: S.piece.lines || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
     settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, zoom: S.zoom, layout: S.layout },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
@@ -606,9 +607,29 @@ $("#pages").addEventListener("click", e => {
   $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); m.classList.add("sel");
   S.fromMs = ms; S.fromBar = [...$$("#pages g.measure")].indexOf(m);
   hud("Graj od tego taktu: dotknij ▶", 2200);
+  const bar = drawnBars(processedXml())[S.fromBar]; if (bar) showPeek(bar);
   if (playState) { stopPlayback(); play(ms); }
 });
-function clearFromBar() { S.fromMs = 0; S.fromBar = -1; $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); }
+function clearFromBar() { S.fromMs = 0; S.fromBar = -1; $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); $("#peek").hidden = true; }
+/* T16: the line of the photo where this bar was printed, shown above the music */
+async function showPeek(bar) {
+  const L = S.piece && S.piece.lines, imgs = S.piece && S.piece.images;
+  if (!L || !L.length || !imgs || !imgs.length) return;
+  const ms = kids(parseXml(S.piece.xml).getElementsByTagName("part")[0] || parseXml("<x/>").documentElement, "measure");
+  let sys = -1; for (let i = 0; i < Math.min(bar, ms.length); i++) if (i === 0 || ms[i].getElementsByTagName("print")[0]?.getAttribute("new-system") === "yes") sys++;
+  const ln = L[Math.max(0, Math.min(sys, L.length - 1))];
+  try {
+    /* the reader gives positions as fractions of the photo (0-1) */
+    const im = await loadImage(imgs[ln.page] || imgs[0]), IW = im.naturalWidth, IH = im.naturalHeight;
+    const pad = ln.h * 1.1, x = Math.max(0, (ln.cx - ln.w / 2) * IW - 12), y = Math.max(0, (ln.cy - ln.h / 2 - pad) * IH);
+    const w = Math.min(IW - x, ln.w * IW + 24), h = Math.min(IH - y, (ln.h + 2 * pad) * IH);
+    const c = $("#peek-c"); c.width = Math.round(w); c.height = Math.round(h);
+    c.getContext("2d").drawImage(im, x, y, w, h, 0, 0, c.width, c.height);
+    $("#peek-t").textContent = `Oryginał: linia ${sys + 1}, takt ${bar}`;
+    $("#peek").hidden = false;
+  } catch (e) { console.warn(e); }
+}
+$("#peek-x").addEventListener("click", () => { $("#peek").hidden = true; });
 
 /* Thumbnail: top of page one, as the library cover */
 async function makeThumb() {
@@ -1490,7 +1511,7 @@ const HOMR_ERR = {
 };
 async function readOnDevice(pages, signal) {
   let rec = await getRecognizer().catch(e => { recognizer = null; throw new Error(e && /memory|wasm|WebAssembly/i.test(e.message) ? HOMR_ERR.worker_lost : "Nie udało się uruchomić odczytu na tym urządzeniu. Odśwież stronę i spróbuj jeszcze raz."); });
-  const xmls = [];
+  const xmls = [], lines = [];
   for (let i = 0; i < pages.length; i++) {
     const pre = pages.length > 1 ? `Strona ${i + 1} z ${pages.length}: ` : "";
     const blob = dataUrlToBlob(pages[i].big);
@@ -1517,12 +1538,16 @@ async function readOnDevice(pages, signal) {
       throw new Error((pages.length > 1 ? `Strona ${i + 1}: ` : "") + (HOMR_ERR[r.error] || HOMR_ERR.engine_failed));
     }
     xmls.push(r.musicXml);
+    try {      /* T16: where each line sits on the photo, to show it next to the bar later */
+      const im = await loadImage(pages[i].big);
+      (r.staves || []).slice().sort((a, b) => a.index - b.index).forEach(s => lines.push({ page: i, cx: s.cx, cy: s.cy, w: s.w, h: s.h, W: im.naturalWidth, H: im.naturalHeight }));
+    } catch {}
   }
   store.set("modelReady", "1");
   const names = new Set((await DB.all().catch(() => [])).map(p => p.title));
   let title = "Nowe nuty", n = 2; while (names.has(title)) title = "Nowe nuty " + n++;
   const checked = checkReading(homrToSolo(xmls, title), readAnswers());
-  return { title, composer: "", xml: checked.xml, sourceType: "device", images: pages.map(p => p.keep), aiJson: null, issues: checked.issues, instrument: "" };
+  return { title, composer: "", xml: checked.xml, sourceType: "device", images: pages.map(p => p.keep), lines, aiJson: null, issues: checked.issues, instrument: "" };
 }
 $("#btn-cancel-read").addEventListener("click", () => readCtl && readCtl.abort());
 
@@ -1647,7 +1672,8 @@ const NEWS = { "3.7": ["Kilka pytań przed czytaniem: klucz, metrum i znaki przy
   "Przypomnienie o kopii zapasowej i bezpieczne wczytywanie kopii.",
   "Odtwarzanie działa też w oknie prywatnym (incognito).",
   "Nuty ze zdjęcia mają tyle taktów w linii, ile na kartce („Jak w oryginale”, zmiana w Więcej).",
-  "Bemole i krzyżyki odczytane ze zdjęcia są teraz widoczne w nutach."] };
+  "Bemole i krzyżyki odczytane ze zdjęcia są teraz widoczne w nutach.",
+  "Dotknij taktu, a nad nutami pokaże się ta linia ze zdjęcia oryginału."] };
 /* ---------------- Install (T9) ---------------- */
 let installEvt = null;
 const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
