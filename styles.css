@@ -1449,3 +1449,7 @@ body.editmode #btn-back{display:none}       /* while editing, "Gotowe" is the wa
 .notice{background:var(--sky-tint);box-shadow:none}
 .notice>svg.i{color:var(--sky-ink)}
 .notice .link{color:var(--sky-ink)}
+/* the brand colour carries Play everywhere, also in the dark */
+:root,:root[data-theme="dark"]{--prom:var(--brand);--prom-ink:var(--on-primary)}
+.dock .play{background:var(--brand)!important;color:var(--on-primary)!important}
+:root[data-theme="dark"] .pill.round:not(.big){background:var(--surface-2)}
