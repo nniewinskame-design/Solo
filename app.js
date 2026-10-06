@@ -26,7 +26,7 @@ const engineReady = new Promise(resolve => {
 const S = {
   view: "home", piece: null, parts: [], srcKey: { fifths: 0, mode: "major" }, srcClef: "treble",
   clef: "keep", iv: { d: 0, s: 0 }, preset: -1,
-  zoom: Math.max(.7, Math.min(1.6, Number(store.get("zoom", 1)) || 1)), tempo: 100,
+  zoom: Math.max(.5, Math.min(2, Number(store.get("zoom2", 0.8)) || 0.8)), tempo: 100,
   dirty: false, thumbDirty: false, loadedKey: null, mode: null
 };
 const CLEF_PL = { treble: "wiolinowy", bass: "basowy", tenor: "tenorowy", alto: "altowy" };
@@ -450,6 +450,7 @@ function loadState(piece, settings) {
     if (settings.iv) S.iv = { d: settings.iv.d | 0, s: settings.iv.s | 0 };
     if (Number.isInteger(settings.preset)) S.preset = settings.preset;
     if (settings.bpm >= 20 && settings.bpm <= 300) S.bpm = Math.round(settings.bpm);
+    if (settings.zoom >= .5 && settings.zoom <= 2) S.zoom = settings.zoom;
   }
   if (S.piece.instrument == null) S.piece.instrument = first && !PIANO_RE.test(first.name) ? first.name : "";
 }
@@ -500,7 +501,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm },
+    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, zoom: S.zoom },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -578,6 +579,7 @@ async function doRender() {
     const first = box.querySelector(".page svg"); if (first) { if (mode === "pages") enlargeTitle(first, 1.9); else enlargeTitle(first, 1.3, 0.75); }
     const doubt = new Set(doubtfulBars(S.piece.issues));
     if (doubt.size) { const order = drawnBars(xml); $$("#pages g.measure").forEach((g, i) => g.classList.toggle("doubt", doubt.has(order[i]))); }
+    S.fromMs = 0; S.fromBar = -1;
     S.mode = mode; S.loadedKey = "view";
     S.baseBpm = scoreBpm();
     if (openSheetId === "more") syncTempo();
@@ -588,7 +590,19 @@ async function doRender() {
 }
 let lastW = window.innerWidth;
 window.addEventListener("resize", () => { if (Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; render(); } });
-$("#pages").addEventListener("click", e => { if (e.target.closest(".page")) document.body.classList.toggle("immersive"); });
+/* tap a bar: it is selected and ▶ plays from there; tap it again (or outside the bars) to clear */
+$("#pages").addEventListener("click", e => {
+  const m = e.target.closest("g.measure");
+  if (!m) { if (S.fromMs) clearFromBar(); else if (e.target.closest(".page")) document.body.classList.toggle("immersive"); return; }
+  if (m.classList.contains("sel")) { clearFromBar(); return; }
+  const firstNote = m.querySelector("g.note, g.rest"); if (!firstNote) return;
+  let ms = 0; try { ms = tk.getTimeForElement(firstNote.id) || 0; } catch {}
+  $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); m.classList.add("sel");
+  S.fromMs = ms; S.fromBar = [...$$("#pages g.measure")].indexOf(m);
+  hud("Graj od tego taktu: dotknij ▶", 2200);
+  if (playState) { stopPlayback(); play(ms); }
+});
+function clearFromBar() { S.fromMs = 0; S.fromBar = -1; $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); }
 
 /* Thumbnail: top of page one, as the library cover */
 async function makeThumb() {
@@ -646,6 +660,7 @@ function stopPlayback() {
   cancelAnimationFrame(playState.raf);
   const url = playState.url; if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
   $$("#pages g.playing").forEach(g => g.classList.remove("playing"));
+  const pl = $("#pages .playline"); if (pl) pl.remove();
   playState = null; setPlayUi(false);
 }
 /* one note of the brass-like synth, into any audio context */
@@ -719,6 +734,14 @@ async function play(fromMs = 0) {
       const el = e.el || (e.el = document.getElementById(e.id)); if (!el) return;
       if (on && !e.lit) {
         el.classList.add("playing"); e.lit = true;
+        /* a line follows the music: it stands at the playing note, as tall as its staff line */
+        const pgs = $("#pages"), sys = el.closest("g.system") || el.closest("g.measure");
+        if (pgs && sys) {
+          let line = pgs.querySelector(".playline"); if (!line) { line = document.createElement("div"); line.className = "playline"; pgs.appendChild(line); }
+          const pr = pgs.getBoundingClientRect(), nr = el.getBoundingClientRect(), sr = sys.getBoundingClientRect();
+          line.style.height = Math.round(sr.height + 12) + "px";
+          line.style.transform = `translate(${Math.round(nr.left - pr.left + nr.width / 2 - 1)}px, ${Math.round(sr.top - pr.top - 6)}px)`;
+        }
         if (performance.now() - lastScroll > 700) {
           const r = el.getBoundingClientRect(), b = sc.getBoundingClientRect();
           if (r.top < b.top + 70 || r.bottom > b.bottom - 150) { sc.scrollBy({ top: r.top - b.top - b.height / 3, behavior: "smooth" }); lastScroll = performance.now(); }
@@ -730,7 +753,25 @@ async function play(fromMs = 0) {
   };
   playState.raf = requestAnimationFrame(step);
 }
-$("#btn-play").addEventListener("click", () => { if (!playState) unlockAudio(); play(); });
+$("#btn-play").addEventListener("click", () => { if (playState) { stopPlayback(); return; } unlockAudio(); play(S.fromMs || 0); });
+(() => {
+  const sc = $("#scroller"), pg = $("#pages"); let d0 = 0, ratio = 1;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  sc.addEventListener("touchstart", e => { if (e.touches.length === 2) { d0 = dist(e.touches); ratio = 1; } }, { passive: true });
+  sc.addEventListener("touchmove", e => {
+    if (e.touches.length !== 2 || !d0) return;
+    e.preventDefault();
+    ratio = Math.max(.5 / S.zoom, Math.min(2 / S.zoom, dist(e.touches) / d0));
+    pg.style.transformOrigin = "50% 0"; pg.style.transform = `scale(${ratio})`;
+  }, { passive: false });
+  sc.addEventListener("touchend", e => {
+    if (!d0 || e.touches.length) return;
+    pg.style.transform = ""; d0 = 0;
+    if (Math.abs(ratio - 1) > .04) setZoom(S.zoom * ratio);
+  });
+})();
+/* nothing may hide the last line: the space under the music is the dock's real height */
+if (window.ResizeObserver) new ResizeObserver(([e]) => $("#score").style.setProperty("--dock-h", Math.round(e.target.offsetHeight) + "px")).observe($("#dock"));
 /* the score scrolls under the floating header: keep its real height as padding */
 if (window.ResizeObserver) new ResizeObserver(([e]) => $("#score").style.setProperty("--sbar-h", Math.round(e.target.offsetHeight) + "px")).observe($("#score .sbar"));
 /* the dock gets smaller while reading downwards and returns on the way back up */
@@ -1089,7 +1130,8 @@ $("#tempo-reset").addEventListener("click", () => setBpm(Math.round(S.baseBpm ||
   b.addEventListener("click", e => { if (e.detail === 0) setBpm(curBpm() + d); });   // keyboard
   b.addEventListener("contextmenu", e => e.preventDefault());
 });
-const setZoom = z => { S.zoom = Math.round(Math.max(.7, Math.min(1.6, z)) * 10) / 10; store.set("zoom", S.zoom); $("#zoom-val").textContent = Math.round(S.zoom * 100) + "%"; render(); };
+/* note size: 50-200 %, remembered for the piece (and as the default for new pieces) */
+const setZoom = z => { S.zoom = Math.round(Math.max(.5, Math.min(2, z)) * 10) / 10; store.set("zoom2", S.zoom); $("#zoom-val").textContent = Math.round(S.zoom * 100) + "%"; if (S.piece) { S.piece.zoom = S.zoom; autosave(); } render(); };
 $("#zoom-in").addEventListener("click", () => setZoom(S.zoom + .1));
 $("#zoom-out").addEventListener("click", () => setZoom(S.zoom - .1));
 [["#f-title", "title"], ["#f-composer", "composer"], ["#f-instrument", "instrument"]].forEach(([sel, k]) => {

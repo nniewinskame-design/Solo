@@ -168,14 +168,18 @@ input.inl::placeholder{color:var(--ink-3)}
 .stitle{text-align:center;min-width:0}
 .stitle .a{font-size:17px;font-weight:650;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stitle .b{font-size:13px;color:var(--ink-2);font-weight:500;line-height:1.35}
-.scroller{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:4px 0 calc(110px + var(--safe-b))}
+.scroller{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:4px 0 calc(var(--dock-h,74px) + 40px + var(--safe-b))}
 .pages{max-width:960px;margin:0 auto;padding:0 14px;display:grid;gap:18px}
 .page{background:#fff;border-radius:4px;box-shadow:var(--page-shadow);overflow:hidden;filter:var(--page-filter)}
 .page>svg{display:block;width:100%;height:auto}
 .page.reflow>svg{width:auto;max-width:100%;margin:0 auto}
 .loading-page{display:flex;align-items:center;justify-content:center;min-height:50vh}
 .page-msg{background:var(--card);border-radius:var(--r-card);padding:28px;text-align:center;color:var(--ink-2)}
-#pages g.playing,#pages g.playing *{fill:#B07D2B!important;stroke:#B07D2B}
+#pages g.playing,#pages g.playing *{fill:#D9381E!important;stroke:#D9381E}
+#pages{position:relative}
+.playline{position:absolute;top:0;left:0;width:3px;border-radius:2px;background:#D9381E;opacity:.55;pointer-events:none;transform:translate3d(0,0,0);transition:transform 120ms linear,height 120ms linear;z-index:2}
+#pages g.measure.sel>.staff>path,#pages g.measure.sel .staff path{stroke:#D9381E}
+#pages g.measure.sel .note,#pages g.measure.sel .rest{fill:#D9381E}
 .dock{position:fixed;left:50%;bottom:calc(16px + var(--safe-b));transform:translateX(-50%);z-index:4;display:flex;gap:2px;padding:5px;border-radius:99px;background:var(--card);box-shadow:var(--shadow-2);--acc:var(--velvet);transition:transform .25s ease,opacity .25s ease}
 :root[data-theme="dark"] .dock{--acc:var(--brass)}
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .dock{--acc:var(--brass)} }
@@ -455,7 +459,8 @@ button,a,label.btn,[role=button]{touch-action:manipulation}
 /* screens are layers so one can slide over another (iOS navigation stack) */
 .view{position:fixed;inset:0;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:var(--paper)}
 #score{overflow:hidden;background:var(--paper-2)}
-#score,#settings,.scroller{touch-action:pan-y pinch-zoom}
+#score,#settings{touch-action:pan-y pinch-zoom}
+.scroller{touch-action:pan-x pan-y}
 .view.navigating{will-change:transform}
 .view.nav-top{box-shadow:-1px 0 0 rgba(0,0,0,.05),-14px 0 36px rgba(20,6,10,.16)}
 #navdim{position:fixed;inset:0;z-index:2;background:rgba(10,4,6,.22);pointer-events:none}
