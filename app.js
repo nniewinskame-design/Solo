@@ -2259,6 +2259,8 @@ $$("#clickseg button").forEach(b => b.addEventListener("click", () => { pb.click
 })();
 /* nothing may hide the last line: the space under the music is the dock's real height */
 if (window.ResizeObserver) new ResizeObserver(([e]) => $("#score").style.setProperty("--dock-h", Math.round(e.target.offsetHeight) + "px")).observe($("#dock"));
+/* the editor is docked to the bottom edge: the page ends above it, never under it */
+if (window.ResizeObserver) new ResizeObserver(([e]) => $("#score").style.setProperty("--ed-h", Math.round(e.target.offsetHeight) + "px")).observe($("#editbar"));
 /* the score scrolls under the floating header: keep its real height as padding */
 if (window.ResizeObserver) new ResizeObserver(([e]) => $("#score").style.setProperty("--sbar-h", Math.round(e.target.offsetHeight) + "px")).observe($("#score .sbar"));
 /* the dock gets smaller while reading downwards and returns on the way back up */

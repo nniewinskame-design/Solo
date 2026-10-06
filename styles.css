@@ -1968,3 +1968,29 @@ svg.cl{flex:none;fill:currentColor}
 svg.cl.g{width:13px;height:30px;margin:-6px 0}
 svg.cl.f{width:15px;height:18px}
 svg.cl.c{width:13px;height:21px}
+
+/* =====================================================================================================
+   Docked bars (Nat, 7 Oct: "not a fan of the floating bottom bar"; as in MuseScore, Notes, GoodNotes, Figma):
+   the tab bar, the player and the editor sit on the bottom edge, full width, with a hairline above; the page
+   ends above them and never runs underneath; the editor's tools open upwards from its bar like a drawer.
+   ===================================================================================================== */
+.tabbar{left:0!important;right:0!important;bottom:0!important;transform:none!important;width:100%!important;max-width:none!important;border-radius:0!important;
+  padding:6px max(8px,env(safe-area-inset-left)) calc(6px + var(--safe-b)) max(8px,env(safe-area-inset-right))!important;
+  background:rgba(255,255,255,.96)!important;box-shadow:0 -1px 0 var(--hairline)!important}
+.dock.transport{left:0!important;right:0!important;bottom:0!important;transform:none!important;width:100%!important;max-width:none!important;border-radius:0!important;
+  justify-content:center!important;gap:14px!important;padding:8px 16px calc(8px + var(--safe-b))!important;background:#fff!important;box-shadow:0 -1px 0 var(--hairline)!important}
+body.editmode #dock,body.immersive .dock{transform:translateY(105%)!important}
+.editor{left:0!important;right:0!important;bottom:0!important;transform:none!important;width:100%!important;max-width:none!important;border-radius:20px 20px 0 0!important;
+  padding:6px 12px calc(8px + var(--safe-b))!important;background:#fff!important;box-shadow:0 -1px 0 var(--hairline-2),0 -10px 28px rgba(15,23,51,.07)!important}
+.editor>*{width:100%;max-width:560px;margin-left:auto;margin-right:auto}
+.editor::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:var(--hairline-2);margin:0 auto 6px}
+.ed-tabs{background:var(--surface-2)!important}
+.ed-pane:not(.bar-pane) button:not([aria-pressed="true"]){background:var(--surface-2)!important}
+/* the page stops above the docked bars */
+#score .scroller{padding-bottom:calc(var(--dock-h,72px) + 16px)!important}
+body.editing #score .scroller{padding-bottom:calc(var(--ed-h,170px) + 16px)!important}
+.loopbar{bottom:calc(var(--dock-h,72px) + 10px)!important}
+.follow-pill{bottom:calc(var(--dock-h,72px) + 12px)!important}
+body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,72px) + 96px)!important}
+.toast{z-index:60}
+.ed-tabs{gap:2px!important;justify-content:space-between!important}.ed-tabs button{min-width:36px!important;padding:0 7px!important}.ed-tabs button[aria-selected="true"]{padding:0 11px!important}.ed-tabs .ed-bar{margin-right:6px!important}
