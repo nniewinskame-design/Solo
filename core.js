@@ -360,13 +360,32 @@ function splitHomrParts(doc) {
   });
   return out;
 }
+/* a full-bar rest for a bar missing in one staff of a page (parts must have the same bars, R19) */
+function padParts(parts) {
+  const most = Math.max(0, ...parts.map(p => kids(p, "measure").length));
+  parts.forEach(p => {
+    let div = 1, beats = 4, bt = 4;
+    kids(p, "measure").forEach(m => kids(m, "attributes").forEach(a => {
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+    }));
+    for (let k = kids(p, "measure").length; k < most; k++) {
+      const m = p.ownerDocument.createElement("measure");
+      m.innerHTML = `<note><rest measure="yes"/><duration>${Math.round(div * beats * 4 / bt)}</duration><voice>1</voice></note>`;
+      p.appendChild(m);
+    }
+  });
+  return parts;
+}
 function homrToSolo(xmlPages, title) {
-  const pages = xmlPages.map(x => { const doc = parseXml(x); return { doc, parts: splitHomrParts(doc) }; });
+  /* a cover, a page of text or a page the reader found no staff on adds nothing (B-14) */
+  const pages = xmlPages.map(x => { const doc = parseXml(x); return { doc, parts: padParts(splitHomrParts(doc).filter(p => kids(p, "measure").length)) }; }).filter(p => p.parts.length);
+  if (!pages.length) throw new Error("Na zdjęciach nie widać pięciolinii.");
   const base = pages[0];
   const sameShape = pages.every(p => p.parts.length === base.parts.length);
   let parts = sameShape ? base.parts : [base.parts[0]];
   pages.slice(1).forEach(pg => {
-    parts.forEach((part, i) => kids(pg.parts[i], "measure").forEach((m, k) => {
+    parts.forEach((part, i) => pg.parts[i] && kids(pg.parts[i], "measure").forEach((m, k) => {
       const nm = part.appendChild(base.doc.importNode(m, true));
       if (k === 0 && !nm.getElementsByTagName("print").length) { const pr = base.doc.createElement("print"); pr.setAttribute("new-system", "yes"); nm.insertBefore(pr, nm.firstChild); }
     }));
@@ -572,7 +591,10 @@ function checkReading(xml, ans = {}) {
         if (p) midis.push({ i, m: 12 * (parseInt(txt(p, "octave"), 10) + 1) + [0, 2, 4, 5, 7, 9, 11][STEP_I[txt(p, "step")]] + (parseFloat(txt(p, "alter")) || 0) });
       });
       const full = div * beats * 4 / bt;
-      const pickup = (i === 0 || i === measures.length - 1) && sum < full;
+      /* a short first bar is a pickup when the last bar completes it, or when it is at most half a bar (a misread
+         first bar with one note missing is flagged); a short last bar is accepted (B-19) */
+      const lastSum = measures.length > 1 ? barFill(measures[measures.length - 1]) : 0;
+      const pickup = i === 0 ? sum < full && (sum <= full / 2 + 0.01 || Math.abs(sum + lastSum - full) < 0.01) : i === measures.length - 1 && sum < full;
       if (!whole && !m.getElementsByTagName("multiple-rest").length && sum > 0 && Math.abs(sum - full) > 0.01 && !pickup)
         issues.push(`Takt ${i + 1}: ${sum > full ? "za dużo" : "za mało"} wartości rytmicznych`);
     });
@@ -822,7 +844,20 @@ function canvasToJpeg(srcCanvasOrImg, maxEdge, q) {
   const sc = Math.min(1, maxEdge / Math.max(w0, h0));
   const c = document.createElement("canvas"); c.width = Math.round(w0 * sc); c.height = Math.round(h0 * sc);
   const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(srcCanvasOrImg, 0, 0, c.width, c.height);
-  return c.toDataURL("image/jpeg", q);
+  const url = c.toDataURL("image/jpeg", q); c.width = c.height = 0;          // let Safari have the canvas memory back now (R21)
+  if (url.length < 100) throw new Error("Za mało pamięci na to zdjęcie. Zamknij inne karty i spróbuj jeszcze raz.");   // "data:," when it ran out
+  return url;
+}
+/* the same as a Blob (for the reader: no 3 MB base64 string per page), with its size */
+async function canvasToJpegBlob(srcCanvasOrImg, maxEdge, q) {
+  const w0 = srcCanvasOrImg.naturalWidth || srcCanvasOrImg.width, h0 = srcCanvasOrImg.naturalHeight || srcCanvasOrImg.height;
+  const sc = Math.min(1, maxEdge / Math.max(w0, h0));
+  const c = document.createElement("canvas"); c.width = Math.round(w0 * sc); c.height = Math.round(h0 * sc);
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(srcCanvasOrImg, 0, 0, c.width, c.height);
+  const W = c.width, H = c.height, blob = await new Promise(r => c.toBlob(r, "image/jpeg", q));
+  c.width = c.height = 0;
+  if (!blob) throw new Error("Za mało pamięci na to zdjęcie. Zamknij inne karty i spróbuj jeszcze raz.");
+  return { blob, W, H };
 }
 
 
@@ -960,6 +995,7 @@ function attachTexts(xml, pages) {
     let added = 0;
     staves.forEach((st, si) => st.texts.forEach(t => {
       const c = classifyText(t.text, t.score); if (!c) return;
+      if (!(st.w > 0) || !Number.isFinite(st.cx) || !Number.isFinite(t.x0) || !sys[si] || !sys[si].length) return;     // no place on the photo
       const left = st.cx - st.w / 2, frac = Math.max(0, Math.min(0.999, (t.x0 - left) / st.w)), bars = sys[si];
       const bi = Math.min(bars.length - 1, Math.floor(frac * bars.length)), m = bars[bi], inBar = frac * bars.length - bi;
       const notes = kids(m, "note").filter(n => !kid(n, "chord") && !kid(n, "grace")), target = notes[Math.min(notes.length - 1, Math.floor(inBar * notes.length))] || null;
