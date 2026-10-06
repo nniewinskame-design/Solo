@@ -778,7 +778,10 @@ function scanZoom() {
 }
 /* bars spread evenly along a line (a bar's width follows its length in time, not how many notes it holds) and
    every line, the last one too, ends at the right edge, as in hand-made sheets */
-const EVEN_BARS = { spacingLinear: 0.1, spacingNonLinear: 1, minLastJustification: 0 };
+const EVEN_BARS = { spacingLinear: 0.1, spacingNonLinear: 1, minLastJustification: 0,
+  /* clear room on both sides of every bar line, and after the clef, key and metre before the first note (the
+     engine's default lets a note or its ♮ touch the bar line) */
+  leftMarginRightBarLine: 1.5, rightMarginRightBarLine: 2, rightMarginClef: 1.4, rightMarginKeySig: 1.6, rightMarginMeterSig: 2.4 };
 function a4Options(extra, zoom = S.zoom) {
   const z = zoom, r = v => Math.round(v / z);
   return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: castsOff() ? "line" : S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
@@ -868,7 +871,7 @@ async function doRender() {
     if (doubt.size) { const order = drawnBars(xml); $$("#pages g.measure").forEach((g, i) => g.classList.toggle("doubt", doubt.has(order[i]))); }
     S.fromMs = 0; S.fromBar = -1;
     if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
-    S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip(); markRange(); markBarSel();
+    S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip(); markRange(); markBarSel(); markLineSel();
     endLines(box);
     requestAnimationFrame(() => { drawLoop(); syncLoopUi(); });
     S.baseBpm = scoreBpm(); $("#tp-bpm").textContent = String(curBpm());
@@ -978,7 +981,9 @@ function edTab(name) {
   $$("#editbar .ed-pane").forEach(p => (p.hidden = p.dataset.pane !== name));
   S.edTab = name;
   if (name === "bar") buildBarSheet(); else markBarSel();
-  if (S.editMode && !edTab.busy) { edTab.busy = true; try { selectNote(S.editSel); } finally { edTab.busy = false; } }          // the hint line follows the tool          // Takt sits in the tool panel like the other tools (the music stays in view)
+  if (name !== "line") S.lineSel = null;
+  if (S.editMode && !edTab.busy) { edTab.busy = true; try { selectNote(S.editSel); } finally { edTab.busy = false; } }
+  markLineSel();          // the hint line follows the tool          // Takt sits in the tool panel like the other tools (the music stays in view)
 }
 function selectNote(sel) {
   S.editSel = sel; if (sel && !S.editMode) { S.editMode = true; editSnap(); }
@@ -990,7 +995,7 @@ function selectNote(sel) {
   $("#ed-undo").disabled = !(S.undo && S.undo.length); syncRedo();
   if (S.edTab == null && !edTab.busy) edTab(null);          // editing opens with no tool open (Nat, 7 Oct); a tool opens when tapped
   const at = sel ? xmlNoteAt(parseXml(S.piece.xml), sel) : null, n = at && at.n, isRest = !!(n && kid(n, "rest"));
-  $$("#editbar .ed-pane:not([data-pane=len]):not([data-pane=bar]) button").forEach(b => (b.disabled = !n || (isRest && !["rest", "delete", "left", "right"].includes(b.dataset.ed))));
+  $$("#editbar .ed-pane:not([data-pane=len]):not([data-pane=bar]):not([data-pane=line]) button").forEach(b => (b.disabled = !n || (isRest && !["rest", "delete", "left", "right"].includes(b.dataset.ed))));
   const cur = n ? (txt(n, "type") || "whole") : (S.inLen || "quarter");
   $$("#editbar [data-len]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.len === cur)));
   $("#ed-dot").setAttribute("aria-pressed", String(!!(n && kid(n, "dot"))));
@@ -1040,6 +1045,9 @@ function pitchAtY(staff, y, part, m) {
 function editTap(e) {
   /* the clef, key, metre or tempo in the music open Utwór, where they are changed */
   if (e.target.closest("g.clef, g.keySig, g.meterSig, g.tempo")) { edTab("bar"); return; }
+  const line = e.target.closest("g.barLine") || barLineAt(e.clientX, e.clientY);
+  if (line) { selectLine(line); return; }
+  if (S.edTab === "line") { S.lineSel = null; edTab(null); }
   /* with Takt open a tap chooses the bar (and the part) Takt works on; it never writes a note */
   if (S.edTab === "bar") {
     const m = e.target.closest("g.measure") || measureAt(e.clientX, e.clientY); if (!m) return;
@@ -1081,6 +1089,42 @@ function editTap(e) {
 $$("#editbar [data-tab-ed]").forEach(b => b.addEventListener("click", () => edTab(S.edTab === b.dataset.tabEd ? null : b.dataset.tabEd)));     // a second tap closes the tool
 $$("#editbar [data-len]").forEach(b => b.addEventListener("click", () => { S.inLen = b.dataset.len; if (S.editSel) editNote("len:" + b.dataset.len); else selectNote(null); }));
 /* Długość → "Pauza": what is written next is a rest of the chosen length */
+/* a bar line tapped while editing is chosen (marked blue): its kind, a new bar after it, joining the two bars or
+   removing the bar before it */
+function barLineAt(x, y) {
+  let best = null, bd = 13;
+  $$("#pages g.measure g.barLine").forEach(g => {
+    const r = g.getBoundingClientRect(); if (y < r.top - 10 || y > r.bottom + 10) return;
+    const d = Math.abs(x - (r.left + r.right) / 2); if (d < bd) { bd = d; best = g; }
+  });
+  return best;
+}
+function selectLine(g) {
+  const di = measureEls().indexOf(g.closest("g.measure")), bar = drawnBars(processedXml())[di]; if (!bar) return;
+  S.editSel = null; S.lineSel = bar; S.barSel = { bar, pid: readingPartId() };
+  edTab("line"); markLineSel();
+}
+function markLineSel() {
+  $$("#pages g.barLine.lsel").forEach(g => g.classList.remove("lsel"));
+  if (!S.editMode || S.edTab !== "line" || !S.lineSel) return;
+  const bars = drawnBars(processedXml()), di = bars.indexOf(S.lineSel), m = measureEls()[di]; if (!m) return;
+  m.querySelectorAll(":scope > g.barLine").forEach(g => g.classList.add("lsel"));
+  const doc = parseXml(S.piece.xml), part = doc.getElementsByTagName("part")[0], ms = part ? kids(part, "measure") : [], mm = ms[S.lineSel - 1];
+  const rb = mm && kids(mm, "barline").find(b => (b.getAttribute("location") || "right") === "right"), st = rb ? (kid(rb, "repeat") ? "repeat" : txt(rb, "bar-style")) : "regular";
+  $$("#line-kind [data-ls]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ls === (st || "regular"))));
+  $("#line-join").disabled = S.lineSel >= ms.length; $("#line-del").disabled = ms.length < 2;
+  $("#ed-info").innerHTML = `<b>Kreska taktowa</b> · za taktem ${S.lineSel}`;
+}
+function lineOp(op, val) {
+  if (!S.lineSel) return;
+  const bar = S.lineSel; S.editSel = null; S.barSel = { bar, pid: readingPartId() };
+  barOp(op, val);
+  if (op === "join" || op === "del") { S.lineSel = null; edTab(null); } else { S.barSel = { bar, pid: readingPartId() }; S.lineSel = bar; }
+}
+$$("#line-kind [data-ls]").forEach(b => b.addEventListener("click", () => lineOp("linestyle", b.dataset.ls)));
+$("#line-add").addEventListener("click", () => lineOp("add"));
+$("#line-join").addEventListener("click", () => lineOp("join"));
+$("#line-del").addEventListener("click", () => lineOp("del"));
 $("#ed-barin").addEventListener("click", () => { if (!S.editSel) { hud("Zaznacz nutę, przed którą ma być kreska"); return; } barOp("split"); });
 $("#ed-barout").addEventListener("click", () => { if (!S.editSel) { hud("Zaznacz nutę w takcie"); return; } barOp("join"); });
 $("#ed-restmode").addEventListener("click", () => { S.inRest = !S.inRest; $("#ed-restmode").setAttribute("aria-pressed", String(S.inRest)); selectNote(S.editSel); });
@@ -1408,7 +1452,6 @@ function buildBarSheet() {
   $("#bar-keysig").textContent = !n ? "Bez znaków" : `${n} ${k1 > 0 ? plural(n, "krzyżyk", "krzyżyki", "krzyżyków") : plural(n, "bemol", "bemole", "bemoli")}`;
   $$("#bar-keypick [data-kd]").forEach(b => (b.disabled = Math.abs(k1 + +b.dataset.kd) > 7));
   if ($("#bar-key")) $("#bar-key").value = String(k);
-  $("#bar-del").disabled = kids(part, "measure").length < 2;
   $("#bar-bpm").textContent = String(curBpm());
 }
 /* any metre (Nat, 7 Oct): four common ones one tap away, and a small field shaped like a chip to type any other:
@@ -1542,6 +1585,16 @@ function barOp(op, val) {
       m.after(nm);
     }
     S.editSel = null;
+  } else if (op === "linestyle") {
+    /* the kind of the bar line after this bar, in every part: plain, double, final or the end of a repeat */
+    parts.forEach(part => {
+      const m = kids(part, "measure")[bar - 1]; if (!m) return;
+      kids(m, "barline").filter(b => (b.getAttribute("location") || "right") === "right").forEach(b => b.remove());
+      if (val === "regular") return;
+      const bl = doc.createElement("barline"); bl.setAttribute("location", "right");
+      bl.innerHTML = val === "repeat" ? `<bar-style>light-heavy</bar-style><repeat direction="backward"/>` : `<bar-style>${val}</bar-style>`;
+      m.appendChild(bl);
+    });
   } else if (op === "del") {
     parts.forEach(part => {
       const ms = kids(part, "measure"), m = ms[bar - 1], nx = ms[bar]; if (!m || ms.length < 2) return;
@@ -1581,11 +1634,6 @@ function transposeScore(df) {
 }
 $("#bar-keypick").addEventListener("click", e => { const b = e.target.closest("[data-kd]"); if (b && !b.disabled) transposeScore(+b.dataset.kd); });
 $("#bar-key")?.addEventListener("change", e => barOp("key", e.target.value));
-$("#bar-add").addEventListener("click", () => barOp("add"));
-$("#bar-addbefore").addEventListener("click", () => barOp("addbefore"));
-$("#bar-del").addEventListener("click", () => barOp("del"));
-$("#bar-join").addEventListener("click", () => barOp("join"));
-$("#bar-split").addEventListener("click", () => barOp("split"));
 [["#bar-bpm-down", -4], ["#bar-bpm-up", 4]].forEach(([s, d]) => $(s).addEventListener("click", () => { setBpm(curBpm() + d); $("#bar-bpm").textContent = String(curBpm()); }));
 $("#btn-edit").addEventListener("click", () => setEditMode(!S.editMode));
 /* a labelled mode, like forScore/Freeform: "Edytuj" opens it, "Gotowe" closes it (every change is already saved);
