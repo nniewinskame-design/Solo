@@ -893,11 +893,11 @@ function whenDrawn(fn, tries = 40) { if ($("#pages g.measure")) setTimeout(fn, 2
 function setEditMode(on) {
   on = !!on; if (on === !!S.editMode && on) return;
   S.editMode = on;
-  /* big notes across the screen while correcting (a finger must hit a line); the A4 page comes back after */
+  /* editing keeps the page as it is (Nat, 7 Oct: no zoom when editing starts); only the notes are shown as written */
   if (on) {
     const moved = S.iv.d || S.iv.s || S.clef !== "keep" || S.readOct;
     S.editView = { iv: S.iv, clef: S.clef, preset: S.preset, page: S.page, zoom: S.zoom, readOct: S.readOct };
-    S.iv = { d: 0, s: 0 }; S.clef = "keep"; S.preset = -1; S.readOct = 0; S.page = "screen"; S.zoom = Math.max(S.zoom, 1.5);
+    S.iv = { d: 0, s: 0 }; S.clef = "keep"; S.preset = -1; S.readOct = 0;
     S.loadedKey = null; render(); if (moved) hud("Poprawiasz nuty tak, jak są zapisane", 2500);
   }
   if (!on && S.editView) { Object.assign(S, S.editView); S.editView = null; S.loadedKey = null; changed(); }
@@ -1118,7 +1118,7 @@ function syncRedo() { const b = $("#ed-redo"); if (b) b.disabled = !(S.redo && S
 function restoreXml(xml) {
   const ids = x => analyseXml(x).parts.map(p => p.id).join();
   if (ids(xml) === ids(S.piece.xml)) { S.piece.xml = xml; refreshInfo(); }
-  else { applyNewXml(xml, null); if (S.editMode) Object.assign(S, { iv: { d: 0, s: 0 }, clef: "keep", preset: -1, readOct: 0, page: "screen" }); }
+  else { applyNewXml(xml, null); if (S.editMode) Object.assign(S, { iv: { d: 0, s: 0 }, clef: "keep", preset: -1, readOct: 0 }); }
   afterEdit();
 }
 function undo() { if (!S.undo || !S.undo.length) return false; (S.redo = S.redo || []).push(S.piece.xml); restoreXml(S.undo.pop()); return true; }
