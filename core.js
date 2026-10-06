@@ -498,10 +498,13 @@ function barIssues(xml) {
   return out;
 }
 /* T19: an empty piece to write your own tune: bass clef (trombone), 4/4, C major, 8 empty bars */
-function blankXml(bars = 8) {
+function blankXml(bars = 8, o = {}) {
+  const beats = o.beats || 4, bt = o.beatType || 4, div = 4, cap = div * 4 * beats / bt, fifths = o.fifths || 0;
+  const clef = o.clef === "treble" ? "<sign>G</sign><line>2</line>" : "<sign>F</sign><line>4</line>";
+  const tempo = o.tempo ? `<direction placement="above"><direction-type><words></words></direction-type><sound tempo="${o.tempo}"/></direction>` : "";
   let m = "";
-  for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>4</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes>` : ""}<note><rest measure="yes"/><duration>16</duration><voice>1</voice></note></measure>`;
-  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>Moje nuty</work-title></work><part-list><score-part id="P1"><part-name>Głos solowy</part-name></score-part></part-list><part id="P1">${m}</part></score-partwise>`;
+  for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>${div}</divisions><key><fifths>${fifths}</fifths></key><time><beats>${beats}</beats><beat-type>${bt}</beat-type></time><clef>${clef}</clef></attributes>${tempo}` : ""}<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice></note></measure>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(o.title || "Moje nuty")}</work-title></work><part-list><score-part id="P1"><part-name>${xesc(o.part || "Głos solowy")}</part-name></score-part></part-list><part id="P1">${m}</part></score-partwise>`;
 }
 function doubtfulBars(issues) { return [...new Set((issues || []).map(t => parseInt((t.match(/Takt (\d+)/) || [])[1], 10)).filter(Boolean))]; }
 

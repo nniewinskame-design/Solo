@@ -1,6 +1,6 @@
 /* Solo service worker: works offline after the first visit (photo reading still needs internet). */
-const CACHE = "solo-v22";
-const SHELL = ["./", "index.html", "styles.css", "theme.js", "core.js", "arrange.js", "motion.js", "app.js", "clefs.js", "manifest.webmanifest",
+const CACHE = "solo-v23";
+const SHELL = ["./", "index.html", "styles.css", "theme.js", "core.js", "arrange.js", "motion.js", "app.js", "profile.js", "clefs.js", "manifest.webmanifest",
   "prywatnosc.html", "regulamin.html", "licencje.html", "legal.js",
   "fonts/fonts.css", "fonts/geist-latin.woff2", "fonts/geist-latinext.woff2",
   "img/window.jpg", "img/brass.jpg", "img/flatlay.jpg", "img/piano.jpg",

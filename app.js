@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "3.7";
+const VERSION = "3.8";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -88,10 +88,11 @@ function navAnimate(fromEl, toEl, dir, velocity = 0, fromLive) {
 }
 function show(v, dir, opt = {}) {
   const from = S.view;
-  const views = ["home", "score", "settings"];
+  const views = ["home", "score", "settings", "tunerv", "metrov"];
   if (from === v || opt.instant) {
     S.view = v; views.forEach(n => ($("#" + n).hidden = n !== v));
     if (v === "home") refreshLibrary(); if (v === "settings") syncSettings();
+    tabShown(v, from);
     return;
   }
   if (from === "score") leaveScore();
@@ -103,9 +104,27 @@ function show(v, dir, opt = {}) {
   const fromEl = $("#" + from), toEl = $("#" + v);
   views.forEach(n => { if (n !== v && n !== from) $("#" + n).hidden = true; });
   if (v !== "home") { const sc = v === "score" ? $("#scroller") : toEl; sc.scrollTop = 0; }
+  tabShown(v, from);
   if (opt.swiped) return;                      // the edge swipe already moved the screens
   navAnimate(fromEl, toEl, dir || (v === "home" ? "back" : "fwd"));
 }
+/* ---------------- tabs: Nuty, Stroik, Metronom, Ty. A piece opens full screen above them ---------------- */
+const TABS = ["home", "tunerv", "metrov", "settings"];
+function tabShown(v, from) {
+  document.body.classList.toggle("tabs", TABS.includes(v));
+  $$("#tabbar [data-tab]").forEach(b => b.toggleAttribute("aria-current", b.dataset.tab === v));
+  if (from === "tunerv" && v !== "tunerv" && tuner.on) tunerStop();
+  if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerStart(); }
+  if (v === "metrov") { $("#metro-tab-host").appendChild($("#metro-ui")); buildToolsSheet(); }
+}
+function goTab(v) {
+  if (v === S.view) { const el = $("#" + v); el && el.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  if (openSheetId) closeSheet();
+  if (v === "home") { if (history.state && history.state.v) history.back(); else show("home", null, { instant: true }); return; }
+  if (S.view === "home") history.pushState({ v }, ""); else history.replaceState({ v }, "");
+  show(v, null, { instant: true });
+}
+$$("#tabbar [data-tab]").forEach(b => b.addEventListener("click", () => goTab(b.dataset.tab)));
 function go(v) {
   if (openSheetId) { closeSheetThen(() => go(v)); return; }
   if (v === S.view) return;
@@ -118,8 +137,8 @@ window.addEventListener("popstate", e => {
   if (skipPop) { skipPop--; const f = afterPop; afterPop = null; if (f) f(); return; }
   if (cam.open) { closeCamera(true); return; }
   if (openSheetId) { hideSheet(); return; }
-  const sw = swipedBack; swipedBack = false;
-  show((e.state && e.state.v) || "home", "back", { swiped: sw });
+  const sw = swipedBack, to = (e.state && e.state.v) || "home"; swipedBack = false;
+  show(to, "back", { swiped: sw, instant: TABS.includes(S.view) && TABS.includes(to) });
 });
 
 /* Swipe from the left edge to go back (score, settings), tracked 1:1 with the finger. */
@@ -169,7 +188,7 @@ function edgeSwipe(view) {
   };
   view.addEventListener("pointerup", end); view.addEventListener("pointercancel", end);
 }
-edgeSwipe($("#score")); edgeSwipe($("#settings"));
+edgeSwipe($("#score"));
 
 /* ---------------- Sheets ----------------
    Phones: a bottom sheet that follows the finger, keeps the flick's velocity and settles
@@ -225,14 +244,14 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet })[name]?.();
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet })[name]?.();
   openSheetId = name;
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
   const f = el.querySelector(".done, button, input"); if (f && matchMedia("(pointer:fine)").matches) f.focus({ preventScroll: true });
 }
 function hideSheet(instant, keepScrim) {
-  if (openSheetId === "tools" && tuner.on) tunerStop();
+  if (openSheetId === "tuner" && tuner.on) tunerStop();
   if (openSheetId === "pdf" && pickPdfPages.cancel) { const c = pickPdfPages.cancel; setTimeout(c, 0); }
   if (!openSheetId) return;
   const name = openSheetId, el = $("#sh-" + name);
@@ -344,7 +363,7 @@ document.addEventListener("click", e => {
   if (a) {
     const act = a.dataset.act;
     if (act === "example") { hideWelcome(); openPiece({ xml: exampleXml(), sourceType: "example", title: "", composer: null, instrument: "Puzon" }); }
-    if (act === "blank") { hideWelcome(); openPiece({ xml: blankXml(), sourceType: "own", title: "Moje nuty", composer: "", instrument: "Puzon" }); S.dirty = true; savePiece(); setEditMode(true); whenDrawn(() => openSheet("bar")); }
+    if (act === "blank") { hideWelcome(); openSheet("new"); }
     if (act === "camera") { if (a.id === "w-camera") store.set("welcomed", "1"); openCamera(); }
     if (act === "print") closeSheetThen(printScore);
     if (act === "pdf") closeSheetThen(savePdf);
@@ -371,7 +390,7 @@ async function openDoc(name) {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && cam.open) { closeCamera(); return; }
   if (e.key === "Escape" && openSheetId) closeSheet();
-  if (e.key === " " && S.view === "score" && !openSheetId && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); if (!playState) unlockAudio(); play(); }
+  if (e.key === " " && S.view === "score" && !openSheetId && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); $("#btn-play").click(); }
 });
 
 /* ---------------- Home / library ---------------- */
@@ -453,7 +472,7 @@ function loadState(piece, settings) {
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
-  S.layout = S.hasLines ? "orig" : "fit"; S.under = ""; S.swing = false;
+  S.layout = S.hasLines ? "orig" : "fit"; S.page = "a4"; S.pz = 1; S.under = ""; S.swing = false;
   if (settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
@@ -462,7 +481,9 @@ function loadState(piece, settings) {
     if (Number.isInteger(settings.preset)) S.preset = settings.preset;
     if (settings.bpm >= 20 && settings.bpm <= 300) S.bpm = Math.round(settings.bpm);
     if (settings.zoom >= .5 && settings.zoom <= 2) S.zoom = settings.zoom;
+    if (settings.pz >= .5 && settings.pz <= 3) S.pz = settings.pz;
     if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
+    if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
     S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
   }
   if (S.piece.instrument == null) S.piece.instrument = first && !PIANO_RE.test(first.name) ? first.name : "";
@@ -480,7 +501,7 @@ function openPiece(piece, settings) {
     $("#notice-text").textContent = n ? `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
   }
   updateTitles();
-  $("#peek").hidden = true; S.undo = []; S.editSel = null; S.keepSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
+  $("#peek").hidden = true; pb.loop = null; pb.pick = false; pb.mute.clear(); pb.resumeMs = 0; S.undo = []; S.editSel = null; S.keepSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
   $("#pages").innerHTML = `<div class="loading-page"><span class="spinner"></span></div>`;
   $("#scroller").scrollTop = 0;
   if (S.view !== "score") go("score");
@@ -516,7 +537,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, zoom: S.zoom, layout: S.layout, under: S.under || "", swing: !!S.swing },
+    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -574,11 +595,12 @@ async function doRender() {
   stopPlayback();
   const box = $("#pages");
   const width = Math.min(960, box.parentElement.clientWidth) - 28;
-  const mode = width >= 600 ? "pages" : "reflow";
+  /* A4 pages, as on paper (Tata 14:16), on every screen; "Dopasuj do ekranu" is the option for bigger notes */
+  const mode = S.page === "screen" ? "reflow" : "pages";
   try {
     const xml = processedXml();
     let opts;
-    if (mode === "pages") opts = a4Options();
+    if (mode === "pages") opts = a4Options({}, 1);
     else {
       const px = 38 * S.zoom;
       opts = { pageWidth: Math.round(width * 100 / px), pageHeight: 60000, adjustPageHeight: true, scale: Math.round(px), breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
@@ -596,7 +618,8 @@ async function doRender() {
     if (doubt.size) { const order = drawnBars(xml); $$("#pages g.measure").forEach((g, i) => g.classList.toggle("doubt", doubt.has(order[i]))); }
     S.fromMs = 0; S.fromBar = -1;
     if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
-    S.mode = mode; S.loadedKey = "view";
+    S.mode = mode; S.loadedKey = "view"; applyPageZoom();
+    requestAnimationFrame(drawLoop);
     S.baseBpm = scoreBpm();
     if (openSheetId === "more") syncTempo();
   } catch (e) {
@@ -631,14 +654,14 @@ function drawnNote(sel) {
   return st ? [...st.querySelectorAll(NOTE_SEL)][sel.i] : null;
 }
 /* in correcting mode a finger does not have to hit the note head: the closest note or rest is taken */
-function nearestNote(x, y) {
+function nearestNote(x, y, max = 90, sel = NOTE_SEL) {
   let best = null, bd = Infinity;
-  $$("#pages " + NOTE_SEL.split(", ").join(", #pages ")).forEach(g => {
+  $$("#pages " + sel.split(", ").join(", #pages ")).forEach(g => {
     const r = g.getBoundingClientRect(); if (!r.width && !r.height) return;
     const dx = Math.max(r.left - x, 0, x - r.right), dy = Math.max(r.top - y, 0, y - r.bottom), d = dx * dx + 2 * dy * dy;
     if (d < bd) { bd = d; best = g; }
   });
-  return bd < 90 * 90 ? best : null;
+  return bd < max * max ? best : null;
 }
 function xmlNoteAt(doc, sel) {
   const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === sel.pid); if (!part) return null;
@@ -647,25 +670,99 @@ function xmlNoteAt(doc, sel) {
 }
 /* run once the music is on the screen (the first drawing loads the engine and can take a few seconds) */
 function whenDrawn(fn, tries = 40) { if ($("#pages g.measure")) setTimeout(fn, 250); else if (tries) setTimeout(() => whenDrawn(fn, tries - 1), 200); }
+/* Correcting mode shows the notes as written (no transposition or other clef), so a tap on a line is that note */
 function setEditMode(on) {
-  S.editMode = !!on; $("#btn-edit").setAttribute("aria-pressed", String(S.editMode));
-  if (!S.editMode) S.editSel = null;
+  on = !!on; if (on === !!S.editMode && on) return;
+  S.editMode = on;
+  /* big notes across the screen while correcting (a finger must hit a line); the A4 page comes back after */
+  if (on) {
+    const moved = S.iv.d || S.iv.s || S.clef !== "keep";
+    S.editView = { iv: S.iv, clef: S.clef, preset: S.preset, page: S.page, zoom: S.zoom };
+    S.iv = { d: 0, s: 0 }; S.clef = "keep"; S.preset = -1; S.page = "screen"; S.zoom = Math.max(S.zoom, 1.5);
+    S.loadedKey = null; render(); if (moved) hud("Poprawiasz nuty tak, jak są zapisane", 2500);
+  }
+  if (!on && S.editView) { Object.assign(S, S.editView); S.editView = null; S.loadedKey = null; changed(); }
+  if (!on) S.editSel = null;
+  $("#btn-edit").innerHTML = icon(on ? "check" : "pencil"); $("#btn-edit").setAttribute("aria-label", on ? "Gotowe" : "Popraw nuty");
+  if (on && playState) stopPlayback(true);
   selectNote(S.editSel);
+}
+const LEN_PL = { whole: "cała nuta", half: "półnuta", quarter: "ćwierćnuta", eighth: "ósemka", "16th": "szesnastka" };
+function edTab(name) {
+  $$("#editbar [data-tab-ed]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tabEd === name)));
+  $$("#editbar .ed-pane").forEach(p => (p.hidden = p.dataset.pane !== name));
+  S.edTab = name;
 }
 function selectNote(sel) {
   S.editSel = sel; if (sel) S.editMode = true;
   const on = !!S.editMode;
   document.body.classList.toggle("editing", on); document.body.classList.toggle("editmode", on);
-  $("#btn-edit").setAttribute("aria-pressed", String(on));
-  $("#editbar").hidden = !on; $("#ed-hint").hidden = !!sel; $("#ed-tools").hidden = !sel;
+  $("#btn-edit").setAttribute("aria-pressed", String(on)); $("#btn-edit").innerHTML = icon(on ? "check" : "pencil");
+  $("#editbar").hidden = !on;
   $$("#pages g.nsel").forEach(g => g.classList.remove("nsel"));
   $("#ed-undo").disabled = !(S.undo && S.undo.length);
-  if (!sel) return;
+  if (!S.edTab) edTab(sel ? "pitch" : "len");
+  const at = sel ? xmlNoteAt(parseXml(S.piece.xml), sel) : null, n = at && at.n, isRest = !!(n && kid(n, "rest"));
+  $$("#editbar .ed-pane:not([data-pane=len]) button").forEach(b => (b.disabled = !n || (isRest && !["rest", "delete", "left", "right"].includes(b.dataset.ed))));
+  const cur = n ? (txt(n, "type") || "whole") : (S.inLen || "quarter");
+  $$("#editbar [data-len]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.len === cur)));
+  $("#ed-dot").setAttribute("aria-pressed", String(!!(n && kid(n, "dot"))));
+  $("#ed-rest").innerHTML = icon(isRest ? "n-quarter" : "rest"); $("#ed-rest").setAttribute("aria-label", isRest ? "Zamień na nutę" : "Zamień na pauzę");
+  if (!n) { $("#ed-info").innerHTML = `Wybierz długość <svg class="i"><use href="#n-${cur === "16th" ? "16th" : cur}"/></svg> i dotknij pięciolinii`; return; }
   const el = drawnNote(sel); if (el) el.classList.add("nsel");
-  const at = xmlNoteAt(parseXml(S.piece.xml), sel);
-  const isRest = !!(at && at.n && kid(at.n, "rest"));
-  $("#ed-rest-t").textContent = isRest ? "Nuta" : "Pauza"; $("#ed-rest-i").textContent = isRest ? "♩" : "▬";
+  const p = kid(n, "pitch"), len = LEN_PL[txt(n, "type")] || "";
+  if (p) {
+    const midi = midiOf(p), oct = Math.floor(midi / 12) - 1;
+    $("#ed-info").innerHTML = `<b>${NOTE_PL[((midi % 12) + 12) % 12]}</b> ${OCTAVE_NAMES[oct] || ""} · ${len}${kid(n, "dot") ? " z kropką" : ""} · takt ${sel.bar}`;
+  } else $("#ed-info").innerHTML = `<b>Pauza</b> · ${len || "cały takt"} · takt ${sel.bar}`;
 }
+/* the sound of a note when it is placed or changed */
+let previewCtx = null;
+function previewNote(n) {
+  const p = n && kid(n, "pitch"); if (!p) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; previewCtx = previewCtx || new AC(); previewCtx.resume?.();
+    const g = previewCtx.createGain(); g.gain.value = 0.16; g.connect(previewCtx.destination);
+    const t = previewCtx.currentTime + 0.02; noteVoice()(previewCtx, g, 440 * Math.pow(2, (midiOf(p) - 69) / 12), t, t + 0.4);
+  } catch {}
+}
+/* which written note a height on the staff means: the five lines of the tapped staff give the steps */
+function pitchAtY(staff, y, part, m) {
+  const lines = [...staff.children].filter(c => c.tagName === "path").slice(0, 5).map(l => l.getBoundingClientRect().top).sort((a, b) => a - b);
+  if (lines.length < 5) return null;
+  const gap = (lines[4] - lines[0]) / 4, steps = Math.round((lines[4] - y) / (gap / 2));
+  return (CLEF_BOTTOM[clefAt(part, m)] ?? 18) + Math.max(-8, Math.min(16, steps));
+}
+/* a tap in correcting mode: on (or right next to) a note → that note; elsewhere on a staff → a new note of the
+   chosen length at that height, in place of the rest there (the bar keeps adding up) */
+function editTap(e) {
+  const near = e.target.closest("g.note") || nearestNote(e.clientX, e.clientY, 22, "g.note");
+  if (near) { const sel = locateNote(near); if (sel && sel.piano) { hud("Partii fortepianu nie poprawisz tutaj.", 3000); return; } if (sel) { selectNote(sel); previewNote(xmlNoteAt(parseXml(S.piece.xml), sel)?.n); } return; }
+  const restEl = e.target.closest("g.rest, g.mRest") || nearestNote(e.clientX, e.clientY, 60, "g.rest, g.mRest");
+  if (!restEl) { const any = nearestNote(e.clientX, e.clientY, 90); if (any) selectNote(locateNote(any)); else selectNote(null); return; }
+  const sel = locateNote(restEl); if (!sel || sel.piano) return;
+  const doc = parseXml(S.piece.xml), at = xmlNoteAt(doc, sel); if (!at || !at.n) return;
+  const staff = restEl.closest("g.staff"), idx = staff && pitchAtY(staff, e.clientY, at.part, at.m); if (idx == null) return;
+  const n = at.n, r = kid(n, "rest"), st = STEP_N[((idx % 7) + 7) % 7], oct = Math.floor(idx / 7), alt = keyAlter(keyAt(at.part, at.m), st);
+  const np = doc.createElement("pitch"); np.innerHTML = `<step>${st}</step>${alt ? `<alter>${alt}</alter>` : ""}<octave>${oct}</octave>`;
+  n.replaceChild(np, r);
+  const { div, cap } = barCap(at.part, at.m), want = S.inLen || "quarter";
+  const room = parseFloat(txt(n, "duration")) || cap, len = ED_LEN[want] * div <= room + 1e-6 ? want : ED_TYPES.slice().reverse().find(t => ED_LEN[t] * div <= room + 1e-6) || "16th";
+  kid(n, "duration").textContent = String(ED_LEN[len] * div);
+  let ty = kid(n, "type"); if (!ty) { ty = doc.createElement("type"); kid(n, "voice") ? kid(n, "voice").after(ty) : kid(n, "duration").after(ty); } ty.textContent = len;
+  kids(n, "dot").forEach(d => d.remove());
+  fitBar(doc, at.part, at.m, n);
+  /* writing in the last bar: there is always one empty bar ready after it */
+  const ms = kids(at.part, "measure");
+  if (at.m === ms[ms.length - 1]) [...doc.getElementsByTagName("part")].forEach(part => {
+    const last = kids(part, "measure").pop(), nm = doc.createElement("measure"), rr = restNote(doc, barCap(part, last).cap, "", 1);
+    kid(rr, "rest").setAttribute("measure", "yes"); nm.setAttribute("number", String(kids(part, "measure").length + 1)); nm.appendChild(rr); last.after(nm);
+  });
+  pushUndo(); S.piece.xml = new XMLSerializer().serializeToString(doc);
+  previewNote(n); S.editSel = sel; afterEdit();
+}
+$$("#editbar [data-tab-ed]").forEach(b => b.addEventListener("click", () => edTab(b.dataset.tabEd)));
+$$("#editbar [data-len]").forEach(b => b.addEventListener("click", () => { S.inLen = b.dataset.len; if (S.editSel) editNote("len:" + b.dataset.len); else selectNote(null); }));
 /* divisions and the length of a full bar (in divisions) at a bar */
 function barCap(part, m) {
   let div = 1, beats = 4, bt = 4;
@@ -712,6 +809,7 @@ function pushUndo() {
 }
 function editNote(op) {
   if (op === "done") { setEditMode(false); return; }
+  if (op.startsWith("len:") && !S.editSel) return;
   if (op === "bar") { openSheet("bar"); return; }
   if (op === "undo") { if (!S.undo || !S.undo.length) return; S.piece.xml = S.undo.pop(); refreshInfo(); afterEdit(); return; }
   const sel = S.editSel; if (!sel) return;
@@ -733,7 +831,26 @@ function editNote(op) {
       ty.textContent = "quarter"; fitBar(doc, at.part, at.m, n);
     }
   };
-  if (op === "up") move(1); else if (op === "down") move(-1);
+  if (op.startsWith("len:") || op === "dot") {
+    const div = divisionsAt(at.part, at.m), r = kid(n, "rest"); if (r) r.removeAttribute("measure");
+    const t = op === "dot" ? (txt(n, "type") || "quarter") : op.slice(4), dotted = op === "dot" ? !kid(n, "dot") : false;
+    kids(n, "dot").forEach(d => d.remove());
+    kid(n, "duration").textContent = String(ED_LEN[t] * div * (dotted ? 1.5 : 1));
+    let ty = kid(n, "type"); if (!ty) { ty = doc.createElement("type"); kid(n, "voice") ? kid(n, "voice").after(ty) : kid(n, "duration").after(ty); }
+    ty.textContent = t; if (dotted) ty.after(doc.createElement("dot"));
+    fitBar(doc, at.part, at.m, n);
+  } else if (op === "left" || op === "right") {
+    /* the note changes places with its neighbour; at the bar line it goes into the next or previous bar */
+    const sib = x => { let y = op === "left" ? x.previousElementSibling : x.nextElementSibling; while (y && (y.tagName !== "note" || kid(y, "chord"))) y = op === "left" ? y.previousElementSibling : y.nextElementSibling; return y; };
+    let other = sib(n), bar = sel.bar;
+    if (!other) {
+      const ms = kids(at.part, "measure"), mi = ms.indexOf(at.m) + (op === "left" ? -1 : 1), nm = ms[mi]; if (!nm) return;
+      const ns = kids(nm, "note").filter(x => !kid(x, "chord")); other = op === "left" ? ns[ns.length - 1] : ns[0]; if (!other) return; bar = mi + 1;
+    }
+    const ph = doc.createElement("x"); n.replaceWith(ph); other.replaceWith(n); ph.replaceWith(other);
+    const i = kids(n.parentNode, "note").indexOf(n), di = bar === sel.bar ? sel.di : drawnBars(processedXml()).indexOf(bar) + (op === "left" ? 0 : 0);
+    S.editSel = { ...sel, bar, i, di: bar === sel.bar ? sel.di : Math.max(0, sel.di + (op === "left" ? -1 : 1)) };
+  } else if (op === "up") move(1); else if (op === "down") move(-1);
   else if (op === "octup") move(7); else if (op === "octdown") move(-7);
   else if (op === "flat") setAlter(-1); else if (op === "sharp") setAlter(1); else if (op === "natural") setAlter(0);
   else if (op === "shorter" || op === "longer") {
@@ -764,6 +881,7 @@ function editNote(op) {
   }
   pushUndo();
   S.piece.xml = new XMLSerializer().serializeToString(doc);
+  if (["up", "down", "octup", "octdown", "flat", "sharp", "natural", "rest", "add"].includes(op)) previewNote(op === "add" ? n.nextElementSibling : n);
   afterEdit();
 }
 function keyAt(part, m) { let f = 0; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const k = kid(a, "key"); if (k) f = parseInt(txt(k, "fifths"), 10) || 0; }); if (mm === m) break; } return f; }
@@ -885,7 +1003,7 @@ $("#bar-add").addEventListener("click", () => barOp("add"));
 $("#bar-addbefore").addEventListener("click", () => barOp("addbefore"));
 $("#bar-del").addEventListener("click", () => barOp("del"));
 [["#bar-bpm-down", -4], ["#bar-bpm-up", 4]].forEach(([s, d]) => $(s).addEventListener("click", () => { setBpm(curBpm() + d); $("#bar-bpm").textContent = String(curBpm()); }));
-$("#btn-edit").addEventListener("click", () => { setEditMode(!S.editMode); if (S.editMode) hud("Dotknij nuty, którą chcesz zmienić", 2200); });
+$("#btn-edit").addEventListener("click", () => setEditMode(!S.editMode));
 function afterEdit() {
   /* the rhythm check follows the edit: fixed bars lose their red, broken ones get it */
   const other = (S.piece.issues || []).filter(t => !/wartości rytmicznych/.test(t));
@@ -904,25 +1022,21 @@ $("#btn-restore").addEventListener("click", () => {
 });
 
 /* tap a note: correct it; tap a bar elsewhere: it is selected and ▶ plays from there; tap again (or outside the bars) to clear */
+/* outside correcting, a tap never edits: it picks where to play from, or moves the loop (also while playing) */
 $("#pages").addEventListener("click", e => {
   if (!S.piece) return;
-  const hit = e.target.closest(NOTE_SEL), ne = hit || (S.editMode ? nearestNote(e.clientX, e.clientY) : null);
-  if (ne) {
-    const sel = locateNote(ne);
-    if (sel && sel.piano) { hud("Partii fortepianu nie poprawisz tutaj. Ukryj ją w „Więcej → Partie”, żeby poprawiać melodię.", 4000); return; }
-    if (sel) { if (S.editSel && S.editSel.di === sel.di && S.editSel.si === sel.si && S.editSel.i === sel.i) selectNote(null); else selectNote(sel); return; }
-  }
-  if (S.editMode) return;
+  if (S.editMode) { editTap(e); return; }
   const m = e.target.closest("g.measure");
-  if (!m) { if (S.fromMs) clearFromBar(); else if (e.target.closest(".page")) document.body.classList.toggle("immersive"); return; }
-  if (m.classList.contains("sel")) { clearFromBar(); return; }
-  const firstNote = m.querySelector("g.note, g.rest"); if (!firstNote) return;
+  if (!m) { if (S.fromMs) clearFromBar(); else if (e.target.closest(".page") && !playState) document.body.classList.toggle("immersive"); return; }
+  const di = measureEls().indexOf(m);
+  if (pb.pick || pb.loop) { setLoopBar(di); return; }
+  if (m.classList.contains("sel") && !playState) { clearFromBar(); return; }
+  const firstNote = m.querySelector("g.note, g.rest, g.mRest"); if (!firstNote) return;
   let ms = 0; try { ms = tk.getTimeForElement(firstNote.id) || 0; } catch {}
   $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); m.classList.add("sel");
-  S.fromMs = ms; S.fromBar = [...$$("#pages g.measure")].indexOf(m);
-  hud("Graj od tego taktu: dotknij ▶", 2200);
+  S.fromMs = ms; S.fromBar = di; pb.resumeMs = 0;
+  if (playState) { pb.follow = true; play(ms); return; }
   const bar = drawnBars(processedXml())[S.fromBar]; if (bar) showPeek(bar);
-  if (playState) { stopPlayback(); play(ms); }
 });
 function clearFromBar() { S.fromMs = 0; S.fromBar = -1; $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); $("#peek").hidden = true; }
 /* T16: the line of the photo where this bar was printed, shown above the music */
@@ -988,21 +1102,33 @@ function unlockAudio() {
     try { player.src = SILENCE; const pr = player.play(); if (pr) pr.catch(() => {}); } catch {}
   }
 }
+/* ---------------- 3.8 player (benchmark: Soundslice, MuseScore 4, Songsterr, Tomplay, Flat, SmartMusic) ----------------
+   The cursor follows the sound itself (the audio clock, so it never drifts): a soft highlight on the bar and a thin
+   line gliding through it. The page moves one line of music at a time, keeping the playing line in the upper third.
+   Pause keeps the place; a one-bar count-in and the metronome click are rendered into the same sound; a loop of
+   bars repeats with the count-in each time and can be changed at any moment, also while playing. */
 let playState = null, playToken = 0;
+const pb = { click: store.get("click", "count"), loop: null, pick: false, mute: new Set(), follow: true, resumeMs: 0 };
 function setPlayUi(on) {
   const b = $("#btn-play"); b.classList.toggle("on", on);
-  b.innerHTML = icon(on ? "stop" : "play");
-  b.setAttribute("aria-label", on ? "Zatrzymaj" : "Posłuchaj"); b.title = on ? "Zatrzymaj" : "Posłuchaj";
+  b.innerHTML = icon(on ? "pause" : "play");
+  b.setAttribute("aria-label", on ? "Pauza" : "Posłuchaj"); b.title = on ? "Pauza" : "Posłuchaj";
+  document.body.classList.toggle("playing", on);
+  $("#tp-bpm").textContent = String(curBpm());
 }
-function stopPlayback() {
+function stopPlayback(keepPlace) {
   playToken++;
   if (!playState) return;
+  if (keepPlace) pb.resumeMs = playPos();
   try { (playState.src || player).pause(); } catch {}
+  try { player.loop = false; } catch {}
   cancelAnimationFrame(playState.raf);
   const url = playState.url; if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
   $$("#pages g.playing").forEach(g => g.classList.remove("playing"));
-  const pl = $("#pages .playline"); if (pl) pl.remove();
+  $$("#pages .playline, #pages .barlight").forEach(x => x.remove());
+  $("#follow-pill").hidden = true; $("#tp-bar").textContent = ""; $("#tp-fill").style.width = "0";
   playState = null; setPlayUi(false);
+  if (!tuner.on && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
 }
 /* one note of the brass-like synth, into any audio context */
 function synthNote(ctx, out, f, st, en) {
@@ -1013,6 +1139,12 @@ function synthNote(ctx, out, f, st, en) {
   env.gain.setValueAtTime(0, st); env.gain.linearRampToValueAtTime(0.9, st + 0.03); env.gain.setTargetAtTime(0.6, st + 0.05, 0.1); env.gain.setTargetAtTime(0, en, 0.04);
   o1.connect(filt); o2.connect(filt); filt.connect(env); env.connect(out);
   o1.start(st); o2.start(st); o1.stop(en + 0.3); o2.stop(en + 0.3);
+}
+/* a short wooden click, accented on the first beat */
+function clickNote(ctx, out, t, accent) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = accent ? 1760 : 1175; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(accent ? 2.2 : 1.4, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .05);
+  o.connect(g); g.connect(out); o.start(t); o.stop(t + .07);
 }
 function wavBlob(buf) {
   const ch = buf.getChannelData(0), n = ch.length, sr = buf.sampleRate;
@@ -1027,46 +1159,83 @@ function wavBlob(buf) {
   return { blob: new Blob([out.buffer], { type: "audio/wav" }), peak };
 }
 const LEAD = 0.06;            // seconds of silence at the start of each rendered file
-async function play(fromMs = 0) {
-  if (playState) { stopPlayback(); if (!(fromMs > 0)) return; }
+const measureEls = () => [...$$("#pages g.measure")];
+/* the beats a metronome gives in each drawn bar (6/8 → 2, 9/8 → 3, 12/8 → 4, 3/8 → 1) */
+function beatsPerBar() {
+  const xml = processedXml(), doc = parseXml(xml), part = doc.getElementsByTagName("part")[0]; if (!part) return [];
+  let b = 4, bt = 4; const byBar = kids(part, "measure").map(m => {
+    kids(m, "attributes").forEach(a => { const t = kid(a, "time"); if (t) { b = parseInt(txt(t, "beats"), 10) || b; bt = parseInt(txt(t, "beat-type"), 10) || bt; } });
+    return bt === 8 && b % 3 === 0 ? b / 3 : b;
+  });
+  return drawnBars(xml).map(n => byBar[n - 1] || 4);
+}
+/* which part a drawn note belongs to (for "Co słychać") */
+function partOfEl(el) {
+  const m = el && el.closest("g.measure"), st = el && el.closest("g.staff"); if (!m || !st) return null;
+  const slot = staffSlots()[staffsOf(m).indexOf(st)]; return slot ? slot.pid : null;
+}
+async function play(fromMs) {
+  if (playState) stopPlayback();
   if (!S.piece) return;
   const token = ++playToken;
   await engineReady;
   if (S.loadedKey !== "view") await doRender();
+  if (token !== playToken) return;
   let tm;
-  try { tm = tk.renderToTimemap({ includeMeasures: false, includeRests: false }); } catch { hud("Nie da się odtworzyć tych nut"); return; }
+  try { tm = tk.renderToTimemap({ includeMeasures: true, includeRests: false }); } catch { hud("Nie da się odtworzyć tych nut"); return; }
+  const bars = []; tm.forEach(e => { if (e.measureOn) bars.push(e.tstamp); });
+  const nBars = measureEls().length;
+  if (pb.loop) { pb.loop.a = Math.min(pb.loop.a, nBars - 1); pb.loop.b = Math.min(pb.loop.b, nBars - 1); }
+  const A = pb.loop ? bars[pb.loop.a] ?? 0 : 0, B = pb.loop ? (bars[pb.loop.b + 1] ?? Infinity) : Infinity;
+  fromMs = pb.loop ? A : Math.max(0, fromMs || 0);
   const k = (S.baseBpm || 120) / curBpm(), ev = [];
   tm.forEach(e => (e.on || []).forEach(id => {
     try {
       const v = tk.getMIDIValuesForElement(id); if (!v || !(v.pitch > 0)) return;
-      const end = e.tstamp + v.duration; if (end <= fromMs + 20) return;
-      const start = Math.max(e.tstamp, fromMs);      // resuming mid-note (tempo change): the note keeps sounding
-      ev.push({ id, t: (start - fromMs) / 1000 * k, dur: Math.max(0.08, (end - start) / 1000 * k), pitch: v.pitch });
+      if (e.tstamp >= B) return;
+      const end = Math.min(e.tstamp + v.duration, B); if (end <= fromMs + 20) return;
+      const start = Math.max(e.tstamp, fromMs);      // resuming mid-note: the note keeps sounding
+      const el = document.getElementById(id);
+      ev.push({ id, el, t: (start - fromMs) / 1000 * k, dur: Math.max(0.08, (end - start) / 1000 * k), pitch: v.pitch, silent: pb.mute.size && pb.mute.has(partOfEl(el)) });
     } catch {}
   }));
   if (!ev.length) { hud("Brak nut do odtworzenia"); return; }
+  ev.sort((a, b) => a.t - b.t);
   if (S.swing) {         /* T29: eighths in pairs play long-short (about 2:1) */
     const beat = 60 / curBpm(), half = beat / 2, eps = beat * 0.05, third = beat / 6;
     ev.forEach(e => { const pos = ((e.t % beat) + beat) % beat; if (e.dur <= half * 1.1) { if (Math.abs(pos - half) < eps) { e.t += third; e.dur -= third; } else if (pos < eps || beat - pos < eps) e.dur += third; } });
   }
-  const end = Math.max(...ev.map(e => e.t + e.dur));
+  /* bars in this range, with their beats, for the count-in and the click */
+  const bpb = beatsPerBar(), first = Math.max(0, bars.findIndex((t, i) => t <= fromMs + 1 && (bars[i + 1] ?? Infinity) > fromMs + 1));
+  const barSec = i => (((bars[i + 1] ?? (bars[i] + (bars[i] - (bars[i - 1] ?? bars[i] - 2000)))) - bars[i]) / 1000) * k;
+  const clicks = [], useClick = pb.click !== "off";
+  const countLen = useClick ? barSec(first) : 0;
+  if (useClick) { const n = bpb[first] || 4; for (let j = 0; j < n; j++) clicks.push({ t: j * countLen / n, acc: j === 0 }); }
+  const rangeLen = Number.isFinite(B) ? (B - fromMs) / 1000 * k : Math.max(...ev.map(e => e.t + e.dur));
+  if (pb.click === "all") for (let i = first; i < bars.length && bars[i] < (Number.isFinite(B) ? B : Infinity); i++) {
+    const n = bpb[i] || 4, t0 = (bars[i] - fromMs) / 1000 * k, len = barSec(i);
+    for (let j = 0; j < n; j++) { const t = t0 + j * len / n; if (t >= -0.01 && t < rangeLen - 0.01) clicks.push({ t: countLen + t, acc: j === 0 }); }
+  }
+  ev.forEach(e => { e.t += countLen; });
+  const total = countLen + rangeLen, fileLen = pb.loop ? total : total + 0.5;
   setPlayUi(true);
-  let url, peak;
+  let url;
   try {
     const sr = 44100, Off = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    const off = new Off(1, Math.ceil((end + LEAD + 0.5) * sr), sr);
+    const off = new Off(1, Math.ceil((fileLen + LEAD) * sr), sr);
     const bus = off.createGain(); bus.gain.value = 0.18; bus.connect(off.destination);
-    ev.forEach(e => noteVoice()(off, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), LEAD + e.t, LEAD + e.t + e.dur * 0.95));
+    const voiceFn = noteVoice();
+    ev.forEach(e => { if (!e.silent) voiceFn(off, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), LEAD + e.t, LEAD + e.t + e.dur * 0.95); });
+    clicks.forEach(c => clickNote(off, bus, LEAD + c.t, c.acc));
     const buf = await off.startRendering();
-    /* private windows (Safari, Firefox, Brave) add random noise to rendered audio against fingerprinting:
-       the lead-in must be silent, and if it isn't, play the notes live instead of from the rendered file */
+    /* private windows add noise to rendered audio against fingerprinting: then the notes are played live */
     const ch = buf.getChannelData(0); let lead = 0;
     for (let i = 0, n = Math.floor(LEAD * sr * 0.8); i < n; i++) lead = Math.max(lead, Math.abs(ch[i]));
-    if (lead > 1e-4) { if (token === playToken) playLive(ev, end, token, k, fromMs); return; }
-    const w = wavBlob(buf); peak = w.peak; url = URL.createObjectURL(w.blob);
+    if (lead > 1e-4) { if (token === playToken) playLive(ev, clicks, total, token, k, fromMs, countLen); return; }
+    url = URL.createObjectURL(wavBlob(buf).blob);
   } catch (e) { console.warn(e); if (token === playToken) { setPlayUi(false); hud("Nie udało się przygotować dźwięku"); } return; }
   if (token !== playToken) { URL.revokeObjectURL(url); return; }      // stopped while it was being prepared
-  player.src = url;
+  player.src = url; player.loop = !!pb.loop;
   try { await player.play(); }
   catch (e) {
     URL.revokeObjectURL(url); setPlayUi(false);
@@ -1074,52 +1243,163 @@ async function play(fromMs = 0) {
     return;
   }
   if (token !== playToken) { player.pause(); URL.revokeObjectURL(url); return; }
-  playState = { raf: 0, k, fromMs, url, peak, src: player }; setPlayUi(true);
-  follow(ev, end, token);
+  playState = { raf: 0, k, fromMs, url, src: player, ev, countLen, total, loopLen: pb.loop ? total + LEAD : 0, clock: { a: -1, at: 0 } };
+  setPlayUi(true); keepAwake(); follow(token);
 }
-/* live playback through Web Audio: used when rendered audio comes back noisy */
-async function playLive(ev, end, token, k, fromMs) {
+async function keepAwake() { try { wakeLock = wakeLock || await navigator.wakeLock?.request("screen"); } catch {} }
+/* live playback through Web Audio: used when rendered audio comes back noisy (no seamless loop there: it restarts) */
+async function playLive(ev, clicks, total, token, k, fromMs, countLen) {
   const AC = window.AudioContext || window.webkitAudioContext; const ctx = new AC();
   try { await ctx.resume(); } catch {}
   const bus = ctx.createGain(); bus.gain.value = 0.18; bus.connect(ctx.destination);
-  const t0 = ctx.currentTime + 0.12;
-  ev.forEach(e => noteVoice()(ctx, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95));
-  const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > end + LEAD + 0.3; }, pause() { try { ctx.close(); } catch {} } };
+  const t0 = ctx.currentTime + 0.12, voiceFn = noteVoice();
+  ev.forEach(e => { if (!e.silent) voiceFn(ctx, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95); });
+  clicks.forEach(c => clickNote(ctx, bus, t0 + LEAD + c.t, c.acc));
+  const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > total + LEAD + 0.3; }, get paused() { return false; }, pause() { try { ctx.close(); } catch {} } };
   if (token !== playToken) { src.pause(); return; }
-  playState = { raf: 0, k, fromMs, url: null, peak: 1, src }; setPlayUi(true);
-  follow(ev, end, token);
+  playState = { raf: 0, k, fromMs, url: null, src, ev, countLen, total, loopLen: 0, live: true, clock: { a: -1, at: 0 } };
+  setPlayUi(true); keepAwake(); follow(token);
 }
-/* highlight the playing notes, move the line, keep the music in view */
-function follow(ev, end, token) {
-  const sc = $("#scroller"); let lastScroll = 0;
+/* the audio element's clock moves in steps on some phones: between steps it is carried on by the frame clock */
+function audioNow(ps) {
+  const a = ps.src.currentTime, now = performance.now(), c = ps.clock;
+  if (a !== c.a) { c.a = a; c.at = now; return a; }
+  if (ps.src.paused) return a;
+  let t = a + (now - c.at) / 1000; if (ps.loopLen && t >= ps.loopLen) t -= ps.loopLen; return t;
+}
+/* where playback is now, in score milliseconds (independent of tempo) */
+function rangeTime(ps) { return audioNow(ps) - LEAD - ps.countLen; }
+const playPos = () => playState ? playState.fromMs + Math.max(0, rangeTime(playState)) * 1000 / playState.k : 0;
+/* positions of everything the cursor needs, relative to #pages (they don't change while scrolling) */
+function cursorMap(ev) {
+  const pg = $("#pages"), pr = pg.getBoundingClientRect(), rel = r => ({ x: r.left - pr.left, y: r.top - pr.top, w: r.width, h: r.height });
+  const ons = []; let last = null;
+  ev.forEach(e => {
+    if (!e.el) return;
+    if (last && Math.abs(e.t - last.t) < 0.005) { last.els.push(e.el); return; }
+    const m = e.el.closest("g.measure"), sys = e.el.closest("g.system") || m; if (!m) return;
+    /* the height comes from the staff lines only (notes above or below the staff would make it jump) */
+    const staffs = staffsOf(m), lines = st => { const ls = [...(st || m).children].filter(c => c.tagName === "path").slice(0, 5).map(l => l.getBoundingClientRect()); return ls.length ? { t: Math.min(...ls.map(r => r.top)) - pr.top, b: Math.max(...ls.map(r => r.bottom)) - pr.top } : (r => ({ t: r.y, b: r.y + r.h }))(rel((st || m).getBoundingClientRect())); };
+    const a = lines(staffs[0]), z = lines(staffs[staffs.length - 1]), gap = (a.b - a.t) / 4 || 8, mr = rel(m.getBoundingClientRect()), nr = rel(e.el.getBoundingClientRect());
+    last = { t: e.t, els: [e.el], x: nr.x + nr.w / 2, m, sys, top: a.t - gap * 1.5, h: z.b - a.t + gap * 3, mx: mr.x, mw: mr.w, mi: measureEls().indexOf(m) };
+    ons.push(last);
+  });
+  return ons;
+}
+function follow(token) {
+  const ps = playState, sc = $("#scroller"), pg = $("#pages"), ons = cursorMap(ps.ev), nBars = measureEls().length;
+  if (!ons.length) return;
+  const line = document.createElement("div"); line.className = "playline"; pg.appendChild(line);
+  const light = document.createElement("div"); light.className = "barlight"; pg.appendChild(light);
+  let cur = -1, lastSys = null, lit = [];
   const step = () => {
     if (!playState || token !== playToken) return;
-    const now = playState.src.currentTime - LEAD;
-    ev.forEach(e => {
-      const on = now >= e.t && now < e.t + e.dur;
-      const el = e.el || (e.el = document.getElementById(e.id)); if (!el) return;
-      if (on && !e.lit) {
-        el.classList.add("playing"); e.lit = true;
-        /* a line follows the music: it stands at the playing note, as tall as its staff line */
-        const pgs = $("#pages"), sys = el.closest("g.system") || el.closest("g.measure");
-        if (pgs && sys) {
-          let line = pgs.querySelector(".playline"); if (!line) { line = document.createElement("div"); line.className = "playline"; pgs.appendChild(line); }
-          const pr = pgs.getBoundingClientRect(), nr = el.getBoundingClientRect(), sr = sys.getBoundingClientRect();
-          line.style.height = Math.round(sr.height + 12) + "px";
-          line.style.transform = `translate(${Math.round(nr.left - pr.left + nr.width / 2 - 1)}px, ${Math.round(sr.top - pr.top - 6)}px)`;
-        }
-        if (performance.now() - lastScroll > 700) {
-          const r = el.getBoundingClientRect(), b = sc.getBoundingClientRect();
-          if (r.top < b.top + 70 || r.bottom > b.bottom - 150) { sc.scrollBy({ top: r.top - b.top - b.height / 3, behavior: "smooth" }); lastScroll = performance.now(); }
-        }
-      } else if (!on && e.lit) { el.classList.remove("playing"); e.lit = false; }
-    });
-    if (playState.src.ended || now > end + 0.3) { stopPlayback(); return; }
-    playState.raf = requestAnimationFrame(step);
+    let T = rangeTime(ps) + ps.countLen;                         // time in the file (count-in included)
+    if (T < ps.countLen) {                                       // counting in: the first bar waits, lit
+      const o = ons[0]; light.style.cssText = `width:${o.mw}px;height:${o.h}px;transform:translate(${o.mx}px,${o.top}px);opacity:.6`;
+      line.style.opacity = "0"; $("#tp-bar").textContent = "…"; ps.raf = requestAnimationFrame(step); return;
+    }
+    line.style.opacity = "1";
+    let i = cur < 0 || ons[cur].t > T ? 0 : cur; while (i + 1 < ons.length && ons[i + 1].t <= T) i++;
+    const o = ons[i], nx = ons[i + 1];
+    if (i !== cur) {
+      lit.forEach(el => el.classList.remove("playing")); lit = o.els; lit.forEach(el => el.classList.add("playing")); cur = i;
+      light.style.cssText = `width:${o.mw}px;height:${o.h}px;transform:translate(${o.mx}px,${o.top}px)`;
+      $("#tp-bar").textContent = `${o.mi + 1} / ${nBars}`;
+      if (o.sys !== lastSys) { lastSys = o.sys; if (pb.follow) scrollToLine(o); }
+    }
+    /* the line glides to the next note on the same line, or to the end of the bar */
+    const end = nx && nx.sys === o.sys ? nx : null, span = (end ? end.t : o.t + 0.5) - o.t, f = Math.max(0, Math.min(1, (T - o.t) / (span || 1)));
+    const x = o.x + ((end ? end.x : o.mx + o.mw - 4) - o.x) * (end ? f : Math.min(f, 0.6));
+    line.style.height = o.h + "px"; line.style.transform = `translate(${x.toFixed(1)}px,${o.top}px)`;
+    $("#tp-fill").style.width = Math.min(100, (T / ps.total) * 100).toFixed(2) + "%";
+    if (!ps.loopLen && (ps.src.ended || T > ps.total + 0.3)) {
+      if (ps.live && pb.loop) { play(); return; }
+      stopPlayback(); pb.resumeMs = 0; return;
+    }
+    ps.raf = requestAnimationFrame(step);
   };
-  playState.raf = requestAnimationFrame(step);
+  ps.raf = requestAnimationFrame(step);
 }
-$("#btn-play").addEventListener("click", () => { if (playState) { stopPlayback(); return; } unlockAudio(); play(S.fromMs || 0); });
+/* the page glides so the playing line sits in the upper third (and the next line is already in view) */
+let scrollAnim = 0, autoScrolling = false;
+function scrollToLine(o) {
+  const sc = $("#scroller"), pg = $("#pages"), pr = pg.getBoundingClientRect(), sr = sc.getBoundingClientRect();
+  const top = pr.top + o.top, want = sr.top + Math.max(70, sc.clientHeight * 0.2);
+  const d = top - want; if (Math.abs(d) < 8) return;
+  const from = sc.scrollTop, to = Math.max(0, Math.min(sc.scrollHeight - sc.clientHeight, from + d)), t0 = performance.now(), dur = canAnimate() ? 420 : 0;
+  cancelAnimationFrame(scrollAnim); autoScrolling = true;
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const tick = now => { const f = dur ? Math.min(1, (now - t0) / dur) : 1; sc.scrollTop = from + (to - from) * ease(f); if (f < 1) scrollAnim = requestAnimationFrame(tick); else setTimeout(() => { autoScrolling = false; }, 60); };
+  scrollAnim = requestAnimationFrame(tick);
+}
+/* the finger moves the page while playing: stop following until "Wróć" */
+(() => {
+  const sc = $("#scroller"), off = () => { if (playState && pb.follow && !autoScrolling) { pb.follow = false; $("#follow-pill").hidden = false; } };
+  sc.addEventListener("touchmove", off, { passive: true }); sc.addEventListener("wheel", off, { passive: true });
+})();
+$("#follow-pill").addEventListener("click", () => {
+  pb.follow = true; $("#follow-pill").hidden = true;
+  const line = $("#pages .playline"); if (line) { const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(line.style.transform); if (m) scrollToLine({ top: +m[2] }); }
+});
+/* transport */
+$("#btn-play").addEventListener("click", () => {
+  if (playState) { stopPlayback(true); return; }
+  unlockAudio(); pb.follow = true;
+  play(S.fromMs || pb.resumeMs || 0);
+});
+$("#btn-restart").addEventListener("click", () => {
+  pb.resumeMs = 0; clearFromBar(); $("#scroller").scrollTo({ top: 0, behavior: canAnimate() ? "smooth" : "auto" });
+  if (playState) { unlockAudio(); play(0); }
+});
+$("#btn-loop").addEventListener("click", () => {
+  if (pb.loop || pb.pick) { pb.loop = null; pb.pick = false; drawLoop(); syncLoopUi(); if (playState) play(playPos()); return; }
+  pb.pick = "first"; syncLoopUi(); hud("Dotknij pierwszego taktu pętli", 3000);
+});
+/* the loop: tap the first and the last bar; afterwards a tap moves the nearer end (also while playing) */
+function setLoopBar(di) {
+  if (pb.pick === "first") { pb.loop = { a: di, b: di }; pb.pick = "last"; hud("Teraz ostatni takt", 2500); }
+  else if (pb.pick === "last") { pb.loop = { a: Math.min(pb.loop.a, di), b: Math.max(pb.loop.a, di) }; pb.pick = false; }
+  else { const L = pb.loop; if (di < L.a) L.a = di; else if (di > L.b) L.b = di; else if (di - L.a <= L.b - di) L.a = di; else L.b = di; }
+  drawLoop(); syncLoopUi();
+  if (playState && !pb.pick) play();
+}
+function drawLoop() {
+  $$("#pages .loopband").forEach(x => x.remove());
+  if (!pb.loop) return;
+  const ms = measureEls(), pg = $("#pages"), pr = pg.getBoundingClientRect(), rows = new Map();
+  ms.slice(pb.loop.a, pb.loop.b + 1).forEach(m => {
+    const sys = m.closest("g.system") || m, r = m.getBoundingClientRect(), row = rows.get(sys) || { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
+    row.l = Math.min(row.l, r.left); row.r = Math.max(row.r, r.right); row.t = Math.min(row.t, r.top); row.b = Math.max(row.b, r.bottom); rows.set(sys, row);
+  });
+  rows.forEach(r => { const d = document.createElement("div"); d.className = "loopband"; d.style.cssText = `left:${r.l - pr.left}px;top:${r.t - pr.top - 4}px;width:${r.r - r.l}px;height:${r.b - r.t + 8}px`; pg.appendChild(d); });
+}
+function syncLoopUi() {
+  $("#btn-loop").setAttribute("aria-pressed", String(!!(pb.loop || pb.pick)));
+  $("#loop-t").textContent = pb.loop ? `Pętla: takty ${pb.loop.a + 1}–${pb.loop.b + 1}` : "Powtarzaj kilka taktów";
+  $("#loop-s").textContent = pb.loop ? "Dotknij taktu, żeby przesunąć początek lub koniec. Dotknij tu, żeby wyłączyć." : "Dotknij pierwszego i ostatniego taktu";
+}
+$("#loop-row").addEventListener("click", () => {
+  if (pb.loop) { pb.loop = null; pb.pick = false; drawLoop(); syncLoopUi(); if (playState) play(playPos()); }
+  else { pb.pick = "first"; syncLoopUi(); closeSheet(); hud("Dotknij pierwszego taktu pętli", 3000); }
+});
+/* practice sheet: speed, click, parts */
+function buildPracticeSheet() {
+  syncTempo(); syncLoopUi();
+  const base = S.baseBpm || 120, pct = Math.round(curBpm() / base * 100);
+  $$("#speedseg button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.pct === pct)));
+  $$("#clickseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.c === pb.click)));
+  $("#swing").checked = !!S.swing;
+  const M = $("#mix"); M.innerHTML = "";
+  S.parts.filter(p => p.keep).forEach(p => {
+    const name = p.name || "Partia", l = document.createElement("label"); l.className = "li";
+    l.innerHTML = `<span class="ic">${icon(p.staves > 1 || PIANO_RE.test(p.name) ? "piano" : "trombone")}</span><span class="grow"><b>${esc(name)}</b></span><input type="checkbox" class="switch" ${pb.mute.has(p.id) ? "" : "checked"} aria-label="Słychać: ${esc(name)}">`;
+    l.querySelector("input").addEventListener("change", e => { if (e.target.checked) pb.mute.delete(p.id); else pb.mute.add(p.id); if (playState) play(playPos()); });
+    M.appendChild(l);
+  });
+}
+$$("#speedseg button").forEach(b => b.addEventListener("click", () => { setBpm(Math.round((S.baseBpm || 120) * +b.dataset.pct / 100)); buildPracticeSheet(); }));
+$$("#clickseg button").forEach(b => b.addEventListener("click", () => { pb.click = b.dataset.c; store.set("click", pb.click); buildPracticeSheet(); if (playState) play(playPos()); }));
 (() => {
   const sc = $("#scroller"), pg = $("#pages"); let d0 = 0, ratio = 1;
   const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
@@ -1127,13 +1407,13 @@ $("#btn-play").addEventListener("click", () => { if (playState) { stopPlayback()
   sc.addEventListener("touchmove", e => {
     if (e.touches.length !== 2 || !d0) return;
     e.preventDefault();
-    ratio = Math.max(.5 / S.zoom, Math.min(2 / S.zoom, dist(e.touches) / d0));
+    ratio = Math.max(.5 / zoomNow(), Math.min(zoomMax() / zoomNow(), dist(e.touches) / d0));
     pg.style.transformOrigin = "50% 0"; pg.style.transform = `scale(${ratio})`;
   }, { passive: false });
   sc.addEventListener("touchend", e => {
     if (!d0 || e.touches.length) return;
     pg.style.transform = ""; d0 = 0;
-    if (Math.abs(ratio - 1) > .04) setZoom(S.zoom * ratio);
+    if (Math.abs(ratio - 1) > .04) setZoom(zoomNow() * ratio);
   });
 })();
 /* nothing may hide the last line: the space under the music is the dock's real height */
@@ -1150,9 +1430,7 @@ if (window.ResizeObserver) new ResizeObserver(([e]) => $("#score").style.setProp
     if (acc > 24) dock.classList.add("min"); else if (acc < -24) dock.classList.remove("min");
   }, { passive: true });
 })();
-/* where playback is now, in score milliseconds (independent of tempo) */
-const playPos = () => playState ? playState.fromMs + Math.max(0, playState.src.currentTime - LEAD) * 1000 / playState.k : 0;
-document.addEventListener("visibilitychange", () => { if (document.hidden) stopPlayback(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) stopPlayback(true); });
 
 /* ---------------- Print & export ---------------- */
 async function printScore() {
@@ -1467,9 +1745,13 @@ $("#oct-up").addEventListener("click", () => { const { k, oct } = kOct(); setKOc
 
 /* ---------------- More sheet ---------------- */
 $$("#layoutseg button").forEach(b => b.addEventListener("click", () => { S.layout = b.dataset.layout; syncLayout(); S.loadedKey = null; changed(); }));
-function syncLayout() { $("#layout-box").hidden = !S.hasLines; $$("#layoutseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.layout === S.layout))); }
+function syncLayout() {
+  $("#layout-box").hidden = !S.hasLines; $$("#layoutseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.layout === S.layout)));
+  $$("#pageseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.page === S.page)));
+}
+$$("#pageseg button").forEach(b => b.addEventListener("click", () => { S.page = b.dataset.page; syncLayout(); S.loadedKey = null; changed(); }));
 $$("#underseg button").forEach(b => b.addEventListener("click", () => { S.under = b.dataset.u; syncArrange(); changed(); }));
-$("#swing").addEventListener("change", e => { S.swing = e.target.checked; S.dirty = true; autosave(); if (playState) { stopPlayback(); play(); } });
+$("#swing").addEventListener("change", e => { S.swing = e.target.checked; S.dirty = true; autosave(); if (playState) play(playPos()); });
 function syncArrange() { $$("#underseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.u === (S.under || "")))); $("#swing").checked = !!S.swing; }
 /* T25 sheet */
 const voice = { i: 3, l: 1 };
@@ -1521,7 +1803,7 @@ function buildMoreSheet() {
     P.appendChild(l);
   });
   syncTempo();
-  $("#zoom-val").textContent = Math.round(S.zoom * 100) + "%";
+  $("#zoom-val").textContent = Math.round(zoomNow() * 100) + "%";
   $("#f-title").value = S.piece.title || ""; $("#f-composer").value = S.piece.composer || ""; $("#f-instrument").value = S.piece.instrument || "";
   const imgs = S.piece.images || [];
   $("#row-orig").hidden = !imgs.length;
@@ -1534,6 +1816,7 @@ function syncTempo() {
   const base = Math.round(S.baseBpm || 120), inp = $("#tempo");
   if (document.activeElement !== inp) inp.value = String(curBpm());
   const r = $("#tempo-reset"); r.hidden = !(S.bpm && S.bpm !== base); r.textContent = `Przywróć ${base}`;
+  $("#tp-bpm").textContent = String(curBpm());
 }
 let tempoTimer = null;
 function setBpm(v, opt = {}) {
@@ -1565,9 +1848,22 @@ $("#tempo-reset").addEventListener("click", () => setBpm(Math.round(S.baseBpm ||
   b.addEventListener("contextmenu", e => e.preventDefault());
 });
 /* note size: 50-200 %, remembered for the piece (and as the default for new pieces) */
-const setZoom = z => { S.zoom = Math.round(Math.max(.5, Math.min(2, z)) * 10) / 10; store.set("zoom2", S.zoom); $("#zoom-val").textContent = Math.round(S.zoom * 100) + "%"; if (S.piece) { S.piece.zoom = S.zoom; autosave(); } render(); };
-$("#zoom-in").addEventListener("click", () => setZoom(S.zoom + .1));
-$("#zoom-out").addEventListener("click", () => setZoom(S.zoom - .1));
+/* A4 pages zoom like a PDF: the sheet itself grows (and can be moved sideways), its lines stay as on paper.
+   "Dopasuj do ekranu" zooms the music instead, and the lines are laid out again. */
+const zoomNow = () => S.page === "screen" ? S.zoom : (S.pz || 1), zoomMax = () => S.page === "screen" ? 2 : 3;
+function applyPageZoom() {
+  const pg = $("#pages"), a4 = S.mode === "pages";
+  pg.classList.toggle("a4", a4); pg.style.width = a4 ? `calc(min(960px, 100%) * ${S.pz || 1})` : "";
+  requestAnimationFrame(drawLoop);
+}
+const setZoom = z => {
+  z = Math.round(Math.max(.5, Math.min(zoomMax(), z)) * 10) / 10;
+  if (S.page === "screen") { S.zoom = z; store.set("zoom2", z); if (S.piece) S.piece.zoom = z; render(); }
+  else { S.pz = z; applyPageZoom(); }
+  $("#zoom-val").textContent = Math.round(z * 100) + "%"; if (S.piece) { S.dirty = true; autosave(); }
+};
+$("#zoom-in").addEventListener("click", () => setZoom(zoomNow() + .1));
+$("#zoom-out").addEventListener("click", () => setZoom(zoomNow() - .1));
 [["#f-title", "title"], ["#f-composer", "composer"], ["#f-instrument", "instrument"]].forEach(([sel, k]) => {
   $(sel).addEventListener("change", e => { S.piece[k] = e.target.value.trim(); if (k === "title" && !S.piece.title) S.piece.title = "Bez tytułu"; changed(); if (k === "instrument" && openSheetId === "more") buildMoreSheet(); });
 });
@@ -2032,7 +2328,14 @@ $("#in-backup").addEventListener("change", async e => {
   } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
 });
 
-const NEWS = { "3.7": ["Przycisk „Popraw”: dotknij w pobliżu nuty, żeby ją zmienić. „Takt”: metrum, klucz, znaki, dodawanie i usuwanie taktów, tempo.",
+const NEWS = { "3.8": ["Zakładki na dole: Nuty, Stroik, Metronom, Ty.",
+  "Na start kilka pytań: instrument (kilka), strój, rola. Zmienisz je w zakładce „Ty”.",
+  "Stroik słucha na żywo: nuta, centy, wykres dźwięku, strój A, instrumenty w B, Es, F.",
+  "Strona A4 jak na papierze, powiększanie dwoma palcami jak w PDF.",
+  "Nowy odtwarzacz: takt odliczania, płynny kursor, przewijanie linia po linii, pauza, pętla zmieniana w trakcie grania, metronom w odsłuchu, wyciszanie partii.",
+  "Poprawianie nut: wybierz długość i dotknij pięciolinii; zakładki z ikonami; przesuwanie nut w bok; kropka; dźwięk przy każdej zmianie.",
+  "Nowa melodia zaczyna się od instrumentu, metrum, tonacji i tempa."],
+  "3.7": ["Przycisk „Popraw”: dotknij w pobliżu nuty, żeby ją zmienić. „Takt”: metrum, klucz, znaki, dodawanie i usuwanie taktów, tempo.",
   "Kilka pytań przed czytaniem: klucz, metrum i znaki przy kluczu poprawiają odczyt.",
   "Takty, które się nie zgadzają, są zaznaczone na czerwono, z licznikiem do sprawdzenia.",
   "Pauzy wielotaktowe nie zasłaniają już kolejnych taktów.",
@@ -2056,8 +2359,9 @@ const NEWS = { "3.7": ["Przycisk „Popraw”: dotknij w pobliżu nuty, żeby j�
 /* ---------------- T22 metronome, T23 tuner ---------------- */
 const metro = { on: false, bpm: 100, beats: 4, ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [] };
 function buildToolsSheet() {
+  if (S.view !== "metrov") $("#metro-sheet-host").appendChild($("#metro-ui"));
   if (!metro.on) { metro.bpm = S.piece && S.view === "score" ? curBpm() : (+store.get("metroBpm", 100) || 100); const t = S.piece && S.view === "score" ? (processedXml().match(/<beats>(\d+)<\/beats>/) || [])[1] : null; metro.beats = [2, 3, 4, 6].includes(+t) ? +t : (+store.get("metroBeats", 4) || 4); }
-  syncMetro(); syncTuner(); syncOwn();
+  syncMetro();
 }
 function syncMetro() {
   $("#m-bpm").textContent = metro.bpm;
@@ -2095,52 +2399,154 @@ $("#m-down").addEventListener("click", () => setMetroBpm(metro.bpm - (metro.bpm 
 $("#m-up").addEventListener("click", () => setMetroBpm(metro.bpm + (metro.bpm >= 120 ? 4 : 2)));
 $$("#m-meter button").forEach(b => b.addEventListener("click", () => { metro.beats = +b.dataset.b; store.set("metroBeats", metro.beats); metro.n = 0; syncMetro(); }));
 
-const tuner = { on: false, stream: null, ctx: null, an: null, raf: 0, tr: +store.get("tunerTr", 0) || 0, buf: null };
+/* T23 tuner, rebuilt after the benchmark (TonalEnergy, Pano, Cleartune, Peterson): it listens ~30 times a second
+   (McLeod pitch method), a note is shown only after 3 readings agree, cents are smoothed, the dot glides at 60 fps,
+   the last note is held 1.5 s after the sound stops, and a trace shows the last 6 seconds (steadiness, vibrato). */
+const tuner = { on: false, stream: null, ctx: null, an: null, raf: 0, buf: null,
+  tr: +store.get("tunerTr", 0) || 0, a4: +store.get("tunerA4", 440) || 440, tol: +store.get("tunerTol", 5) || 5,
+  hist: [], shown: null, cand: null, candN: 0, ema: 0, lastOn: 0, lastAn: 0, x: 0, trace: [] };
 const NOTE_PL = ["C", "Cis", "D", "Es", "E", "F", "Fis", "G", "As", "A", "B", "H"];
+/* Polish octave names: C2–H2 wielka, C3 mała, C4 razkreślna … */
+const OCTAVE_NAMES = ["subkontra", "kontra", "wielka", "mała", "razkreślna", "dwukreślna", "trzykreślna", "czterokreślna"];
 function syncTuner() {
   $$("#t-instr button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tr === tuner.tr)));
+  $$("#t-tol button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tol === tuner.tol)));
+  $("#t-a").textContent = String(tuner.a4);
+  const z = tuner.tol, pc = v => 50 + v;            // the meter spans −50…+50 cents
+  $("#t-zones").style.background = `linear-gradient(90deg, var(--tn-far) 0%, var(--tn-far) ${pc(-15)}%, var(--tn-near) ${pc(-15)}%, var(--tn-near) ${pc(-z)}%, var(--tn-ok) ${pc(-z)}%, var(--tn-ok) ${pc(z)}%, var(--tn-near) ${pc(z)}%, var(--tn-near) ${pc(15)}%, var(--tn-far) ${pc(15)}%)`;
+  $("#t-zones").style.opacity = ".28";
   $("#t-go").innerHTML = `${icon(tuner.on ? "stop" : "mic")}<span>${tuner.on ? "Wyłącz stroik" : "Włącz stroik"}</span>`;
 }
-/* pitch by autocorrelation: robust for brass and voice, on the device */
-function detectPitch(buf, sr) {
-  let rms = 0; for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / buf.length); if (rms < .01) return -1;
-  let a = 0, b = buf.length - 1; const th = .2; while (a < buf.length / 2 && Math.abs(buf[a]) < th) a++; while (b > buf.length / 2 && Math.abs(buf[b]) < th) b--;
-  const x = buf.slice(a, b), n = x.length, c = new Float32Array(n);
-  for (let lag = 0; lag < n; lag++) { let s = 0; for (let i = 0; i < n - lag; i++) s += x[i] * x[i + lag]; c[lag] = s; }
-  let d = 0; while (d < n - 1 && c[d] > c[d + 1]) d++;
-  let best = -1, bv = -1; for (let i = d; i < n; i++) if (c[i] > bv) { bv = c[i]; best = i; }
-  if (best <= 0 || best >= n - 1) return -1;
-  const y1 = c[best - 1], y2 = c[best], y3 = c[best + 1], aa = (y1 + y3 - 2 * y2) / 2, bb = (y3 - y1) / 2;
-  return sr / (aa ? best - bb / (2 * aa) : best);
+/* Pitch of one sound: McLeod Pitch Method (normalised autocorrelation), the method used by good tuners.
+   It does not depend on how loud the sound is (phones give a quiet signal when auto-gain is off),
+   and it takes the first strong peak, so it does not jump an octave down. The signal is thinned to
+   ~12 kHz first so it is quick on older phones, then the result is fine-tuned on the full signal.
+   Returns Hz or -1; detectPitch.clarity is 0..1, detectPitch.rms the loudness. */
+function detectPitch(buf, sr, minF = 40, maxF = 1500) {
+  detectPitch.clarity = 0;
+  const D = sr > 30000 ? 4 : 2, half = Math.floor(buf.length / D), x = new Float32Array(half);
+  let mean = 0; for (let i = 0; i < half; i++) { let v = 0; for (let k = 0; k < D; k++) v += buf[D * i + k]; x[i] = v / D; mean += x[i]; }
+  mean /= half; let rms = 0; for (let i = 0; i < half; i++) { x[i] -= mean; rms += x[i] * x[i]; }
+  rms = Math.sqrt(rms / half); detectPitch.rms = rms; if (rms < 0.0008) return -1;          // silence
+  const srD = sr / D;
+  const maxLag = Math.min(half >> 1, Math.ceil(srD / minF)), minLag = Math.max(2, Math.floor(srD / maxF)), W = half - maxLag;
+  const nsdf = new Float32Array(maxLag + 2);
+  for (let tau = 0; tau <= maxLag + 1; tau++) {
+    let acf = 0, m = 0;
+    for (let i = 0; i < W; i++) { const a = x[i], b = x[i + tau]; acf += a * b; m += a * a + b * b; }
+    nsdf[tau] = m > 0 ? 2 * acf / m : 0;
+  }
+  /* key maxima: the highest point of each positive region after the first zero crossing */
+  const peaks = []; let tau = 1;
+  while (tau < maxLag && nsdf[tau] > 0) tau++;
+  while (tau < maxLag) {
+    while (tau < maxLag && nsdf[tau] <= 0) tau++;
+    let best = -1, bv = -Infinity;
+    while (tau < maxLag && nsdf[tau] > 0) { if (nsdf[tau] > bv && tau >= minLag) { bv = nsdf[tau]; best = tau; } tau++; }
+    if (best > 0) peaks.push(best);
+  }
+  if (!peaks.length) return -1;
+  const top = Math.max(...peaks.map(p => nsdf[p])), pick = peaks.find(p => nsdf[p] >= 0.9 * top);
+  const y1 = nsdf[pick - 1], y2 = nsdf[pick], y3 = nsdf[pick + 1], den = y1 - 2 * y2 + y3;
+  const shift = den ? (y1 - y3) / (2 * den) : 0;
+  detectPitch.clarity = Math.min(1, y2 - 0.25 * (y1 - y3) * shift);
+  /* fine tuning on the full signal, only around the peak found (a few lags: cheap) */
+  const t0 = Math.round((pick + shift) * D), Wf = buf.length - (t0 + D + 2) * 2, f = t => {
+    let acf = 0, m = 0; for (let i = 0; i < Wf; i++) { const a = buf[i], b = buf[i + t]; acf += a * b; m += a * a + b * b; } return m > 0 ? 2 * acf / m : 0;
+  };
+  if (Wf > 256) {
+    let bt = t0, bv = f(t0);
+    for (let t = Math.max(1, t0 - D); t <= t0 + D; t++) { const v = f(t); if (v > bv) { bv = v; bt = t; } }
+    /* a high note with a weak fundamental can look like the octave below: if half the period fits as well, take it */
+    const minFull = Math.floor(sr / maxF);
+    for (let h = Math.round(bt / 2); h >= minFull && h >= 4;) {
+      let hb = h, hv = f(h); for (let t = h - 2; t <= h + 2; t++) { const v = f(t); if (v > hv) { hv = v; hb = t; } }
+      if (hv < 0.9 * bv) break; bt = hb; bv = hv; h = Math.round(bt / 2);
+    }
+    const a1 = f(bt - 1), a3 = f(bt + 1), dn = a1 - 2 * bv + a3;
+    return sr / (bt + (dn ? (a1 - a3) / (2 * dn) : 0));
+  }
+  return srD / (pick + shift);
 }
 async function tunerStart() {
+  /* the audio context is made inside the tap (iPhone needs that), the microphone without phone-call processing */
+  const AC = window.AudioContext || window.webkitAudioContext; tuner.ctx = new AC(); try { tuner.ctx.resume(); } catch {}
   try {
-    tuner.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-  } catch (e) { hud(e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Możesz ją dać w ustawieniach przeglądarki." : "Nie udało się włączyć mikrofonu.", 4000); return; }
-  const AC = window.AudioContext || window.webkitAudioContext; tuner.ctx = new AC(); await tuner.ctx.resume?.();
-  tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 2048; tuner.buf = new Float32Array(tuner.an.fftSize);
-  tuner.ctx.createMediaStreamSource(tuner.stream).connect(tuner.an); tuner.on = true; syncTuner();
-  const loop = () => {
-    if (!tuner.on) return;
-    tuner.an.getFloatTimeDomainData(tuner.buf);
-    const f = detectPitch(tuner.buf, tuner.ctx.sampleRate);
-    if (f > 30 && f < 2000) {
-      const m = 69 + 12 * Math.log2(f / 440), r = Math.round(m), cents = Math.round((m - r) * 100), shown = r + tuner.tr;
-      $("#t-note").textContent = NOTE_PL[((shown % 12) + 12) % 12];
-      $("#t-needle").style.transform = `translateX(${Math.max(-50, Math.min(50, cents)) * 1.6}px)`;
-      $("#t-cents").textContent = Math.abs(cents) <= 5 ? "Czysto" : cents < 0 ? `Za nisko o ${-cents} centów` : `Za wysoko o ${cents} centów`;
-      $(".tuner").classList.toggle("ok", Math.abs(cents) <= 5);
-    }
-    tuner.raf = requestAnimationFrame(loop);
-  };
-  tuner.raf = requestAnimationFrame(loop);
+    tuner.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  } catch (e) {
+    try { tuner.ctx.close(); } catch {} tuner.ctx = null;
+    hud(e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Możesz ją dać w ustawieniach przeglądarki." : "Nie udało się włączyć mikrofonu.", 4000); return;
+  }
+  try { await tuner.ctx.resume(); } catch {}
+  tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 4096; tuner.buf = new Float32Array(tuner.an.fftSize);
+  tuner.ctx.createMediaStreamSource(tuner.stream).connect(tuner.an);
+  Object.assign(tuner, { on: true, hist: [], shown: null, cand: null, candN: 0, lastOn: 0, trace: [] }); syncTuner();
+  try { wakeLock = wakeLock || await navigator.wakeLock?.request("screen"); } catch {}
+  tuner.raf = requestAnimationFrame(tunerLoop);
+}
+function tunerAnalyse(t) {
+  if (tuner.ctx.state !== "running") { tuner.ctx.resume?.().catch(() => {}); return; }
+  tuner.an.getFloatTimeDomainData(tuner.buf);
+  const f = detectPitch(tuner.buf, tuner.ctx.sampleRate, 27, 1400);
+  if (!(f > 0) || detectPitch.clarity < (tuner.shown === null ? 0.9 : 0.85)) { tuner.trace.push({ t, c: null }); return; }
+  tuner.hist.push(f); if (tuner.hist.length > 5) tuner.hist.shift();
+  const fm = [...tuner.hist].sort((a, b) => a - b)[tuner.hist.length >> 1];
+  const midi = 69 + 12 * Math.log2(fm / tuner.a4), n = Math.round(midi), c = 100 * (midi - n);
+  if (n !== tuner.shown) {
+    if (n === tuner.cand) tuner.candN++; else { tuner.cand = n; tuner.candN = 1; }
+    if (tuner.candN < 3) { tuner.trace.push({ t, c: null }); return; }
+    tuner.shown = n; tuner.ema = c; tuner.hz = fm;
+  } else { tuner.ema += 0.3 * (c - tuner.ema); tuner.hz = fm; }
+  tuner.lastOn = t; tuner.trace.push({ t, c: tuner.ema });
+}
+function tunerLoop(t) {
+  if (!tuner.on) return;
+  tuner.raf = requestAnimationFrame(tunerLoop);
+  if (t - tuner.lastAn > 30) { tuner.lastAn = t; tunerAnalyse(t); }
+  while (tuner.trace.length && t - tuner.trace[0].t > 6000) tuner.trace.shift();
+  const box = $("#tuner2"), live = tuner.shown !== null && t - tuner.lastOn < 250, held = tuner.shown !== null && t - tuner.lastOn < 1500;
+  if (!held && tuner.shown !== null) { tuner.shown = null; tuner.hist = []; }
+  const c = tuner.ema, st = !held ? "off" : !live ? "hold" : Math.abs(c) <= tuner.tol ? "ok" : Math.abs(c) <= 15 ? "near" : "far";
+  if (box.dataset.st !== st) box.dataset.st = st;
+  if (tuner.shown !== null) {
+    const w = tuner.shown + tuner.tr, name = NOTE_PL[((w % 12) + 12) % 12], oct = Math.floor(w / 12) - 1;
+    $("#t-note").textContent = name; $("#t-oct").textContent = OCTAVE_NAMES[oct] ? `oktawa ${OCTAVE_NAMES[oct]}` : "";
+    const r = Math.round(c);
+    $("#t-cents").textContent = Math.abs(r) <= tuner.tol ? "✓" : r < 0 ? `−${-r} ¢` : `+${r} ¢`;
+    $("#t-cents").setAttribute("aria-label", Math.abs(r) <= tuner.tol ? "Czysto" : r < 0 ? `Za nisko o ${-r} centów` : `Za wysoko o ${r} centów`);
+    $("#t-hz").textContent = `${tuner.hz.toFixed(1)} Hz${tuner.tr ? " · dźwięk zapisany dla instrumentu" : ""}`;
+  } else { $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = tuner.on ? "Zagraj długi dźwięk" : ""; }
+  /* the dot glides towards its place (no jumps between readings) */
+  const W = $(".tn-meter").clientWidth, target = held ? Math.max(-50, Math.min(50, c)) / 50 * (W / 2 - 23) : 0;
+  tuner.x += (target - tuner.x) * 0.22; $("#t-dot").style.transform = `translateX(${tuner.x.toFixed(1)}px)`;
+  drawTrace(t);
+}
+function drawTrace(t) {
+  const cv = $("#t-trace"), dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const cs = getComputedStyle(document.documentElement), y = c => h / 2 - Math.max(-50, Math.min(50, c)) / 50 * (h / 2 - 6);
+  g.fillStyle = cs.getPropertyValue("--tn-ok").trim(); g.globalAlpha = .14; g.fillRect(0, y(tuner.tol), w, y(-tuner.tol) - y(tuner.tol)); g.globalAlpha = 1;
+  g.strokeStyle = cs.getPropertyValue("--ink-3").trim() || "#999"; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = cs.getPropertyValue("--ink").trim() || "#222"; g.lineWidth = 2.5; g.lineJoin = "round"; g.beginPath();
+  let pen = false;
+  tuner.trace.forEach(p => { const x = w - (t - p.t) / 6000 * w; if (p.c === null) { pen = false; return; } pen ? g.lineTo(x, y(p.c)) : g.moveTo(x, y(p.c)); pen = true; });
+  g.stroke();
 }
 function tunerStop() {
   tuner.on = false; cancelAnimationFrame(tuner.raf);
   try { tuner.stream && tuner.stream.getTracks().forEach(t => t.stop()); } catch {} try { tuner.ctx && tuner.ctx.close(); } catch {}
-  tuner.stream = tuner.ctx = null; $(".tuner").classList.remove("ok"); $("#t-note").textContent = "–"; $("#t-cents").textContent = "Zagraj jeden długi dźwięk"; syncTuner();
+  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; $("#tuner2").dataset.st = "off";
+  $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = "";
+  $("#t-dot").style.transform = ""; tuner.x = 0; drawTrace(performance.now()); syncTuner();
+  if (!playState && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
 }
 $("#t-go").addEventListener("click", () => tuner.on ? tunerStop() : tunerStart());
+$$("#t-tol button").forEach(b => b.addEventListener("click", () => { tuner.tol = +b.dataset.tol; store.set("tunerTol", tuner.tol); syncTuner(); }));
+const setA4 = v => { tuner.a4 = Math.max(430, Math.min(450, v)); store.set("tunerA4", tuner.a4); syncTuner(); };
+$("#t-a-down").addEventListener("click", () => setA4(tuner.a4 - 1));
+$("#t-a-up").addEventListener("click", () => setA4(tuner.a4 + 1));
+function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerStart(); }
 /* T31: record one long note, find its pitch, and use it as the playback sound (pitch-shifted) */
 const own = { rate: 0, f0: 0, data: null };
 (function loadOwn() { try { const j = JSON.parse(store.get("ownSound", "null")); if (j && j.f0 && j.b64) { const bin = atob(j.b64), a = new Int16Array(bin.length / 2); for (let i = 0; i < a.length; i++) a[i] = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); own.data = Float32Array.from(a, v => v / 32767); own.rate = j.rate; own.f0 = j.f0; } } catch {} })();
@@ -2182,17 +2588,17 @@ function ownNote(ctx, out, f, st, en) {
   g.gain.setValueAtTime(0, st); g.gain.linearRampToValueAtTime(1, st + .02); g.gain.setTargetAtTime(0, en, .05);
   s.connect(g); g.connect(out); s.start(st); s.stop(en + .4);
 }
-const noteVoice = () => (store.get("ownUse") === "1" && own.data ? ownNote : synthNote);
+const noteVoice = () => (store.get("ownUse") === "1" && own.data ? ownNote : typeof timbreNote === "function" ? timbreNote(mainInstr().voice) : synthNote);
 $$("#t-instr button").forEach(b => b.addEventListener("click", () => { tuner.tr = +b.dataset.tr; store.set("tunerTr", tuner.tr); syncTuner(); }));
 
 /* ---------------- T24 tutorial: five steps over the real screen, skippable ---------------- */
 const TOUR = [
-  ["#pages", "Nuty", "Dotknij taktu, żeby grać od niego i zobaczyć tę linię ze zdjęcia."],
-  ["#btn-edit", "Popraw", "Włącz i dotknij w pobliżu nuty, żeby ją zmienić. Przycisk „Takt” ustawia metrum, klucz i znaki oraz dodaje lub usuwa takty."],
-  ['#dock [data-sheet="clef"]', "Klucz", "Zmień klucz: basowy, tenorowy, altowy albo wiolinowy."],
-  ['#dock [data-sheet="key"]', "Tonacja", "Przenieś nuty wyżej lub niżej, o tercję, kwartę, kwintę albo na inny instrument."],
-  ["#btn-play", "Posłuchaj", "Odtwarzanie z kolorem granej nuty. Tempo zmienisz w Więcej."],
-  ['#dock [data-sheet="more"]', "Więcej", "Wielkość nut, układ jak w oryginale, drugi głos, akordy, metronom i stroik, druk i wysyłanie."]
+  ["#pages", "Nuty", "Dotknij taktu, żeby grać od niego. Dwa palce powiększają stronę."],
+  ["#btn-play", "Posłuchaj", "Takt odliczania, potem kursor idzie za muzyką, a strona przewija się sama."],
+  ["#btn-loop", "Pętla", "Dotknij pierwszego i ostatniego taktu. Zmienisz ją w każdej chwili, także w trakcie grania."],
+  ["#btn-tempo", "Tempo", "Wolniej, szybciej, 50%, 75%, metronom w odsłuchu, co słychać."],
+  ["#btn-edit", "Popraw", "Wybierz długość i dotknij pięciolinii, albo dotknij nuty, żeby ją zmienić."],
+  ["#btn-tools", "Narzędzia", "Tonacja, klucz, drugi głos, partie, oryginał, wysyłanie, stroik, metronom."]
 ];
 let tourI = -1;
 function tourShow() {
@@ -2294,3 +2700,31 @@ async function openShared() {
     window.addEventListener("popstate", () => { if (pendingReload) setTimeout(reloadIfIdle, 600); });
   }
 })();
+
+/* ---------------- a new melody: the basics first (benchmark: MuseScore, iReal Pro, Flat), then an empty staff ---------------- */
+const nm = { instr: null, time: "4/4", key: 0, bpm: 90, title: "" };
+function buildNewSheet() {
+  const p = profile(); nm.instr = nm.instr || p.main;
+  const ids = [...new Set([...p.instruments, nm.instr])];
+  $("#new-instr").innerHTML = ids.map(id => `<button data-i="${id}" aria-pressed="${id === nm.instr}">${esc(instrById(id).name)}</button>`).join("") +
+    `<select id="new-instr-more" aria-label="Inny instrument"><option value="">Inny…</option>${INSTRUMENTS.filter(i => !ids.includes(i.id)).map(i => `<option value="${i.id}">${esc(i.name)}</option>`).join("")}</select>`;
+  $$("#new-time button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === nm.time)));
+  $("#new-key").value = String(nm.key); $("#new-bpm").textContent = String(nm.bpm);
+  $("#new-title").value = nm.title;
+  $("#new-clef").textContent = instrById(nm.instr).clef === "bass" ? "klucz basowy" : "klucz wiolinowy";
+}
+$("#new-instr").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if (b) { nm.instr = b.dataset.i; buildNewSheet(); } });
+$("#new-instr").addEventListener("change", e => { if (e.target.id === "new-instr-more" && e.target.value) { nm.instr = e.target.value; buildNewSheet(); } });
+$$("#new-time button").forEach(b => b.addEventListener("click", () => { nm.time = b.dataset.v; buildNewSheet(); }));
+$("#new-key").addEventListener("change", e => { nm.key = +e.target.value; });
+$("#new-title").addEventListener("input", e => { nm.title = e.target.value; });
+[["#new-bpm-down", -5], ["#new-bpm-up", 5]].forEach(([s, d]) => $(s).addEventListener("click", () => { nm.bpm = Math.max(30, Math.min(240, nm.bpm + d)); $("#new-bpm").textContent = String(nm.bpm); }));
+$("#new-go").addEventListener("click", () => {
+  const ins = instrById(nm.instr), [beats, bt] = nm.time.split("/").map(Number);
+  const xml = blankXml(4, { clef: ins.clef, beats, beatType: bt, fifths: nm.key, tempo: nm.bpm, title: nm.title || "Nowa melodia", part: ins.name });
+  closeSheetThen(() => {
+    openPiece({ xml, sourceType: "own", title: nm.title || "Nowa melodia", composer: "", instrument: ins.name });
+    S.dirty = true; savePiece(); S.inLen = "quarter"; S.edTab = null; nm.title = "";
+    whenDrawn(() => { setEditMode(true); edTab("len"); selectNote(null); });
+  });
+});
