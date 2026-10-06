@@ -585,10 +585,11 @@ function barIssues(xml) {
   });
   return out;
 }
-/* T19: an empty piece to write your own tune: bass clef (trombone), 4/4, C major, 8 empty bars */
+/* T19: an empty piece to write your own tune, in the instrument's clef (treble, bass, alto or tenor); a keyboard or
+   harp melody is one staff in the treble clef (the editor corrects single staves) */
 function blankXml(bars = 8, o = {}) {
   const beats = o.beats || 4, bt = o.beatType || 4, div = 4, cap = div * 4 * beats / bt, fifths = o.fifths || 0;
-  const clef = o.clef === "treble" ? "<sign>G</sign><line>2</line>" : "<sign>F</sign><line>4</line>";
+  const cx = { treble: ["G", 2], bass: ["F", 4], tenor: ["C", 4], alto: ["C", 3] }[o.clef] || ["G", 2], clef = `<sign>${cx[0]}</sign><line>${cx[1]}</line>`;
   const tempo = o.tempo ? `<direction placement="above"><direction-type><words></words></direction-type><sound tempo="${o.tempo}"/></direction>` : "";
   let m = "";
   for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>${div}</divisions><key><fifths>${fifths}</fifths></key><time><beats>${beats}</beats><beat-type>${bt}</beat-type></time><clef>${clef}</clef></attributes>${tempo}` : ""}<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice></note></measure>`;
@@ -800,7 +801,7 @@ function exampleXml() {
                [["F3", 4, "pio", "begin"], ["D3", 4, "sen", "middle"], ["D3", 4, "ka", "end"]],
                [["C3", 8, "nie", "single"], ["E3", 8, "dłu", "begin"], ["C3", 2, "ga.", "end"]]];
   const harm = ["C", "G7", "C", "C", "G7", "C"];
-  const RH = { C: ["E3", "G4", "C5"], G7: ["D3", "F4", "B4"] }, LH = { C: "C3", G7: "G2" };
+  const RH = { C: ["E4", "G4", "C5"], G7: ["D4", "F4", "B4"] }, LH = { C: "C3", G7: "G2" };     // right hand in close position (§10)
   const dur = { 2: 48, 4: 24, 8: 12 }, typ = { 2: "half", 4: "quarter", 8: "eighth" };
   const pitch = p => { const m = p.match(/^([A-G])(b|#)?(\d)$/); const alt = m[2] === "b" ? -1 : m[2] === "#" ? 1 : 0;
     return `<pitch><step>${m[1]}</step>${alt ? `<alter>${alt}</alter>` : ""}<octave>${m[3]}</octave></pitch>`; };
@@ -1038,13 +1039,13 @@ const READY_TUNES = {
     bars: "F#4:4 F#4:4 G4:4 A4:4|A4:4 G4:4 F#4:4 E4:4|D4:4 D4:4 E4:4 F#4:4|F#4:6 E4:2 E4:8|F#4:4 F#4:4 G4:4 A4:4|A4:4 G4:4 F#4:4 E4:4|D4:4 D4:4 E4:4 F#4:4|E4:6 D4:2 D4:8" }
 };
 function readyTuneXml(id) {
-  const t = READY_TUNES[id], typ = { 2: "eighth", 3: "eighth", 4: "quarter", 6: "quarter", 8: "half", 12: "half", 16: "whole" };
+  const t = READY_TUNES[id], typ = { 1: "16th", 2: "eighth", 3: "eighth", 4: "quarter", 6: "quarter", 8: "half", 12: "half", 16: "whole" }, n = t.bars.split("|").length;
   let s = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(t.title)}</work-title></work><identification><creator type="composer">${xesc(t.composer)}</creator></identification><part-list><score-part id="P1"><part-name>Melodia</part-name></score-part></part-list><part id="P1">`;
   t.bars.split("|").forEach((b, i) => {
     s += `<measure number="${i + 1}">` + (i ? "" : `<attributes><divisions>4</divisions><key><fifths>${t.fifths}</fifths></key><time><beats>${t.time[0]}</beats><beat-type>${t.time[1]}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><direction placement="above"><direction-type><words></words></direction-type><sound tempo="${t.tempo}"/></direction>`);
     b.trim().split(/\s+/).forEach(tok => { const [p, d] = tok.split(":"), m = p.match(/^([A-G])(#|b)?(\d)$/), dd = +d;
       s += `<note><pitch><step>${m[1]}</step>${m[2] ? `<alter>${m[2] === "#" ? 1 : -1}</alter>` : ""}<octave>${m[3]}</octave></pitch><duration>${dd}</duration><voice>1</voice><type>${typ[dd]}</type>${[3, 6, 12].includes(dd) ? "<dot/>" : ""}</note>`; });
-    s += `</measure>`;
+    s += (i === n - 1 ? `<barline location="right"><bar-style>light-heavy</bar-style></barline>` : "") + `</measure>`;
   });
   return s + `</part></score-partwise>`;
 }

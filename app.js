@@ -363,7 +363,7 @@ document.addEventListener("click", e => {
   const a = e.target.closest("[data-act]");
   if (a) {
     const act = a.dataset.act;
-    if (act === "example") { hideWelcome(); openPiece({ xml: exampleXml(), sourceType: "example", title: "", composer: null, instrument: "Puzon" }); }
+    if (act === "example") { hideWelcome(); openPiece(examplePiece()); }
     if (act === "blank") { hideWelcome(); if (openSheetId) closeSheetThen(() => openSheet("new")); else openSheet("new"); }
     if (act === "camera") { if (a.id === "w-camera") store.set("welcomed", "1"); if (openSheetId) closeSheetThen(openCamera); else openCamera(); }
     if (act === "print") closeSheetThen(() => exportParts.length === 1 ? withOnly(exportParts[0], printScore) : exportParts.length ? hud("Do druku wybierz jedną partię albo pobierz PDF", 3500) : printScore());
@@ -472,8 +472,16 @@ $("#lib-search").addEventListener("input", refreshLibrary);
 $("#lib-sort").addEventListener("change", () => { store.set("sort", $("#lib-sort").value); refreshLibrary(); });
 
 /* ---------------- Opening a piece ---------------- */
-const OTHER_INSTR = /tr[aą]bk|klarnet|waltorn|saks|skrzyp|flet|ob[oó]j|trumpet|clarinet|horn|sax|violin|flute|oboe|głos|solo|voice/i;
-function maybeTrombone() { if (!S.piece.instrument || OTHER_INSTR.test(S.piece.instrument)) S.piece.instrument = "Puzon"; }
+/* the example ("Wlazł kotek" with piano) for the player's own instrument: its octave, transposition and clef */
+function examplePiece() {
+  const me = mainInstr();
+  if (me.id === "puzon") return { xml: exampleXml(), sourceType: "example", title: "", composer: null, instrument: me.name };
+  let xml = makePart(readyTuneXml("kotek"), "P1", { role: "melody", instr: me });
+  xml = makePart(xml, "P1", { role: "chords", instr: instrById("fortepian") });
+  const d = parseXml(xml), root = d.documentElement;
+  kids(root, "part").find(p => p.getAttribute("id") === "P1").remove(); kids(kid(root, "part-list"), "score-part").find(p => p.getAttribute("id") === "P1").remove();
+  return { xml: new XMLSerializer().serializeToString(d), sourceType: "example", title: "", composer: null, instrument: me.name };
+}
 /* the piece's state (parts, key, clef, transposition, tempo) without touching the screen */
 function loadState(piece, settings) {
   const info = analyseXml(piece.xml);
@@ -1768,8 +1776,7 @@ function buildClefSheet() {
     b.innerHTML = `${glyph(gl)}<span class="grow"><b>${esc(label)}</b>${v === easiest ? `<small>Najmniej linii dodanych</small>` : ""}</span><span class="radio"></span>`;
     b.addEventListener("click", () => {
       const oct = S.readOct || 0, f = fitFor(v);
-      S.clef = v; S.readOct = f.oct; S.clefMine = true;
-      if (S.clef === "bass" || S.clef === "tenor") maybeTrombone();
+      S.clef = v; S.readOct = f.oct; S.clefMine = true;          // the piece's instrument stays what it is
       $("#clef-hint").textContent = f.oct < oct ? "Oktawę niżej: nuty mieszczą się na pięciolinii." : f.oct > oct ? "Oktawę wyżej: nuty mieszczą się na pięciolinii." : "";
       buildClefSheet(); changed();
     });
@@ -1778,15 +1785,31 @@ function buildClefSheet() {
 }
 
 /* ---------------- Key sheet ---------------- */
+/* "Nuty na inny instrument": music written for `from`, read by the player on their own instrument (profile): the
+   interval is the difference of the two transpositions, the octave the one that suits the player's instrument (range,
+   comfort, ledger lines), the clef the player's own. Indexes are stored with each piece, so new presets are appended
+   and only the display order changes. */
 const PRESETS = [
-  { t: "Trąbka, klarnet", s: "w B", iv: { d: -8, s: -14 } },
-  { t: "Waltornia", s: "w F", iv: { d: -4, s: -7 } },
-  { t: "Saksofon altowy", s: "w Es", iv: { d: -12, s: -21 } },
-  { t: "Skrzypce, flet", s: "oktawę niżej", iv: { d: -7, s: -12 } },
-  { t: "Puzon, eufonium, baryton", s: "w B, klucz wiolinowy", iv: { d: -8, s: -14 } }
+  { t: "Trąbka, klarnet", s: "w B", from: "trabka" },
+  { t: "Waltornia", s: "w F", from: "waltornia" },
+  { t: "Saksofon altowy", s: "w Es", from: "sax-a" },
+  { t: "Skrzypce, flet", s: "w C", from: "flet" },
+  { t: "Puzon, eufonium, baryton", s: "w B, klucz wiolinowy", from: "baryton" },
+  { t: "Klarnet A", s: "w A", from: "klarnet-a" }
 ];
-/* indexes are stored with each piece, so new presets are appended and only the display order changes */
-const PRESET_ORDER = [4, 0, 1, 2, 3];
+const PRESET_ORDER = [4, 0, 1, 2, 5, 3];
+function presetRead(idx) {
+  const X = instrById(PRESETS[idx].from), Y = mainInstr(), tx = trIv(X.tr), ty = trIv(Y.tr);
+  const doc = parseXml(S.piece.xml), part = kids(doc.documentElement, "part").find(p => p.getAttribute("id") === readingPartId());
+  let oct = 0, clef = Y.clef;
+  if (part) {
+    const ps = partPitches(part).map(m => m - (X.tr || 0)), idx = partIdx(part).map(i => i - tx.d);
+    if (ps.length) oct = octaveFor(ps, Y, idx);
+    const w = partIdx(part).map(i => i + ty.d - tx.d + 7 * oct); let best = ledgerCost(w, Y.clef) - 0.5;
+    clefsOf(Y).filter(c => c !== Y.clef && CLEF_LINES[c] != null).forEach(c => { const v = ledgerCost(w, c); if (v < best) { best = v; clef = c; } });
+  }
+  return { iv: fixEnharmonic({ d: ty.d - tx.d + 7 * oct, s: (Y.tr || 0) - (X.tr || 0) + 12 * oct }, S.srcKey.fifths), clef: CLEF_LINES[clef] != null ? clef : "treble" };
+}
 function dstFForK(k) { let f = S.srcKey.fifths + 7 * k; while (f > 6) f -= 12; while (f < -6) f += 12; return f === 6 ? -6 : f; }
 function kOct() {
   const s = S.iv.s; let k = ((s % 12) + 12) % 12; if (k > 6) k -= 12;
@@ -1816,21 +1839,22 @@ function buildKeySheet() {
   }
   const PL = $("#preset-list"); PL.innerHTML = "";
   [-1, ...PRESET_ORDER].forEach(idx => {
-    const p = idx < 0 ? { t: "Nie" } : PRESETS[idx];
+    const p = idx < 0 ? { t: "Nie" } : PRESETS[idx], r = idx < 0 ? null : presetRead(idx);
     const b = document.createElement("button"); b.className = "li tap"; b.dataset.p = idx;
-    b.innerHTML = `<span class="radio"></span><span class="grow">${esc(p.t)}${p.s ? `<small>${esc(p.s)}</small>` : ""}</span>`;
+    b.innerHTML = `<span class="radio"></span><span class="grow">${esc(p.t)}${p.s ? `<small>${esc(p.s)} · ${esc(intervalPl(r.iv))}</small>` : ""}</span>`;
     b.addEventListener("click", () => {
-      if (idx < 0) { if (S.preset >= 0) S.iv = { d: 0, s: 0 }; S.preset = -1; }
-      else { S.iv = fixEnharmonic(PRESETS[idx].iv, S.srcKey.fifths); S.clef = "bass"; S.preset = idx; maybeTrombone(); }
+      if (idx < 0) { if (S.preset >= 0) { S.iv = { d: 0, s: 0 }; S.readOct = 0; } S.preset = -1; }
+      else { const q = presetRead(idx); S.iv = q.iv; S.clef = q.clef; S.readOct = 0; S.clefMine = true; S.preset = idx; }
       ensureOnStaff();
       changed();
     });
     PL.appendChild(b);
   });
-  const solo = S.parts.find(p => p.id === readingPartId()) || S.parts[0];
-  const inB = solo && (solo.transp === -2 || /\b(in|w)\s*(Bb|B♭|B)(?![a-z])/i.test(solo.name) || /tr[aą]bk|trumpet|klarnet|clarinet/i.test(solo.name));
-  $("#preset-hint").hidden = !inB;
-  $("#preset-hint").textContent = `Nuty na „${solo ? solo.name : ""}”? Wybierz „Trąbka, klarnet”.`;
+  /* the part is written for a transposing instrument the player does not play: say which preset reads it */
+  const solo = S.parts.find(p => p.id === readingPartId()) || S.parts[0], pc = t => (((t || 0) % 12) + 12) % 12;
+  const tr = solo ? (partTr(solo.id) || -solo.transp || 0) : 0, hint = tr && pc(tr) !== pc(mainInstr().tr) ? PRESET_ORDER.map(i => PRESETS[i]).find(p => pc(instrById(p.from).tr) === pc(tr)) : null;
+  $("#preset-hint").hidden = !hint;
+  $("#preset-hint").textContent = hint ? `Nuty na „${partLabel(solo)}”? Wybierz „${hint.t}”.` : "";
   syncKeySheet();
 }
 /* quick named intervals: a second, third, fourth or fifth up or down */
@@ -2821,7 +2845,7 @@ $("#tour-next").addEventListener("click", () => { if (++tourI >= TOUR.length) to
 $("#tour-skip").addEventListener("click", tourEnd);
 $("#btn-tour").addEventListener("click", () => {
   const go2 = () => setTimeout(tourStart, 700);
-  if (S.piece) { go("score"); go2(); } else { openPiece({ xml: exampleXml(), sourceType: "example", title: "", composer: null, instrument: "Puzon" }); go2(); }
+  if (S.piece) { go("score"); go2(); } else { openPiece(examplePiece()); go2(); }
 });
 
 /* ---------------- Install (T9) ---------------- */
@@ -2917,7 +2941,7 @@ function buildNewSheet() {
   $$("#new-time button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === nm.time)));
   $("#new-key").value = String(nm.key); $("#new-bpm").textContent = String(nm.bpm);
   $("#new-title").value = nm.title;
-  $("#new-clef").textContent = instrById(nm.instr).clef === "bass" ? "klucz basowy" : "klucz wiolinowy";
+  $("#new-clef").textContent = "klucz " + (CLEF_PL[instrById(nm.instr).clef] || "wiolinowy");
 }
 $("#new-instr").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if (b) { nm.instr = b.dataset.i; buildNewSheet(); } });
 $("#new-instr").addEventListener("change", e => { if (e.target.id === "new-instr-more" && e.target.value) { nm.instr = e.target.value; buildNewSheet(); } });
@@ -2941,7 +2965,10 @@ $("#new-ready").addEventListener("click", e => {
 });
 $("#new-go").addEventListener("click", () => {
   const ins = instrById(nm.instr), [beats, bt] = nm.time.split("/").map(Number);
-  const xml = blankXml(4, { clef: ins.clef, beats, beatType: bt, fifths: nm.key, tempo: nm.bpm, title: nm.title || "Nowa melodia", part: ins.name });
+  /* the new part declares its instrument (and <transpose> for a transposing one), in its own clef */
+  const d = parseXml(blankXml(4, { clef: ins.clef, beats, beatType: bt, fifths: nm.key, tempo: nm.bpm, title: nm.title || "Nowa melodia", part: ins.name }));
+  setDeclared(d, d.getElementsByTagName("score-part")[0], ins); setTranspose(d, d.getElementsByTagName("part")[0], trIv(ins.tr));
+  const xml = new XMLSerializer().serializeToString(d);
   closeSheetThen(() => {
     openPiece({ xml, sourceType: "own", title: nm.title || "Nowa melodia", composer: "", instrument: ins.name });
     S.dirty = true; savePiece(); S.inLen = "quarter"; S.edTab = null; nm.title = "";
