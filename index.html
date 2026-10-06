@@ -473,7 +473,8 @@
   <div class="list"><div class="li"><span class="grow"><b>A</b></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><span class="unit">Hz</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
   <div class="owncard" id="own">
     <div class="own-head"><span class="own-ic"><svg class="i"><use href="#mic"/></svg></span><div class="grow"><b>Twój dźwięk</b><small id="own-st"></small></div></div>
-    <div class="own-acts"><button class="btn primary" id="own-rec"><span>Nagraj</span></button><button class="btn tinted" id="own-play" aria-label="Posłuchaj"><svg class="i"><use href="#play"/></svg></button></div>
+    <div class="list own-list" id="own-list"></div>
+    <button class="btn primary wide" id="own-rec"><svg class="i"><use href="#mic"/></svg><span>Nagraj</span></button>
     <label class="li" for="own-use"><span class="grow"><b>Graj moim dźwiękiem</b></span><input type="checkbox" id="own-use" class="switch"></label>
   </div>
   </div></div>
@@ -725,6 +726,12 @@
   <div class="emojis" id="col-emoji"></div>
   <button class="btn primary wide" id="col-save"><svg class="i"><use href="#check"/></svg><span>Gotowe</span></button>
   <button class="btn ghost wide danger" id="col-del" hidden><svg class="i"><use href="#trash"/></svg><span>Usuń kolekcję</span></button>
+</div>
+
+<div class="sheet" id="sh-pick" role="dialog" aria-modal="true" aria-labelledby="sh-pick-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-pick-t">Instrument</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <div id="pick-box"></div>
 </div>
 
 <div class="sheet" id="sh-share" role="dialog" aria-modal="true" aria-labelledby="sh-share-t" hidden>

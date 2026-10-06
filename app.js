@@ -245,7 +245,7 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet, share: buildShareSheet, instr: () => buildInstrSheet(), col: buildColSheet, addto: buildAddtoSheet, card: syncFavTile })[name]?.();
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet, share: buildShareSheet, instr: () => buildInstrSheet(), col: buildColSheet, addto: buildAddtoSheet, card: syncFavTile, pick: () => buildPickSheet() })[name]?.();
   openSheetId = name; document.body.classList.toggle("sheet-add", name === "add");
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
@@ -2322,7 +2322,7 @@ const HOMR_ERR = {
 };
 async function readOnDevice(pages, signal) {
   let rec = await getRecognizer().catch(e => { recognizer = null; throw new Error(e && /memory|wasm|WebAssembly/i.test(e.message) ? HOMR_ERR.worker_lost : "Nie udało się uruchomić odczytu na tym urządzeniu. Odśwież stronę i spróbuj jeszcze raz."); });
-  const xmls = [], lines = [];
+  const xmls = [], lines = [], texts = [];
   for (let i = 0; i < pages.length; i++) {
     const pre = pages.length > 1 ? `Strona ${i + 1} z ${pages.length}: ` : "";
     const blob = dataUrlToBlob(pages[i].big);
@@ -2334,13 +2334,15 @@ async function readOnDevice(pages, signal) {
         ck("ck1", "ok"); $("#ck1-t").textContent = "Przygotowanie"; ck("ck2", "now"); $("#ck2-t").textContent = pre + "Szukanie pięciolinii"; bar(null);
       } else if (stage === "staff") {
         ck("ck2", "ok"); ck("ck3", "now"); $("#ck3-t").textContent = `${pre}Odczytywanie nut: pięciolinia ${Math.min(done + 1, total)} z ${total}`; bar(total ? (i + done / total) / pages.length : null);
-      } else if (stage === "xml") { ck("ck3", "now"); }
+      } else if (stage === "ocr") { ck("ck3", "now"); $("#ck3-t").textContent = `${pre}Odczytywanie napisów (tempo, określenia)`; bar(total ? done / total : null); }
+      else if (stage === "xml") { ck("ck3", "now"); }
     };
-    let r = await rec.recognizePage(blob, { ocr: false, signal, onProgress: progress });
+    /* the reader also reads the text above each staff: tempo, rit., a tempo, rehearsal letters (see attachTexts) */
+    let r = await rec.recognizePage(blob, { ocr: true, signal, onProgress: progress });
     // some graphics chips give WebGPU results that are wrong rather than slow: retry once on the CPU
     if (!r.ok && rec.backend === "webgpu" && (r.error === "not_music" || r.error === "engine_failed" || r.error === "worker_lost")) {
       rec = await getRecognizer("wasm-threads");
-      r = await rec.recognizePage(blob, { ocr: false, signal, onProgress: progress });
+      r = await rec.recognizePage(blob, { ocr: true, signal, onProgress: progress });
       if (r.ok) store.set("homrPrefer", "wasm-threads");
     }
     if (!r.ok) {
@@ -2348,7 +2350,7 @@ async function readOnDevice(pages, signal) {
       if (r.error === "worker_lost") recognizer = null;
       throw new Error((pages.length > 1 ? `Strona ${i + 1}: ` : "") + (HOMR_ERR[r.error] || HOMR_ERR.engine_failed));
     }
-    xmls.push(r.musicXml);
+    xmls.push(r.musicXml); texts.push({ page: i, staves: r.staves || [], texts: r.texts || [] });
     try {      /* T16: where each line sits on the photo, to show it next to the bar later */
       const im = await loadImage(pages[i].big);
       (r.staves || []).slice().sort((a, b) => a.index - b.index).forEach(s => lines.push({ page: i, cx: s.cx, cy: s.cy, w: s.w, h: s.h, W: im.naturalWidth, H: im.naturalHeight }));
@@ -2357,7 +2359,7 @@ async function readOnDevice(pages, signal) {
   store.set("modelReady", "1");
   const names = new Set((await DB.all().catch(() => [])).map(p => p.title));
   let title = "Nowe nuty", n = 2; while (names.has(title)) title = "Nowe nuty " + n++;
-  const checked = checkReading(homrToSolo(xmls, title), readAnswers());
+  const checked = checkReading(attachTexts(homrToSolo(xmls, title), texts), readAnswers());
   return { title, composer: "", xml: checked.xml, sourceType: "device", images: pages.map(p => p.keep), lines, aiJson: null, issues: checked.issues, instrument: "" };
 }
 $("#btn-cancel-read").addEventListener("click", () => readCtl && readCtl.abort());

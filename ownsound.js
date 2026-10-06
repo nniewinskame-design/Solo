@@ -73,15 +73,33 @@ function makeSample(raw, sr, targetMidi) {
 
 /* ---------------- the guided recording ---------------- */
 const of = { instr: null, step: 0, targets: [], done: [], ctx: null, stream: null, proc: null, ring: null, rp: 0, sr: 48000, raf: 0, holdFrom: 0, reads: [], hint: "", state: "idle", last: null };
+/* the card in the tuner: one row per recorded instrument — listen, change which instrument it is, delete */
 function syncOwn() {
   const rec = Object.entries(own.byInstr).filter(([, l]) => l.length);
-  $("#own-st").textContent = rec.length ? rec.map(([id, l]) => `${instrById(id).name}: ${l.length}`).join(" · ") : "Nagraj kilka dźwięków swojego instrumentu";
-  $("#own-rec span").textContent = "Nagraj";
-  $("#own-play").hidden = !rec.length; $("#own-use").disabled = !rec.length; $("#own-use").checked = !!rec.length && store.get("ownUse") === "1";
+  $("#own-st").textContent = rec.length ? "Dotknij nazwy, żeby zmienić instrument" : "Nagraj kilka dźwięków swojego instrumentu";
+  $("#own-list").innerHTML = rec.map(([id, l]) => `<div class="li own-row" data-id="${id}"><button class="own-name" data-act="re" aria-label="Zmień instrument"><b>${esc(instrById(id).name)}</b><small>${l.length} ${plural(l.length, "dźwięk", "dźwięki", "dźwięków")}</small></button><button class="pill round sm" data-act="play" aria-label="Posłuchaj">${icon("play")}</button><button class="pill round sm" data-act="del" aria-label="Usuń nagranie">${icon("trash")}</button></div>`).join("");
+  $("#own-list").hidden = !rec.length;
+  $("#own-use").disabled = !rec.length; $("#own-use").checked = !!rec.length && store.get("ownUse") === "1";
 }
+$("#own-list").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"), row = e.target.closest("[data-id]"); if (!b || !row) return;
+  const id = row.dataset.id;
+  if (b.dataset.act === "play") playScale(own.byInstr[id]);
+  if (b.dataset.act === "del") { const keep = own.byInstr[id]; delete own.byInstr[id]; saveOwn(); syncOwn(); hudUndoOwn(id, keep); }
+  if (b.dataset.act === "re") pickInstrument("Jaki instrument?", nid => { if (nid === id) return; const other = own.byInstr[nid]; own.byInstr[nid] = own.byInstr[id]; if (other) own.byInstr[id] = other; else delete own.byInstr[id]; /* two recordings swap, nothing is lost */ saveOwn(); syncOwn(); hud(`Teraz: ${instrById(nid).name}`, 1800); });
+});
+function hudUndoOwn(id, list) {
+  hud("Usunięto nagranie", 4000);
+  const b = document.createElement("button"); b.className = "toast-act"; b.textContent = "Cofnij";
+  b.addEventListener("click", () => { own.byInstr[id] = list; saveOwn(); syncOwn(); $("#toast").classList.remove("show"); });
+  $("#toast").appendChild(b);
+}
+/* any instrument, with search and "Twoje" first (the same picker as everywhere) */
+let pickCb = null;
+function pickInstrument(title, cb) { pickCb = cb; $("#sh-pick-t").textContent = title; openSheet("pick"); }
+function buildPickSheet() { instrPicker($("#pick-box"), { onPick: id => { const f = pickCb; pickCb = null; closeSheetThen(() => f && f(id)); } }); }
 $("#own-use").addEventListener("change", e => store.set("ownUse", e.target.checked ? "1" : "0"));
 $("#own-rec").addEventListener("click", () => { if (tuner.on) tunerStop(); openOwnFlow(); });
-$("#own-play").addEventListener("click", () => { const id = own.byInstr[mainInstr().id] ? mainInstr().id : Object.keys(own.byInstr)[0]; if (id) playScale(own.byInstr[id]); });
 function openOwnFlow() {
   of.instr = of.instr && profile().instruments.includes(of.instr) ? of.instr : mainInstr().id;
   of.targets = ownTargets(); of.done = of.targets.map(() => null); of.step = 0; of.state = "intro";
@@ -160,11 +178,15 @@ function renderOwn() {
   const body = $("#ownf-body"), acts = $("#ownf-acts"), n = of.targets.length, m = instrById(of.instr || mainInstr().id);
   $("#ownf-dots").innerHTML = of.targets.map((_, i) => `<i class="${of.state !== "intro" && of.state !== "sum" && i === of.step ? "on" : of.done[i] ? "done" : ""}"></i>`).join("");
   if (of.state === "intro") {
-    const mine = profile().instruments, has = own.byInstr[of.instr];
+    /* which instrument: yours first, "+" opens every instrument (search, families) right here */
+    const mine = [...new Set([...profile().instruments, of.instr])], has = own.byInstr[of.instr];
     body.innerHTML = `<div class="of-hero">${icon("mic")}</div><h1 class="h-xl">${esc(m.name)}</h1>
-      ${mine.length > 1 ? `<div class="ichips of-instr">${mine.map(id => `<button class="ichip" data-oi="${id}" aria-pressed="${id === of.instr}">${esc(instrById(id).name)}</button>`).join("")}</div>` : ""}
+      <div class="ichips of-instr">${mine.map(id => `<button class="ichip" data-oi="${id}" aria-pressed="${id === of.instr}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip" data-more aria-label="Inny instrument">${icon("plus")}</button></div>
+      <div id="of-picker" hidden></div>
       <p class="onb-lead">${n} dźwięków · cichy pokój · telefon metr od instrumentu</p>${has ? `<p class="note">Masz już nagranie tego instrumentu. Nowe je zastąpi.</p>` : ""}`;
-    body.querySelectorAll("[data-oi]").forEach(b => b.addEventListener("click", () => { of.instr = b.dataset.oi; of.targets = ownTargets(); of.done = of.targets.map(() => null); renderOwn(); }));
+    const setI = id => { of.instr = id; of.targets = ownTargets(); of.done = of.targets.map(() => null); renderOwn(); };
+    body.querySelectorAll("[data-oi]").forEach(b => b.addEventListener("click", () => setI(b.dataset.oi)));
+    body.querySelector("[data-more]").addEventListener("click", () => { const pk = $("#of-picker"); pk.hidden = !pk.hidden; if (!pk.hidden) instrPicker(pk, { onPick: id => setI(id) }); });
     acts.innerHTML = `<button class="btn primary wide" id="of-go"><span>Zaczynamy</span></button>`;
     $("#of-go").addEventListener("click", async () => { if (!(await startListening())) return; of.state = "listen"; renderOwn(); });
   } else if (of.state === "listen" || of.state === "got") {

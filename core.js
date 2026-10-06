@@ -918,3 +918,43 @@ function partIndexes(xml, keepIds) {
   });
   return out;
 }
+
+/* ---------------- markings read as text (the reader's OCR of the band above each staff) ----------------
+   Each text has its staff and its place on the photo; it goes to the bar under it (bars of a line are taken as
+   equally wide) and before the note nearest its left edge. Only what is clearly music is kept: tempo and
+   performance words (Italian, Polish, German), metronome marks (also set the playback tempo), dynamics of two
+   or more letters, D.C./D.S./Fine. Bar numbers, chord-like fragments and noise are left out. */
+const MUSIC_WORDS = /^(allegr|andant|moderat|adagi|largo|larghett|lento|presto|prestissim|vivac|vivo|grave|maestos|cantabil|dolc|espress|legat|staccat|marcat|tenut|simil|rit|ritard|riten|rall|accel|a\s?tempo|tempo|cresc|decresc|dim|smorz|morendo|perdendo|poco|molto|pi[uù]|meno|sempre|subito|con\s|senza|tranquill|giocos|scherz|animat|agitat|energic|risolut|pesant|leggier|sostenut|fine|d\.?\s?c\.?|d\.?\s?s\.?|al\s(fine|coda)|coda|solo|soli|tutti|a\s?2|div|unis|sord|wesoł|wesol|wolno|umiarkowan|szybk|spokojn|żyw|zyw|marsz|śpiewn|spiewn|łagodn|lagodn|ciężk|ciezk|mäßig|massig|langsam|schnell|lebhaft|ruhig|breit|zart)/i;
+function classifyText(raw, score) {
+  const t = String(raw || "").trim().replace(/\s+/g, " "); if (!t || score < 0.5) return null;
+  /* a lone p, f or capital letter above a staff is as often a note name in an exercise as a dynamic or a
+     rehearsal letter: left out (a wrong marking is worse than a missing one; the editor adds them in a tap) */
+  if (/^(ppp|pp|mp|mf|ff|fff|sfz|sfp|rfz|fz)$/.test(t)) return { kind: "dyn", value: t };
+  const mm = t.match(/[=＝]\s*(?:ca\.?\s*)?(\d{2,3})\b/); if (mm && +mm[1] >= 30 && +mm[1] <= 260) return { kind: "tempo", bpm: +mm[1], text: t };
+  if (/^\d+$/.test(t)) return null;                                      // bar numbers
+  if (t.length >= 2 && t.length <= 32 && MUSIC_WORDS.test(t.replace(/^[^A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]+/, ""))) return { kind: "words", text: t };
+  return null;
+}
+function attachTexts(xml, pages) {
+  try {
+    const doc = parseXml(xml), part = doc.getElementsByTagName("part")[0]; if (!part) return xml;
+    const ms = kids(part, "measure"), sys = [];
+    ms.forEach((m, i) => { const nl = i === 0 || [...m.getElementsByTagName("print")].some(p => p.getAttribute("new-system") === "yes" || p.getAttribute("new-page") === "yes"); if (nl || !sys.length) sys.push([]); sys[sys.length - 1].push(m); });
+    const staves = []; pages.forEach(pg => (pg.staves || []).slice().sort((a, b) => a.index - b.index).forEach(s => staves.push({ ...s, texts: (pg.texts || []).filter(t => t.staff === s.index) })));
+    if (staves.length !== sys.length) return xml;                       // not one staff per line (e.g. piano): leave it
+    let added = 0;
+    staves.forEach((st, si) => st.texts.forEach(t => {
+      const c = classifyText(t.text, t.score); if (!c) return;
+      const left = st.cx - st.w / 2, frac = Math.max(0, Math.min(0.999, (t.x0 - left) / st.w)), bars = sys[si];
+      const bi = Math.min(bars.length - 1, Math.floor(frac * bars.length)), m = bars[bi], inBar = frac * bars.length - bi;
+      const notes = kids(m, "note").filter(n => !kid(n, "chord") && !kid(n, "grace")), target = notes[Math.min(notes.length - 1, Math.floor(inBar * notes.length))] || null;
+      const d = doc.createElement("direction"); d.setAttribute("placement", c.kind === "dyn" ? "below" : "above");
+      if (c.kind === "dyn") d.innerHTML = `<direction-type><dynamics><${c.value}/></dynamics></direction-type>`;
+      else if (c.kind === "rehearsal") d.innerHTML = `<direction-type><rehearsal>${xesc(c.text)}</rehearsal></direction-type>`;
+      else if (c.kind === "tempo") d.innerHTML = `<direction-type><words font-weight="bold">${xesc(c.text)}</words></direction-type><sound tempo="${c.bpm}"/>`;
+      else d.innerHTML = `<direction-type><words${/^(allegr|andant|moderat|adagi|largo|lento|presto|vivac|grave|tempo|wesoł|wolno|umiarkowan|szybk|spokojn|marsz)/i.test(c.text) ? ' font-weight="bold"' : ' font-style="italic"'}>${xesc(c.text)}</words></direction-type>`;
+      m.insertBefore(d, target); added++;
+    }));
+    return added ? new XMLSerializer().serializeToString(doc) : xml;
+  } catch (e) { console.warn(e); return xml; }
+}
