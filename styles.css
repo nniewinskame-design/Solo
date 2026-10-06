@@ -1838,3 +1838,56 @@ body.immersive .loopbar{display:none}
 .ed-tabs button[aria-selected="true"]{padding:0 12px!important}
 .ed-tabs .ed-bar{background:var(--brand-tint)!important;color:var(--brand-ink)!important;font-weight:650!important;position:relative;margin-right:10px!important}
 .ed-tabs .ed-bar::after{content:"";position:absolute;right:-8px;top:10px;bottom:10px;width:1px;background:var(--hairline-2)}
+
+/* =====================================================================================================
+   Colour blocks (Nat, 7 Oct: "bigger areas of solid colour AND several colours"): Solo Blue leads; sun, mint,
+   coral, lilac, sky and pink fill whole cards and tiles, each with dark ink text. The music stays on white.
+   ===================================================================================================== */
+:root{
+  --c-sun:#FFD84D;   --c-sun-ink:#2B2100;
+  --c-mint:#4BDDB0;  --c-mint-ink:#00382A;
+  --c-coral:#FF8A6B; --c-coral-ink:#3D0F00;
+  --c-lilac:#B9A2FF; --c-lilac-ink:#22104F;
+  --c-sky:#7CCFFF;   --c-sky-ink:#002B44;
+  --c-pink:#FF9ACF;  --c-pink-ink:#4A0630;
+}
+/* home: a blue welcome card and four colour tiles */
+.mast{margin:4px 0 12px!important;padding:26px 20px 28px!important;border-radius:28px;background:var(--brand)!important;color:#fff;overflow:hidden}
+.mast .brand,.mast .h-xl{color:#fff!important}
+.mast .brand svg.mark{color:#fff!important}
+.quick{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 22px}
+.quick .q{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:18px;min-height:96px;padding:14px 16px;border-radius:22px;text-align:left;
+  transition:transform var(--spring-snappy-d) var(--spring-snappy)}
+.quick .q:active{transform:scale(.97)}
+.quick .q svg.i{width:26px;height:26px}
+.quick .q b{font:600 16px/1.2 var(--font);letter-spacing:-.015em}
+.q-sun{background:var(--c-sun);color:var(--c-sun-ink)}
+.q-mint{background:var(--c-mint);color:var(--c-mint-ink)}
+.q-coral{background:var(--c-coral);color:var(--c-coral-ink)}
+.q-lilac{background:var(--c-lilac);color:var(--c-lilac-ink)}
+.notice{background:var(--c-sun)!important;box-shadow:none!important;color:var(--c-sun-ink)}
+.notice>svg.i,.notice .link,.notice .x{color:var(--c-sun-ink)!important}
+.notice span{color:var(--c-sun-ink)!important;opacity:.85}
+/* add sheet: the four ways as colour tiles */
+#sh-add .addlist{display:grid!important;grid-template-columns:1fr 1fr;gap:10px;background:none!important;box-shadow:none!important;padding:0}
+#sh-add .addlist .li{flex-direction:column;align-items:flex-start;justify-content:space-between;gap:16px;min-height:104px;padding:14px 16px;border-radius:22px;border:0!important}
+#sh-add .addlist .li .ic{color:inherit!important;width:auto!important;height:auto!important}
+#sh-add .addlist .li b{font:600 16px var(--font);color:inherit}
+#sh-add .addlist .li small{color:inherit;opacity:.75}
+#sh-add .addlist .li:nth-child(1){background:var(--c-sun);color:var(--c-sun-ink)}
+#sh-add .addlist .li:nth-child(2){background:var(--c-pink);color:var(--c-pink-ink)}
+#sh-add .addlist .li:nth-child(3){background:var(--c-sky);color:var(--c-sky-ink)}
+#sh-add .addlist .li:nth-child(4){background:var(--c-mint);color:var(--c-mint-ink)}
+/* metronome: the tempo on a sun card */
+#metrov .metro-bpm{width:100%;padding:22px 16px 20px;border-radius:28px;background:var(--c-sun);color:var(--c-sun-ink)}
+#metrov .metro-bpm small,#metrov .m-name{color:var(--c-sun-ink)!important;opacity:.8}
+/* tuner: its settings on a mint card */
+.lx-set{background:var(--c-mint)!important;color:var(--c-mint-ink);border-radius:22px!important;box-shadow:none!important}
+.lx-set .ic,.lx-set small,.lx-set .chev{color:var(--c-mint-ink)!important}
+/* Ja: the profile on lilac, sounds on sky */
+.me-card{background:var(--c-lilac)!important;box-shadow:none!important;color:var(--c-lilac-ink)}
+.me-card .me-tile{background:#fff!important;color:var(--c-lilac-ink)!important}
+.me-card input.me-name[type=text],.me-card small{color:var(--c-lilac-ink)!important}
+.snd-tile:not(.add){background:var(--c-sky)!important;color:var(--c-sky-ink)!important;box-shadow:none!important}
+.snd-tile:not(.add) .snd-sq{background:#fff!important}
+.snd-tile:not(.add) small,.snd-tile:not(.add) .snd-sub{color:var(--c-sky-ink)!important}
