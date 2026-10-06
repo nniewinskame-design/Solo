@@ -921,7 +921,7 @@ function selectNote(sel) {
   $("#editbar").hidden = !on;
   $$("#pages g.nsel").forEach(g => g.classList.remove("nsel"));
   $("#ed-undo").disabled = !(S.undo && S.undo.length); syncRedo();
-  if (!S.edTab) edTab(sel ? "pitch" : "bar");          // editing opens on Takt (Nat, 7 Oct)
+  if (S.edTab == null) edTab(null);          // editing opens with no tool open (Nat, 7 Oct); a tool opens when tapped
   const at = sel ? xmlNoteAt(parseXml(S.piece.xml), sel) : null, n = at && at.n, isRest = !!(n && kid(n, "rest"));
   $$("#editbar .ed-pane:not([data-pane=len]):not([data-pane=bar]) button").forEach(b => (b.disabled = !n || (isRest && !["rest", "delete", "left", "right"].includes(b.dataset.ed))));
   const cur = n ? (txt(n, "type") || "whole") : (S.inLen || "quarter");
@@ -929,7 +929,7 @@ function selectNote(sel) {
   $("#ed-dot").setAttribute("aria-pressed", String(!!(n && kid(n, "dot"))));
   if (n) { const docB = parseXml(S.piece.xml), atB = xmlNoteAt(docB, sel), on = !!atB && beamJoined(docB, atB); $("#ed-beam").setAttribute("aria-pressed", String(on)); $("#ed-beam").setAttribute("aria-label", on ? "Rozdziel belkę z następną nutą" : "Połącz belką z następną nutą"); $("#ed-beam").disabled = isRest || !BEAMABLE[txt(n, "type")]; }
   $("#ed-rest").innerHTML = icon(isRest ? "n-quarter" : "rest"); $("#ed-rest").setAttribute("aria-label", isRest ? "Zamień na nutę" : "Zamień na pauzę");
-  if (!n) { $("#ed-info").innerHTML = `Wybierz długość <svg class="i"><use href="#n-${cur === "16th" ? "16th" : cur}"/></svg> i dotknij pięciolinii`; return; }
+  if (!n) { $("#ed-info").innerHTML = `Dotknij pięciolinii, żeby dopisać nutę <svg class="i"><use href="#n-${cur === "16th" ? "16th" : cur}"/></svg>, albo wybierz narzędzie`; return; }
   const el = drawnNote(sel); if (el) el.classList.add("nsel");
   const p = kid(n, "pitch"), len = LEN_PL[txt(n, "type")] || "";
   if (p) {
@@ -1007,7 +1007,7 @@ function editTap(e) {
   pushUndo(); S.piece.xml = new XMLSerializer().serializeToString(doc);
   previewNote(n); S.editSel = sel; afterEdit();
 }
-$$("#editbar [data-tab-ed]").forEach(b => b.addEventListener("click", () => edTab(b.dataset.tabEd)));
+$$("#editbar [data-tab-ed]").forEach(b => b.addEventListener("click", () => edTab(S.edTab === b.dataset.tabEd ? null : b.dataset.tabEd)));     // a second tap closes the tool
 $$("#editbar [data-len]").forEach(b => b.addEventListener("click", () => { S.inLen = b.dataset.len; if (S.editSel) editNote("len:" + b.dataset.len); else selectNote(null); }));
 /* divisions and the length of a full bar (in divisions) at a bar */
 function barCap(part, m) {
@@ -1326,8 +1326,6 @@ function buildBarSheet() {
   meterInline($("#bar-time"), t, v => { clearTimeout(buildBarSheet.t); buildBarSheet.t = setTimeout(() => barOp("time", v), 800); });
   $$("#bar-clef button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c)));
   $("#bar-clef-t").textContent = `Klucz · ${partLabel(S.parts.find(x => x.id === pid) || { id: pid, name: "" }) || "ta partia"}`;
-  $$("#bar-clefmode button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m === barClefMode)));
-  $("#bar-clefnote").textContent = barClefMode === "lines" ? "Do poprawiania źle odczytanego klucza: nuty zostają w tych samych miejscach, zmieniają się dźwięki." : bar === 1 ? "Zmienia się tylko ta partia, w całym utworze." : `Zmienia się tylko ta partia, od taktu ${bar}.`;
   const mode = (() => { const k1 = kids(part, "measure")[0]?.getElementsByTagName("key")[0]; return k1 && txt(k1, "mode") === "minor" ? "minor" : S.srcKey?.mode || "major"; })();
   const k1 = keyAt(part, kids(part, "measure")[0]), n = Math.abs(k1);
   $("#bar-keyname").textContent = keyName(k1, mode);
@@ -1465,7 +1463,6 @@ function barOp(op, val) {
 }
 let barClefMode = "sound";
 $$("#bar-clef button").forEach(b => b.addEventListener("click", () => barOp("clef", b.dataset.v)));
-$$("#bar-clefmode button").forEach(b => b.addEventListener("click", () => { barClefMode = b.dataset.m; buildBarSheet(); }));
 /* "Tonacja utworu": the whole piece (every part) moves to the key one fifth up or down the circle, by the nearest
    interval (at most a tritone); the part being edited names the key */
 function transposeScore(df) {

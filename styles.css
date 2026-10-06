@@ -1953,3 +1953,10 @@ body.editmode .ed-info:has(+ .bar-pane:not([hidden])){display:none}
 .m-inline .mi-unit{display:grid;grid-template-columns:repeat(4,1fr);margin:0 0 0 auto!important;flex:1;max-width:176px;padding:2px}
 .m-inline .mi-unit button{min-height:32px!important;padding:0!important}
 .m-inline .mi-unit svg.i{width:18px;height:18px}
+
+/* ---- the editor panel stands off the white page: a light grey-blue panel, a clear shadow, tools on white ---- */
+.editor{background:#EBEEF7!important;box-shadow:0 -10px 36px rgba(15,23,51,.16),0 0 0 1px var(--hairline-2)!important}
+.ed-pane:not(.bar-pane) button:not([aria-pressed="true"]){background:#fff!important}
+.ed-tabs{background:#fff;border-radius:999px;padding:4px!important}
+.ed-info{color:var(--text-2)}
+.bar-pane .chips>button:not([aria-pressed="true"]){background:#fff}
