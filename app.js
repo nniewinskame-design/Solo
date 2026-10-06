@@ -776,11 +776,44 @@ function scanZoom() {
   const r = ls.map(l => (l.h * l.H) / (l.w * l.W)).sort((a, b) => a - b)[Math.floor(ls.length / 2)];
   return Math.max(1, Math.min(1.35, r / 0.04 * 0.85));
 }
+/* bars spread evenly along a line (a bar's width follows its length in time, not how many notes it holds) and
+   every line, the last one too, ends at the right edge, as in hand-made sheets */
+const EVEN_BARS = { spacingLinear: 0.1, spacingNonLinear: 1, minLastJustification: 0 };
 function a4Options(extra, zoom = S.zoom) {
   const z = zoom, r = v => Math.round(v / z);
   return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: castsOff() ? "line" : S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
     pageMarginTop: r(110), pageMarginBottom: r(110), pageMarginLeft: r(150), pageMarginRight: r(150), spacingSystem: 6, svgViewBox: true,
-    transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true, ...extra };
+    transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true, ...EVEN_BARS, ...extra };
+}
+/* no warning metre at the end of a line (the engine adds one when the next line starts with a metre; the paper has
+   none). Its room is shared out among the line's bars, so the last bar line stands at the very end of the line.
+   Works on the drawing's own numbers, so also on pages not shown on screen (PDF, print). */
+function endLines(root) {
+  const nums = el => (el.getAttribute("d") || "").match(/-?\d+(\.\d+)?/g)?.map(Number) || [];
+  const move = (el, dx) => { if (!dx) return; const t = el.getAttribute("transform"); el.setAttribute("transform", `translate(${dx.toFixed(1)},0)` + (t ? " " + t : "")); };
+  root.querySelectorAll("g.system").forEach(sys => {
+    const ms = [...sys.children].filter(g => g.matches("g.measure")); if (!ms.length) return;
+    const last = ms[ms.length - 1];
+    const warn = [...last.querySelectorAll("g.staff > g.meterSig")].filter(m => { for (let p = m.previousElementSibling; p; p = p.previousElementSibling) if (p.matches("g.layer")) return true; return false; });
+    if (!warn.length) return;
+    warn.forEach(m => m.remove());
+    const lines = [...last.querySelectorAll("g.staff > path")].map(nums).filter(v => v.length >= 4);
+    const bars = [...last.querySelectorAll(":scope > g.barLine path")].map(nums).filter(v => v.length >= 2);
+    if (!lines.length || !bars.length) return;
+    const gap = Math.max(...lines.map(v => v[2])) - Math.max(...bars.map(v => v[0])), n = ms.length;
+    if (!(gap > 0)) return;
+    ms.forEach((m, k) => {
+      const a = gap * k / n, b = k === n - 1 ? gap : gap * (k + 1) / n;
+      [...m.children].forEach(c => {
+        if (c.matches("g.staff")) [...c.children].forEach(el => {
+          if (el.tagName.toLowerCase() !== "path") { move(el, a); return; }
+          const v = nums(el); if (v.length < 4) return;
+          el.setAttribute("d", `M${v[0] + a} ${v[1]} L${k === n - 1 ? v[2] : v[2] + b} ${v[3]}`);   // the staff lines of this bar
+        });
+        else move(c, c.matches("g.barLine") ? b : a);
+      });
+    });
+  });
 }
 function enlargeTitle(root, factor, shift = 1.25) {
   const head = root.querySelector(".pgHead"); if (!head || !S.piece) return;
@@ -821,7 +854,7 @@ async function doRender() {
     else {
       const px = 38 * S.zoom;
       opts = { pageWidth: Math.round(width * 100 / px), pageHeight: 60000, adjustPageHeight: true, scale: Math.round(px), breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
-        pageMarginLeft: 50, pageMarginRight: 50, pageMarginTop: 60, pageMarginBottom: 60, spacingSystem: 8, svgViewBox: false, transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true };
+        pageMarginLeft: 50, pageMarginRight: 50, pageMarginTop: 60, pageMarginBottom: 60, spacingSystem: 8, svgViewBox: false, transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true, ...EVEN_BARS };
     }
     tk.setOptions(opts);
     if (!tk.loadData(xml)) throw new Error("Nie udało się narysować nut.");
@@ -836,8 +869,7 @@ async function doRender() {
     S.fromMs = 0; S.fromBar = -1;
     if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
     S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip(); markRange(); markBarSel();
-    /* no warning metre at the end of a line (the engine adds one when the next line starts with a metre; the paper has none) */
-    $$("#pages g.system").forEach(sys => { const r = sys.getBoundingClientRect(); sys.querySelectorAll("g.meterSig").forEach(m => { const b = m.getBoundingClientRect(); if (b.width && b.left > r.left + r.width * 0.85) m.style.display = "none"; }); });
+    endLines(box);
     requestAnimationFrame(() => { drawLoop(); syncLoopUi(); });
     S.baseBpm = scoreBpm(); $("#tp-bpm").textContent = String(curBpm());
     if (openSheetId === "more") syncTempo();
@@ -1607,7 +1639,6 @@ $("#pages").addEventListener("click", e => {
   $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); m.classList.add("sel");
   S.fromMs = ms; S.fromBar = di; pb.resumeMs = 0;
   if (playState) { pb.follow = true; play(ms); return; }
-  const bar = drawnBars(processedXml())[S.fromBar]; if (bar) showPeek(bar);
 });
 function clearFromBar() { S.fromMs = 0; S.fromBar = -1; $$("#pages g.measure.sel").forEach(g => g.classList.remove("sel")); $("#peek").hidden = true; }
 /* T16: the line of the photo where this bar was printed, shown above the music */
@@ -2350,7 +2381,7 @@ async function printScore() {
   tk.loadData(processedXml());
   let html = "";
   for (let i = 1; i <= tk.getPageCount(); i++) html += `<div class="pg">${tk.renderToSVG(i)}</div>`;
-  const pa = $("#print-area"); pa.innerHTML = html;
+  const pa = $("#print-area"); pa.innerHTML = html; endLines(pa);
   const first = pa.querySelector("svg"); if (first) enlargeTitle(first, 1.9);
   S.loadedKey = null;
   setTimeout(() => { window.print(); clearPrintOnTouch(); }, 80);
@@ -2427,7 +2458,7 @@ async function pdfBlob(xml, title) {
   S.loadedKey = null;
   const images = [];
   for (let i = 0; i < svgs.length; i++) {
-    const el = await pageCanvas(svgs[i]); if (i === 0) enlargeTitle(el, 1.9);
+    const el = await pageCanvas(svgs[i]); endLines(el); if (i === 0) enlargeTitle(el, 1.9);
     const c = await rasterPage(el); images.push(await pageImage(c)); c.width = c.height = 1;    // free the memory before the next page
   }
   return buildPdf(images, PDF_W, PDF_H, title);
@@ -2484,7 +2515,7 @@ async function sendImage() {
   try {
     await engineReady;
     tk.setOptions(a4Options()); tk.loadData(processedXml());
-    const el = await pageCanvas(tk.renderToSVG(1)); enlargeTitle(el, 1.9);
+    const el = await pageCanvas(tk.renderToSVG(1)); endLines(el); enlargeTitle(el, 1.9);
     const c = await rasterPage(el); S.loadedKey = null;
     const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.9));
     const name = safeName(S.piece.title || "Nuty") + ".jpg", file = new File([blob], name, { type: "image/jpeg" });

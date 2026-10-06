@@ -2052,3 +2052,7 @@ svg.cl.g{height:27px!important;margin:-3px 0!important}
 #notice .link{grid-area:cmp;justify-self:start;padding:2px 0;min-height:0;font:600 13.5px var(--font)}
 #notice .x{grid-area:x;width:32px;height:32px;margin:-4px -4px 0 0}
 @media (min-width:600px){ #notice{margin:4px auto 10px} }
+/* deleting: a separate red button under the other options, never one of them */
+.sep-del{margin-top:18px!important;color:var(--bad-ink)!important;background:var(--bad-tint)!important;border-radius:14px!important;min-height:48px}
+.sep-del svg.i{color:var(--bad-ink)!important}
+#sh-card .tiles{grid-template-columns:repeat(4,1fr)!important}
