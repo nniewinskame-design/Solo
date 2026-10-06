@@ -23,7 +23,7 @@ const ORB_HUES = {
   sky: ["#4CCBFF", "#7FD6FF"], slate: ["#8E98B5", "#C3C9DC"], brand: ["#3D5BFF", "#7C8CFF"]
 };
 /* the second, neighbouring colour of each orb (brass glows amber and coral) */
-const ORB_PAIR = { amber: "coral", green: "teal", coral: "pink", blue: "violet", violet: "blue", pink: "violet", teal: "sky", lime: "green", sky: "blue", slate: "sky", brand: "violet" };
+const ORB_PAIR = { amber: "coral", green: "teal", coral: "pink", blue: "violet", violet: "blue", pink: "violet", teal: "green", lime: "green", sky: "blue", slate: "sky", brand: "violet" };
 /* an instrument family (INSTR group) as its hue: one colour = one meaning, app-wide */
 const FAMILY_HUE = { "Dęte blaszane": "amber", "Dęte drewniane": "green", "Smyczkowe": "coral", "Klawiszowe": "blue", "Szarpane": "violet", "Perkusyjne": "teal", "Głos": "pink" };
 const orbHueOfGroup = g => FAMILY_HUE[g] || "slate";

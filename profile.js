@@ -152,13 +152,12 @@ function applyProfile(prev) {
 }
 function profileSummary(p = profile()) {
   const m = instrById(p.main), more = p.instruments.filter(i => i !== p.main).map(i => instrById(i).name);
-  const role = { teacher: "uczę", student: "uczę się", self: "gram dla siebie" }[p.role];
-  return [m.name + (more.length ? ` (+ ${more.join(", ")})` : ""), trPc(m) ? (p.reading === "written" ? "nuty dla instrumentu" : "dźwięki rzeczywiste") : "", role, `A = ${p.a4} Hz`].filter(Boolean).join(" · ");
+  return [m.name + (more.length ? ` (+ ${more.join(", ")})` : ""), trPc(m) ? (p.reading === "written" ? "nuty dla instrumentu" : "dźwięki rzeczywiste") : "", `A = ${p.a4} Hz`].filter(Boolean).join(" · ");
 }
 
 /* ---------------- onboarding: one question per screen, big tiles, always "Pomiń" ---------------- */
 const onb = { step: 0, p: null };
-const ONB_STEPS = ["hello", "role", "instr", "main", "reading", "a4", "done"];
+const ONB_STEPS = ["hello", "instr", "main", "reading", "done"];   // no role question (Nat, 7 Oct); A4 is set in Ja
 function openOnboarding() {
   onb.p = profile(); onb.p.instruments = [...onb.p.instruments]; onb.step = 0;
   $("#onb").hidden = false; renderOnb();
@@ -271,14 +270,12 @@ function timbreNote(kind) {
 function renderProfile() {
   const box = $("#prof"); if (!box) return;
   const p = profile(), m = instrById(p.main);
-  const ROLE = { teacher: "Uczę gry", student: "Uczę się", self: "Gram dla siebie" };
   /* the card at the top: who plays what, at a glance; the main instrument's family colour on the tile */
   const card = $("#me-card");
-  if (card) card.innerHTML = `<span class="me-tile" ${hueStyle(m)}>${icon("user")}</span><span class="me-txt"><b>${esc(m.name)}</b><small>${esc(ROLE[p.role] || "")} · A = ${p.a4} Hz</small></span>`;
+  if (card) card.innerHTML = `<span class="me-tile" ${hueStyle(m)}>${icon("user")}</span><span class="me-txt"><b>${esc(m.name)}</b><small>${p.instruments.length > 1 ? `${p.instruments.length} ${plural(p.instruments.length, "instrument", "instrumenty", "instrumentów")} · ` : ""}A = ${p.a4} Hz</small></span>`;
   const row = (label, body, note = "") => `<div class="me-row"><span class="me-l">${label}</span>${body}${note}</div>`;
   box.innerHTML = `<div class="group me-group">
     ${row("Instrumenty", `<div class="ichips">${p.instruments.map(id => `<button class="ichip" ${hueStyle(id)} data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip add" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>`, p.instruments.length > 1 ? `<small class="me-note">Dotknij, żeby wybrać główny</small>` : "")}
-    ${row("Rola", `<div class="seg three"><button data-role="teacher" aria-pressed="${p.role === "teacher"}">Uczę</button><button data-role="student" aria-pressed="${p.role === "student"}">Uczę się</button><button data-role="self" aria-pressed="${p.role === "self"}">Dla siebie</button></div>`)}
     ${row("Strój A", `<div class="seg three">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>`)}
     ${trPc(m) ? row("Stroik pokazuje", `<div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla ${esc(m.name.toLowerCase())}</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>`) : ""}
   </div>`;
@@ -289,7 +286,6 @@ $("#prof").addEventListener("click", e => {
   if (b.hasAttribute("data-edit")) { openSheet("instr"); return; }
   if (b.dataset.main) p.main = b.dataset.main;
   if (b.dataset.read) p.reading = b.dataset.read;
-  if (b.dataset.role) p.role = b.dataset.role;
   if (b.dataset.a4) p.a4 = +b.dataset.a4;
   saveProfile({ ...p, done: true }); renderProfile();
 });

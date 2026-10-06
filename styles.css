@@ -1684,3 +1684,56 @@ a,.link{color:var(--brand-ink)}
 .kp-mode{grid-template-columns:1fr 1fr}
 .me-foot{margin-bottom:calc(120px + var(--safe-b))}
 #sh-new .li .grow{display:flex;align-items:center;gap:6px;font:600 18px var(--font)}
+
+/* ===== a broad palette (Nat, 7 Oct): blue-violet leads, every place has its own clear colour, like the Microsoft
+   apps. Tabs: Nuty blue→violet, Stroik teal→green, Metronom amber→coral, Ja pink→violet. List icons sit on colour
+   tiles (as in iOS Settings), cycling through the hues. ===== */
+:root{
+  --g-notes:linear-gradient(120deg,#2D8CFF,#9A4DFF);
+  --g-tuner:linear-gradient(120deg,#12C2D6,#19C47E);
+  --g-metro:linear-gradient(120deg,#FFAE1F,#FF5E5B);
+  --g-me:linear-gradient(120deg,#FF5FB4,#9A4DFF);
+}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){
+  :root{
+    --g-notes:linear-gradient(in oklch 120deg,#2D8CFF,#9A4DFF);
+    --g-tuner:linear-gradient(in oklch 120deg,#12C2D6,#19C47E);
+    --g-metro:linear-gradient(in oklch 120deg,#FFAE1F,#FF5E5B);
+    --g-me:linear-gradient(in oklch 120deg,#FF5FB4,#9A4DFF);
+  }
+}
+.tabbar .slide{background:var(--g-notes);transition:transform var(--spring-snappy-d) var(--spring-snappy),width var(--spring-snappy-d) var(--spring-snappy),background 300ms var(--ease-out)}
+.tabbar:has([data-tab="tunerv"][aria-current]) .slide{background:var(--g-tuner);box-shadow:0 8px 20px -10px #19C47E}
+.tabbar:has([data-tab="metrov"][aria-current]) .slide{background:var(--g-metro);box-shadow:0 8px 20px -10px #FF5E5B}
+.tabbar:has([data-tab="settings"][aria-current]) .slide{background:var(--g-me);box-shadow:0 8px 20px -10px #C454E0}
+#t-go{background:var(--g-tuner)!important;box-shadow:0 10px 24px -12px #19C47E!important}
+#m-go{background:var(--g-metro)!important;box-shadow:0 10px 24px -12px #FF5E5B!important}
+
+/* list icons on colour tiles */
+.group .li .ic,.list .li .ic{--t:var(--blue),var(--blue-2);background:linear-gradient(135deg,var(--t));color:#fff;border-radius:9px}
+.group .li:nth-child(6n+2) .ic,.list .li:nth-child(6n+2) .ic{--t:var(--green),var(--green-2)}
+.group .li:nth-child(6n+3) .ic,.list .li:nth-child(6n+3) .ic{--t:var(--coral),var(--coral-2)}
+.group .li:nth-child(6n+4) .ic,.list .li:nth-child(6n+4) .ic{--t:var(--violet),var(--violet-2)}
+.group .li:nth-child(6n+5) .ic,.list .li:nth-child(6n+5) .ic{--t:var(--teal),var(--teal-2)}
+.group .li:nth-child(6n+6) .ic,.list .li:nth-child(6n+6) .ic{--t:var(--pink),var(--pink-2)}
+.li-det:nth-child(2) summary .ic{--t:var(--amber),var(--amber-2);background:linear-gradient(135deg,var(--t));color:#fff}
+.group .li.danger .ic{--t:#FF5E5B,#E5383B}
+#sh-add .addlist .ic{width:48px;height:48px;border-radius:14px;color:#fff!important}
+#sh-add .addlist .li:nth-child(1) .ic{background:linear-gradient(135deg,var(--sky),var(--blue-2))!important}
+#sh-add .addlist .li:nth-child(2) .ic{background:linear-gradient(135deg,var(--pink),var(--violet-2))!important}
+#sh-add .addlist .li:nth-child(3) .ic{background:linear-gradient(135deg,var(--amber),var(--coral-2))!important}
+#sh-add .addlist .li:nth-child(4) .ic{background:linear-gradient(135deg,var(--teal),var(--green-2))!important}
+
+/* library filters: each its own colour when chosen */
+.cols .cchip:nth-child(2)[aria-selected="true"]{background:linear-gradient(120deg,var(--pink),var(--coral-2))}
+.cols .cchip:nth-child(3)[aria-selected="true"]{background:linear-gradient(120deg,var(--teal),var(--green-2))}
+.cols .cchip:nth-child(4)[aria-selected="true"]{background:linear-gradient(120deg,var(--sky),var(--blue-2))}
+.cols .cchip:nth-child(5)[aria-selected="true"]{background:linear-gradient(120deg,var(--amber),var(--coral))}
+.cols .cchip:nth-child(6)[aria-selected="true"]{background:linear-gradient(120deg,var(--violet),var(--pink-2))}
+.cols .cchip:nth-child(2) .i{color:var(--pink-2)} .cols .cchip:nth-child(3) .i{color:var(--green-2)} .cols .cchip:nth-child(4) .i{color:var(--blue-2)}
+.cols .cchip[aria-selected="true"] .i{color:#fff}
+/* metronome in its own colours: amber → coral */
+.metro .beats>button[data-acc="1"]::before{box-shadow:inset 0 0 0 3px #FF7A3D}
+.metro .beats>button.on::before{background:#FFB21E}
+.metro .beats>button.on[data-acc="1"]::before{background:var(--g-metro)}
+.m-name{color:#E8590C}

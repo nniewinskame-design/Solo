@@ -3559,7 +3559,7 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
   "Nowa melodia: wybierasz klucz, tonację (dur albo moll) i dowolne metrum.",
-  "Zakładka Ja uporządkowana. Tylko jasny wygląd.",
+  "Każda zakładka ma swój kolor, ikonki na kolorowych kafelkach. Zakładka Ja uporządkowana, tylko jasny wygląd.",
   "Metronom ze stukaniem tempa i akcentami. Stroik z wielką nutą.",
   "Tonacje molowe z właściwymi akordami. Przedtakt wyrównany we wszystkich partiach.",
   "Partie dla instrumentów transponujących brzmią poprawnie, także po eksporcie.",
@@ -3891,7 +3891,7 @@ function writtenName(midi, tr = tuner.tr) {
 /* the listening orb behind the note (orb.js): sky, leaning flat/sharp, green with a ring once in tune
    (enter at the chosen accuracy, leave 3 cents wider, "locked" after 300 ms, so it does not flicker) */
 function tnOrb() {
-  if (!tn.orb && typeof createOrb === "function" && $("#t-orb")) tn.orb = createOrb($("#t-orb"), { hue: "brand", drift: "x", hollow: true });
+  if (!tn.orb && typeof createOrb === "function" && $("#t-orb")) tn.orb = createOrb($("#t-orb"), { hue: "teal", drift: "x", hollow: true });
   return tn.orb;
 }
 function tnOrbFrame(t, held, live, c) {
