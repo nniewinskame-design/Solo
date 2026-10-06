@@ -201,6 +201,9 @@
       </div>
     </div>
 
+    <h3 class="lbl">Pomoc</h3>
+    <div class="group"><button class="li tap" id="btn-tour"><span class="ic"><svg class="i"><use href="#info"/></svg></span><span class="grow"><b>Samouczek</b><small>5 krótkich kroków na ekranie nut</small></span><svg class="i chev"><use href="#right"/></svg></button></div>
+
     <h3 class="lbl">Co nowego</h3>
     <div class="group"><div class="li col" id="news"></div></div>
 
@@ -278,6 +281,12 @@
   </div>
 </section>
 
+<div class="tour" id="tour" hidden role="dialog" aria-modal="true" aria-labelledby="tour-t">
+  <div class="tour-hole" id="tour-hole"></div>
+  <div class="tour-card" id="tour-card"><p class="tour-step" id="tour-n"></p><h2 class="h-m" id="tour-t"></h2><p id="tour-p"></p>
+    <div class="row-btns"><button class="btn tinted small" id="tour-skip">Pomiń</button><button class="btn primary small" id="tour-next">Dalej</button></div></div>
+</div>
+
 <!-- =============== SHEETS =============== -->
 <div class="scrim" id="scrim" hidden></div>
 
@@ -319,6 +328,13 @@
     <div class="seg" id="t-instr"><button data-tr="0">Puzon (C)</button><button data-tr="2">Instrument w B</button><button data-tr="-3">w Es</button><button data-tr="7">w F</button></div>
     <p class="note">Stroik słucha przez mikrofon tylko na tym urządzeniu. Dźwięk nie jest nagrywany ani wysyłany. Telefon zapyta o zgodę.</p>
     <button class="btn tinted wide" id="t-go"><svg class="i"><use href="#mic"/></svg><span>Włącz stroik</span></button>
+  </div>
+  <h3 class="lbl">Mój dźwięk</h3>
+  <div class="tuner" id="own">
+    <p class="txt">Zagraj jeden długi, równy dźwięk (2 sekundy). Solo zagra potem nuty Twoim brzmieniem.</p>
+    <p class="tune-cents" id="own-st"></p>
+    <button class="btn tinted wide" id="own-rec"><svg class="i"><use href="#mic"/></svg><span>Nagraj mój dźwięk</span></button>
+    <label class="li" for="own-use"><span class="grow"><b>Graj moim dźwiękiem</b></span><input type="checkbox" id="own-use" class="switch"></label>
   </div>
 </div>
 

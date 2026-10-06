@@ -262,6 +262,13 @@ input.switch:checked{background:var(--primary)}
 input.switch:checked::after{transform:translateX(20px)}
 input.switch:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
 
+.tour{position:fixed;inset:0;z-index:60}
+.tour-hole{position:fixed;border-radius:18px;box-shadow:0 0 0 9999px rgba(20,12,10,.62);transition:all .3s var(--ease-out,ease)}
+.tour-card{position:fixed;left:16px;right:16px;max-width:420px;margin:0 auto;background:var(--card);border-radius:20px;padding:18px;box-shadow:var(--shadow-2);display:flex;flex-direction:column;gap:8px}
+.tour-card p{margin:0}
+.tour-step{font-size:13px;color:var(--ink-2);font-weight:600}
+@media (prefers-reduced-motion:reduce){.tour-hole{transition:none}}
+
 /* ===== Lists / groups ===== */
 .lbl{font-size:13px;font-weight:600;color:var(--ink-2);margin:22px 4px 8px}
 .lbl.first{margin-top:6px}

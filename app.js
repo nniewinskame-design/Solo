@@ -470,6 +470,7 @@ function openPiece(piece, settings) {
   try { loadState(piece, settings); } catch (e) { hud(e.message || "Nie udało się otworzyć nut.", 4000); return; }
   S.dirty = false; S.thumbDirty = !piece.thumb; S.loadedKey = null;
   S.piece.opened = Date.now();
+  if (!store.get("tourDone")) setTimeout(() => { if (S.view === "score" && !openSheetId && !store.get("tourDone")) tourStart(); }, 1600);
   $("#notice").hidden = !(S.piece.issues && S.piece.issues.length);
   if (S.piece.issues && S.piece.issues.length) {
     const nums = doubtfulBars(S.piece.issues), n = nums.length;
@@ -841,7 +842,7 @@ async function play(fromMs = 0) {
     const sr = 44100, Off = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const off = new Off(1, Math.ceil((end + LEAD + 0.5) * sr), sr);
     const bus = off.createGain(); bus.gain.value = 0.18; bus.connect(off.destination);
-    ev.forEach(e => synthNote(off, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), LEAD + e.t, LEAD + e.t + e.dur * 0.95));
+    ev.forEach(e => noteVoice()(off, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), LEAD + e.t, LEAD + e.t + e.dur * 0.95));
     const buf = await off.startRendering();
     /* private windows (Safari, Firefox, Brave) add random noise to rendered audio against fingerprinting:
        the lead-in must be silent, and if it isn't, play the notes live instead of from the rendered file */
@@ -868,7 +869,7 @@ async function playLive(ev, end, token, k, fromMs) {
   try { await ctx.resume(); } catch {}
   const bus = ctx.createGain(); bus.gain.value = 0.18; bus.connect(ctx.destination);
   const t0 = ctx.currentTime + 0.12;
-  ev.forEach(e => synthNote(ctx, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95));
+  ev.forEach(e => noteVoice()(ctx, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95));
   const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > end + LEAD + 0.3; }, pause() { try { ctx.close(); } catch {} } };
   if (token !== playToken) { src.pause(); return; }
   playState = { raf: 0, k, fromMs, url: null, peak: 1, src }; setPlayUi(true);
@@ -1834,12 +1835,14 @@ const NEWS = { "3.7": ["Kilka pytań przed czytaniem: klucz, metrum i znaki przy
   "Wyślij PDF lub obraz przez WhatsApp, e-mail i inne.",
   "PDF z Gmaila: Udostępnij → Solo (gdy Solo jest zainstalowane).",
   "Metronom i stroik.",
-  "Aranżacja w Więcej: drugi głos (tercje, seksty, trzy poziomy), akordy lub funkcje pod nutami, partia dla trąbki, saksofonu, waltorni, skrzypiec, swing."] };
+  "Aranżacja w Więcej: drugi głos (tercje, seksty, trzy poziomy), akordy lub funkcje pod nutami, partia dla trąbki, saksofonu, waltorni, skrzypiec, swing.",
+  "Mój dźwięk: nagraj jeden długi dźwięk swojego instrumentu, a Solo zagra nuty Twoim brzmieniem.",
+  "Samouczek: 5 krótkich kroków (Ustawienia → Pomoc)."] };
 /* ---------------- T22 metronome, T23 tuner ---------------- */
 const metro = { on: false, bpm: 100, beats: 4, ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [] };
 function buildToolsSheet() {
   if (!metro.on) { metro.bpm = S.piece && S.view === "score" ? curBpm() : (+store.get("metroBpm", 100) || 100); const t = S.piece && S.view === "score" ? (processedXml().match(/<beats>(\d+)<\/beats>/) || [])[1] : null; metro.beats = [2, 3, 4, 6].includes(+t) ? +t : (+store.get("metroBeats", 4) || 4); }
-  syncMetro(); syncTuner();
+  syncMetro(); syncTuner(); syncOwn();
 }
 function syncMetro() {
   $("#m-bpm").textContent = metro.bpm;
@@ -1923,7 +1926,77 @@ function tunerStop() {
   tuner.stream = tuner.ctx = null; $(".tuner").classList.remove("ok"); $("#t-note").textContent = "–"; $("#t-cents").textContent = "Zagraj jeden długi dźwięk"; syncTuner();
 }
 $("#t-go").addEventListener("click", () => tuner.on ? tunerStop() : tunerStart());
+/* T31: record one long note, find its pitch, and use it as the playback sound (pitch-shifted) */
+const own = { rate: 0, f0: 0, data: null };
+(function loadOwn() { try { const j = JSON.parse(store.get("ownSound", "null")); if (j && j.f0 && j.b64) { const bin = atob(j.b64), a = new Int16Array(bin.length / 2); for (let i = 0; i < a.length; i++) a[i] = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); own.data = Float32Array.from(a, v => v / 32767); own.rate = j.rate; own.f0 = j.f0; } } catch {} })();
+function syncOwn() {
+  $("#own-use").checked = store.get("ownUse") === "1" && !!own.data; $("#own-use").disabled = !own.data;
+  $("#own-st").textContent = own.data ? `Nagrany dźwięk: ${NOTE_PL[((Math.round(69 + 12 * Math.log2(own.f0 / 440)) % 12) + 12) % 12]} (${Math.round(own.f0)} Hz)` : "Brak nagrania";
+}
+$("#own-use").addEventListener("change", e => store.set("ownUse", e.target.checked ? "1" : "0"));
+$("#own-rec").addEventListener("click", async () => {
+  if (tuner.on) tunerStop();
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }); }
+  catch (e) { hud("Brak zgody na mikrofon.", 3000); return; }
+  const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(); await ctx.resume?.();
+  const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1), chunks = [];
+  proc.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  src.connect(proc); proc.connect(ctx.destination);
+  $("#own-st").textContent = "Nagrywam… graj!";
+  await new Promise(r => setTimeout(r, 2200));
+  proc.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop());
+  const all = new Float32Array(chunks.reduce((a, c) => a + c.length, 0)); let o = 0; chunks.forEach(c => { all.set(c, o); o += c.length; });
+  const rate = ctx.sampleRate; ctx.close();
+  /* the steady middle of the note, normalised */
+  const cut = all.slice(Math.floor(rate * 0.25), Math.floor(rate * 1.95)); let peak = 0; cut.forEach(v => { peak = Math.max(peak, Math.abs(v)); });
+  const f0 = detectPitch(cut.slice(Math.floor(cut.length / 2) - 1024, Math.floor(cut.length / 2) + 1024), rate);
+  if (peak < 0.02 || !(f0 > 40 && f0 < 1500)) { $("#own-st").textContent = "Nie usłyszałem wyraźnego dźwięku. Spróbuj jeszcze raz, bliżej telefonu."; return; }
+  own.data = cut.map(v => v / peak * .9); own.rate = rate; own.f0 = f0;
+  try {
+    const i16 = Int16Array.from(own.data, v => Math.round(v * 32767)); let s = ""; const u8 = new Uint8Array(i16.buffer);
+    for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+    store.set("ownSound", JSON.stringify({ rate, f0, b64: btoa(s) })); store.set("ownUse", "1");
+  } catch {}
+  syncOwn(); hud("Gotowe: Solo zagra Twoim dźwiękiem", 2500);
+});
+/* one note from the recorded sound: pitch-shifted, looped in its steady middle, soft ends */
+function ownNote(ctx, out, f, st, en) {
+  if (!own._buf || own._ctx !== ctx) { own._buf = ctx.createBuffer(1, own.data.length, own.rate); own._buf.copyToChannel(own.data, 0); own._ctx = ctx; }
+  const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = own._buf; s.playbackRate.value = f / own.f0;
+  s.loop = true; s.loopStart = own._buf.duration * .35; s.loopEnd = own._buf.duration * .85;
+  g.gain.setValueAtTime(0, st); g.gain.linearRampToValueAtTime(1, st + .02); g.gain.setTargetAtTime(0, en, .05);
+  s.connect(g); g.connect(out); s.start(st); s.stop(en + .4);
+}
+const noteVoice = () => (store.get("ownUse") === "1" && own.data ? ownNote : synthNote);
 $$("#t-instr button").forEach(b => b.addEventListener("click", () => { tuner.tr = +b.dataset.tr; store.set("tunerTr", tuner.tr); syncTuner(); }));
+
+/* ---------------- T24 tutorial: five steps over the real screen, skippable ---------------- */
+const TOUR = [
+  ["#pages", "Nuty", "Dotknij nuty, żeby ją poprawić. Dotknij taktu, żeby grać od niego i zobaczyć tę linię ze zdjęcia."],
+  ['#dock [data-sheet="clef"]', "Klucz", "Zmień klucz: basowy, tenorowy, altowy albo wiolinowy."],
+  ['#dock [data-sheet="key"]', "Tonacja", "Przenieś nuty wyżej lub niżej, o tercję, kwartę, kwintę albo na inny instrument."],
+  ["#btn-play", "Posłuchaj", "Odtwarzanie z kolorem granej nuty. Tempo zmienisz w Więcej."],
+  ['#dock [data-sheet="more"]', "Więcej", "Wielkość nut, układ jak w oryginale, drugi głos, akordy, metronom i stroik, druk i wysyłanie."]
+];
+let tourI = -1;
+function tourShow() {
+  const [sel, t, p] = TOUR[tourI], el = $(sel); if (!el) { tourEnd(); return; }
+  const r = el.getBoundingClientRect(), pad = 6, hole = $("#tour-hole");
+  const top = Math.max(8, r.top - pad), h = Math.min(innerHeight - 16, r.height + 2 * pad);
+  Object.assign(hole.style, { left: r.left - pad + "px", top: top + "px", width: r.width + 2 * pad + "px", height: Math.min(h, innerHeight * .45) + "px" });
+  $("#tour-n").textContent = `${tourI + 1} z ${TOUR.length}`; $("#tour-t").textContent = t; $("#tour-p").textContent = p;
+  $("#tour-next").textContent = tourI === TOUR.length - 1 ? "Gotowe" : "Dalej";
+  const card = $("#tour-card"); card.style.top = card.style.bottom = "";
+  if (r.top > innerHeight / 2) card.style.top = Math.max(16, top - card.offsetHeight - 16) + "px"; else card.style.top = Math.min(innerHeight - card.offsetHeight - 16, top + Math.min(h, innerHeight * .45) + 16) + "px";
+}
+function tourStart() { if (S.view !== "score") return; tourI = 0; $("#tour").hidden = false; tourShow(); $("#tour-next").focus(); }
+function tourEnd() { tourI = -1; $("#tour").hidden = true; store.set("tourDone", "1"); }
+$("#tour-next").addEventListener("click", () => { if (++tourI >= TOUR.length) tourEnd(); else tourShow(); });
+$("#tour-skip").addEventListener("click", tourEnd);
+$("#btn-tour").addEventListener("click", () => {
+  const go2 = () => setTimeout(tourStart, 700);
+  if (S.piece) { go("score"); go2(); } else { openPiece({ xml: exampleXml(), sourceType: "example", title: "", composer: null, instrument: "Puzon" }); go2(); }
+});
 
 /* ---------------- Install (T9) ---------------- */
 let installEvt = null;
