@@ -586,7 +586,7 @@
 
 <div class="sheet" id="sh-more" role="dialog" aria-modal="true" aria-labelledby="sh-more-t" hidden>
   <div class="grab"></div>
-  <div class="shead"><h2 class="h-m" id="sh-more-t">Narzędzia</h2><button class="done" data-close>Gotowe</button></div>
+  <div class="shead"><h2 class="h-m" id="sh-more-t">Więcej</h2><button class="done" data-close>Gotowe</button></div>
   <div class="tiles three first">
     <button class="tile" data-sheet="key"><svg class="i"><use href="#updown"/></svg><span>Tonacja</span></button>
     <button class="tile" data-sheet="clef"><svg class="i"><use href="#clef"/></svg><span>Klucz</span></button>
@@ -659,17 +659,26 @@
 <div class="sheet" id="sh-part" role="dialog" aria-modal="true" aria-labelledby="sh-part-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-part-t">Partia</h2><button class="done" data-close>Gotowe</button></div>
-  <div class="tiles three first">
+  <h3 class="lbl first">Słuchanie</h3>
+  <div class="tiles two">
     <button class="tile" id="pp-only"><svg class="i"><use href="#eye"/></svg><span>Tylko ta</span></button>
     <button class="tile" id="pp-mute" aria-pressed="false"><svg class="i"><use href="#mute"/></svg><span>Wycisz</span></button>
-    <button class="tile" id="pp-instr" aria-label="Zmień instrument, te same nuty"><svg class="i"><use href="#swap"/></svg><span>Zmień</span></button>
-    <button class="tile" id="pp-up"><svg class="i"><use href="#octave"/></svg><span>Wyżej</span></button>
-    <button class="tile" id="pp-down"><svg class="i"><use href="#octave-down"/></svg><span>Niżej</span></button>
-    <button class="tile" id="pp-change" aria-label="Instrument: strój, unisono, drugi głos, bas"><svg class="i"><use href="#sliders"/></svg><span>Instrument</span></button>
+  </div>
+  <h3 class="lbl">Brzmienie</h3>
+  <div class="list">
+    <button class="li tap" id="pp-instr"><span class="grow"><b>Zmień instrument</b><small id="pp-instr-now"></small></span><svg class="i chev"><use href="#right"/></svg></button>
+    <div class="li stepper"><button class="pill round" id="pp-down" aria-label="Oktawę niżej"><svg class="i"><use href="#minus"/></svg></button><span class="grow step-val">Oktawa</span><button class="pill round" id="pp-up" aria-label="Oktawę wyżej"><svg class="i"><use href="#plus"/></svg></button></div>
+  </div>
+  <div id="pp-rolebox"><h3 class="lbl">Instrument gra</h3>
+  <div class="chips" id="pp-role"><button data-role="voice2">2. głos</button><button data-role="voice3">3. głos</button><button data-role="melody">Ta sama melodia</button><button data-role="bass">Bas</button><button data-role="chords">Akordy</button></div>
+  <button class="link more-opts" id="pp-change">Więcej możliwości</button></div>
+  <h3 class="lbl">Udostępnij</h3>
+  <div class="tiles two">
     <button class="tile" id="pp-print"><svg class="i"><use href="#print"/></svg><span>Drukuj</span></button>
     <button class="tile" id="pp-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
-    <button class="tile danger" id="pp-del"><svg class="i"><use href="#trash"/></svg><span>Usuń</span></button>
   </div>
+  <button class="btn ghost danger wide" id="pp-del"><svg class="i"><use href="#trash"/></svg><span>Usuń partię</span></button>
+</div>
 </div>
 
 <div class="sheet" id="sh-practice" role="dialog" aria-modal="true" aria-labelledby="sh-practice-t" hidden>

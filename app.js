@@ -312,12 +312,13 @@ function dismissCover(el) {
   const a = el.animate([{ transform: "translate3d(0,0,0)" }, { transform: "translate3d(0,100%,0)" }], { duration: f.duration, easing: f.easing, fill: "forwards" });
   a.finished.then(() => { el.hidden = true; a.cancel(); }).catch(() => {});
 }
-/* Sheet headers: title in the middle, a round ✓ (done) or ✕ (cancel) button; the words stay as labels. */
+/* Sheet headers: title in the middle, "Gotowe" as a word or a round ✕ (cancel). */
 $$(".shead").forEach(h => {
   h.querySelectorAll(".done").forEach(b => {
     const label = b.textContent.trim();
     b.setAttribute("aria-label", label); b.title = label;
-    b.innerHTML = icon(b.classList.contains("ghost") ? "x" : "check");
+    /* ✕ for "close without a choice"; "Gotowe" stays a word (a lone ✓ left people guessing what it confirms) */
+    b.innerHTML = b.classList.contains("ghost") ? icon("x") : `<span>${esc(label)}</span>`;
   });
 });
 /* Sheet dragging: header and grab handle always; the body only when it is scrolled to the top. */
@@ -526,6 +527,8 @@ function examplePiece() {
 }
 /* the piece's state (parts, key, clef, transposition, tempo) without touching the screen */
 function loadState(piece, settings) {
+  /* "Melodia ludowa" was written in by Solo for its own folk tunes; the composer field stays empty when unknown */
+  if (piece && piece.composer === "Melodia ludowa" && /^(example|own)$/.test(piece.sourceType || "")) piece = { ...piece, composer: "" };
   const info = analyseXml(piece.xml);
   S.piece = { ...piece, title: piece.title || info.title || "Bez tytułu", composer: piece.composer ?? info.composer ?? "" };
   S.parts = info.parts; S.srcKey = info.key;
@@ -4177,7 +4180,18 @@ function buildPartSheet() {
   $("#pp-del").disabled = S.parts.length < 2; $("#pp-only").disabled = S.parts.length < 2;
   $("#pp-only span").textContent = S.only === pid ? "Wszystkie" : "Tylko ta";
   $("#pp-instr").disabled = (S.parts.find(p => p.id === pid) || {}).staves > 1;
+  $("#pp-instr-now").textContent = instrById(instrOfPart(pid)).name;
+  $("#pp-rolebox").hidden = pid === melodyPart();          // the melody is what the others are written from
 }
+/* what this part plays, rewritten from the melody in one tap (its instrument stays) */
+$("#pp-role").addEventListener("click", e => {
+  const b = e.target.closest("[data-role]"); if (!b) return;
+  const pid = partSheetId;
+  try {
+    const r = addPart(S.piece.xml, instrOfPart(pid), b.dataset.role, { src: melodyPart(), int: 0 }); if (!r.id) return;
+    pushUndo(); closeSheetThen(() => { applyNewXml(orchestrateXml(replacePart(r.xml, pid, r.id), r.id), r.id); hudUndo(`Teraz: ${b.textContent}`); });
+  } catch (err) { console.error(err); hud("Nie udało się zmienić partii"); }
+});
 $("#pp-only").addEventListener("click", () => { closeSheet(); showOnly(S.only === partSheetId ? null : partSheetId); });
 $("#pp-mute").addEventListener("click", () => { const id = partSheetId; if (pb.mute.has(id)) pb.mute.delete(id); else pb.mute.add(id); buildPartSheet(); renderPartStrip(); if (playState) play(playPos()); });
 async function withOnly(pid, fn) { const prev = S.only; showOnly(pid); await new Promise(r => setTimeout(r, 300)); try { await fn(); } finally { showOnly(prev); } }

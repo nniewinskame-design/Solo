@@ -1395,3 +1395,21 @@ body.editmode #btn-back{display:none}       /* while editing, "Gotowe" is the wa
 .ed-tabs button[data-ed="bar"] span{display:none}
 .toast .toast-act{color:#FF9DB5}
 #pages g.measure.doubt .note,#pages g.measure.doubt .rest,#pages g.measure.doubt .accid{fill:var(--violet)}
+/* part menu: sections, the role as slate chips, delete as a quiet red text button at the end */
+#sh-part .tiles.two{grid-template-columns:1fr 1fr}
+#pp-role>button{--h:var(--slate);--h-ink:var(--slate-ink)}
+.more-opts{display:block;margin:10px auto 0;font:500 15px var(--font);color:var(--text-2);text-decoration:underline;text-underline-offset:3px;min-height:44px}
+#pp-del{margin-top:18px}
+
+/* ===== Sheets: light, calm; "Gotowe" is a word, ✕ closes ===== */
+.sheet{background:var(--canvas)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:var(--shadow-3)!important}
+.sheet .list{background:var(--surface);box-shadow:var(--shadow-1),0 0 0 .5px var(--hairline)}
+.shead{grid-template-columns:minmax(46px,auto) 1fr minmax(46px,auto)}
+.shead .done:not(.ghost){width:auto;padding:0 16px;height:40px;min-height:40px;border-radius:999px;background:var(--slate-tint);color:var(--slate-ink);font:600 15px var(--font);box-shadow:none}
+.shead .done.ghost{width:40px;height:40px;min-height:40px;background:var(--surface-2);box-shadow:none;color:var(--text-2)}
+.tile{background:var(--surface);box-shadow:var(--shadow-1),0 0 0 .5px var(--hairline);color:var(--text)}
+.tile .i{color:var(--text-2)}
+.shead{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}       /* the title stays centred whatever the buttons are */
+.shead .done{justify-self:end}
+.shead .done.ghost:first-child{justify-self:start}
+.li.stepper{background:transparent!important}
