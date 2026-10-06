@@ -1262,3 +1262,4 @@ body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 1
 .pchip.add::before{display:none}
 .sheet .ask-row{background:var(--card);border-radius:var(--r-m);padding:8px 8px 8px 16px;min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 #score #s-sub{white-space:normal;display:block;line-height:1.35;-webkit-line-clamp:unset}   /* composer · clef · key wrap as whole words instead of "…" */
+.txt,.w-legal,#sh-doc .doc,.li small,.note{-webkit-user-select:text;user-select:text}   /* help text and contact details can be copied (K43) */

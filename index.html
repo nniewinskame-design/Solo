@@ -364,7 +364,7 @@
         <button class="btn ghost" data-act="example" id="w-example">Pokaż przykład</button>
       </div>
     </div>
-    <p class="w-legal">Korzystając z Solo, akceptujesz <a href="regulamin.html">regulamin</a> i&nbsp;<a href="prywatnosc.html">politykę&nbsp;prywatności</a>.</p>
+    <p class="w-legal">Korzystając z Solo, akceptujesz <a href="regulamin.html" data-doc="regulamin">regulamin</a> i&nbsp;<a href="prywatnosc.html" data-doc="prywatnosc">politykę&nbsp;prywatności</a>.</p>
   </div>
 </section>
 
@@ -392,7 +392,7 @@
 </section>
 
 <!-- =============== READING =============== -->
-<section id="reading" class="overlay reading" hidden>
+<section id="reading" class="overlay reading" role="dialog" aria-modal="true" aria-label="Czytanie nut" hidden>
   <div class="wrap narrow">
     <div class="rtop"><button class="link" id="btn-cancel-read">Anuluj</button><span class="foot" id="read-pages"></span></div>
     <div class="frame"><img id="read-img" alt=""><i class="scan"></i><i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i></div>

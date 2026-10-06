@@ -146,7 +146,7 @@ function renderOnb() {
     h = `<div class="onb-brand"><svg class="mark"><use href="#note"/></svg><span>Solo</span></div>
       <h1 class="h-xl">Kilka pytań na start</h1>
       <p class="onb-lead">Solo ustawi się pod Ciebie. Wszystko zmienisz później w zakładce „Ja”.</p>
-      <p class="w-legal">Korzystając z Solo, akceptujesz <a href="regulamin.html">regulamin</a> i&nbsp;<a href="prywatnosc.html">politykę&nbsp;prywatności</a>.</p>`;
+      <p class="w-legal">Korzystając z Solo, akceptujesz <a href="regulamin.html" data-doc="regulamin">regulamin</a> i&nbsp;<a href="prywatnosc.html" data-doc="prywatnosc">politykę&nbsp;prywatności</a>.</p>`;
     next = "Zaczynamy";
   } else if (name === "instr") {
     h = `<h2 class="h-l">Na czym grasz?</h2><div id="onb-picker"></div>`;

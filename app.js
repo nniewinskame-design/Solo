@@ -415,7 +415,9 @@ async function openDoc(name) {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && cam.open) { closeCamera(); return; }
   if (e.key === "Escape" && openSheetId) closeSheet();
-  if (e.key === " " && S.view === "score" && !openSheetId && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); $("#btn-play").click(); }
+  if (e.key === "Escape" && tourI >= 0) { tourEnd(); return; }
+  /* Space plays, except on a focused button (it presses the button) or a field (K40) */
+  if (e.key === " " && S.view === "score" && !openSheetId && !/INPUT|TEXTAREA|SELECT|BUTTON|A/.test(document.activeElement.tagName)) { e.preventDefault(); $("#btn-play").click(); }
 });
 
 /* ---------------- Home / library ---------------- */
@@ -1866,7 +1868,7 @@ function syncKeySheet() {
   if (kn.textContent && kn.textContent !== nk && canAnimate()) { kn.classList.remove("bump"); void kn.offsetWidth; kn.classList.add("bump"); }
   kn.textContent = nk;
   $("#key-desc").textContent = moved ? `${cap(intervalPl(S.iv))} · oryginał: ${keyName(S.srcKey.fifths, S.srcKey.mode)}` : "Jak w oryginale";
-  $("#key-range").value = String(k);
+  $("#key-range").value = String(k); $("#key-range").setAttribute("aria-valuetext", nk);   // a screen reader says "F-dur", not "-1"
   if (!slider.dragging) placeHandle();
   const h = $("#handle");
   h.textContent = keyName(S.srcKey.fifths + intervalFifths(S.iv), S.srcKey.mode).replace(/-(dur|moll)$/, "");
@@ -2060,7 +2062,7 @@ $("#btn-report").addEventListener("click", async () => {
   try {
     /* the original photo goes along only if the system share sheet can carry files; the person picks the app */
     if (p.images && p.images[0] && navigator.canShare) {
-      const blob = await (await fetch(p.images[0])).blob(), file = new File([blob], "oryginal.jpg", { type: "image/jpeg" });
+      const blob = dataUrlToBlob(p.images[0]), file = new File([blob], "oryginal.jpg", { type: "image/jpeg" });
       if (navigator.canShare({ files: [file] })) { await navigator.share({ ...data, files: [file] }); return; }
     }
     if (navigator.share) { await navigator.share(data); return; }
