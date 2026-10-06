@@ -2036,9 +2036,13 @@ async function printScore() {
   const pa = $("#print-area"); pa.innerHTML = html;
   const first = pa.querySelector("svg"); if (first) enlargeTitle(first, 1.9);
   S.loadedKey = null;
-  setTimeout(() => window.print(), 80);
+  setTimeout(() => { window.print(); clearPrintOnTouch(); }, 80);
 }
-window.addEventListener("afterprint", () => { $("#print-area").innerHTML = ""; if (S.view === "score") render(); });
+function clearPrint() { const pa = $("#print-area"); if (!pa.innerHTML) return; pa.innerHTML = ""; if (S.view === "score") render(); }
+window.addEventListener("afterprint", clearPrint);
+/* iOS Safari fires afterprint unreliably: the pages of SVG would stay and the next render be skipped, so the first
+   touch after the print sheet has closed clears them too (the page gets no touches while the sheet is open), H4 */
+function clearPrintOnTouch() { setTimeout(() => document.addEventListener("pointerdown", clearPrint, { once: true, capture: true }), 1000); }
 /* ---- PDF: each A4 page drawn at 300 dpi and packed into a small PDF written right here ---- */
 const PDF_DPI = 300, PDF_W = 2480, PDF_H = 3508;
 async function pageCanvas(svgStr) {
