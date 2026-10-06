@@ -18,7 +18,7 @@ const store = {
 const fold = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l");
 function hud(msg, ms = 2400) {
   const h = $("#toast"); if (!h) return;
-  h.textContent = msg; h.classList.add("show");
+  h.innerHTML = ""; const t = document.createElement("span"); t.className = "t-msg"; t.textContent = msg; h.appendChild(t); h.classList.add("show");
   clearTimeout(hud._t); hud._t = setTimeout(() => h.classList.remove("show"), ms);
 }
 /* ---------------- Music theory helpers ---------------- */

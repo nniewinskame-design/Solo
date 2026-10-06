@@ -1805,3 +1805,36 @@ body.immersive .loopbar{display:none}
 .snd-wave{background:var(--surface)!important;color:var(--lime-ink)!important;box-shadow:0 0 0 1px var(--lime-bd),0 0 0 3px var(--surface)!important}
 .snd-sq{background:var(--h-tint,var(--surface-2))!important;border-radius:50%!important}
 .snd-tile{box-shadow:var(--card-shadow),inset 0 0 0 1px var(--hairline)!important}
+
+/* ---- notifications as in modern apps: a small white card at the top, short text that wraps, one action ---- */
+.toast{top:calc(var(--safe-t) + 10px)!important;bottom:auto!important;width:max-content;max-width:min(360px,calc(100vw - 32px))!important;min-height:0!important;
+  display:flex!important;align-items:center;gap:12px;padding:11px 14px 11px 16px!important;border-radius:16px!important;
+  background:rgba(255,255,255,.96)!important;color:var(--text)!important;-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+  box-shadow:0 8px 28px rgba(15,23,51,.14),0 0 0 1px var(--hairline)!important;font:500 14px/1.35 var(--font)!important;letter-spacing:-.005em;text-align:left!important}
+.toast .t-msg{flex:1;min-width:0;overflow-wrap:anywhere}
+.toast .toast-act{flex:none;margin:0!important;min-height:32px;padding:0 12px!important;border-radius:999px;background:var(--brand-tint)!important;color:var(--brand-ink)!important;font:600 13.5px var(--font)!important;text-decoration:none!important}
+
+/* ---- the editor: Takt first, set apart as the main tool ---- */
+.ed-tabs .ed-bar{order:-1;background:var(--brand)!important;color:#fff!important;padding:0 14px!important;margin-right:6px}
+.ed-tabs .ed-bar span{display:inline!important}
+
+/* ---- solid colour, used everywhere the same way (Nat: colour here and there tires the eye): every control is blue —
+   round buttons in a blue tint with a blue icon, every chosen state solid blue with white ---- */
+.pill.round,.pill.sm,#score .sbar .pill.round{background:var(--brand-tint)!important;color:var(--brand-ink)!important;box-shadow:none!important}
+.pill.round:disabled{background:var(--surface-2)!important;color:var(--disabled)!important}
+.seg button[aria-pressed=true]{background:var(--brand)!important;color:#fff!important;box-shadow:0 2px 8px rgb(42 98 240/.25)!important}
+.chips>button:not([style])[aria-pressed="true"],.cols .cchip[aria-selected="true"],.ed-tabs button[aria-selected="true"],.meter .mt-own.on,#btn-loop[aria-pressed="true"]{
+  background:var(--brand)!important;border-color:transparent!important;color:#fff!important}
+.chips>button:not([style])[aria-pressed="true"]::before,.cols .cchip[aria-selected="true"] .i{background-color:#fff;color:#fff!important}
+.cols .cchip[aria-selected="true"] .i{background:none}
+.tabbar .slide{background:var(--brand)!important;border:0!important}
+.tabbar button[aria-current]{color:#fff!important}
+.tile .i,.ic,.sheet .ic,.group .li .ic,.list .li .ic{color:var(--brand)!important}
+.li.danger .ic{color:var(--bad-ink)!important}
+.dock.transport .tool:not(.play){color:var(--brand-ink)}
+.dock.transport .tempo{background:var(--brand-tint)!important;color:var(--brand-ink)}
+.ed-pane button{color:var(--brand-ink)}
+.ed-tabs button[aria-selected="true"] span{display:none!important}
+.ed-tabs button[aria-selected="true"]{padding:0 12px!important}
+.ed-tabs .ed-bar{background:var(--brand-tint)!important;color:var(--brand-ink)!important;font-weight:650!important;position:relative;margin-right:10px!important}
+.ed-tabs .ed-bar::after{content:"";position:absolute;right:-8px;top:10px;bottom:10px;width:1px;background:var(--hairline-2)}
