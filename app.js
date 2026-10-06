@@ -3308,11 +3308,9 @@ function buildAsk() {
   };
   chips("#ask-clef", "#ask-clef-c", o => !o.value ? "Nie wiem" : CL[o.value] ? `<svg class="cl ${CL[o.value]}"><use href="#clef-${CL[o.value]}"/></svg>${NAME[o.value]}` : esc(o.textContent.replace(/ w całym utworze/, "")));
   chips("#ask-time", "#ask-time-c", o => esc(o.value || "Nie wiem"));
-  const k = $("#ask-key"), kb = $("#ask-key-c"); if (!k || !kb) return;
-  const vals = [...k.options].map(o => o.value).filter(Boolean).map(Number).sort((a, b) => a - b), cur = k.value === "" ? null : +k.value;
-  const name = v => v == null ? "Nie wiem" : !v ? "Bez znaków" : `${Math.abs(v)} ${v > 0 ? plural(Math.abs(v), "krzyżyk", "krzyżyki", "krzyżyków") : plural(Math.abs(v), "bemol", "bemole", "bemoli")}`;
-  kb.innerHTML = `<button type="button" class="pill round sm" data-k="-1" aria-label="Więcej bemoli" ${cur != null && cur <= vals[0] ? "disabled" : ""}><svg class="i"><use href="#minus"/></svg></button><b class="ak-val">${name(cur)}</b><button type="button" class="pill round sm" data-k="1" aria-label="Więcej krzyżyków" ${cur != null && cur >= vals[vals.length - 1] ? "disabled" : ""}><svg class="i"><use href="#plus"/></svg></button>${cur != null ? `<button type="button" class="ak-x" data-k="0">Nie wiem</button>` : ""}`;
-  kb.onclick = e => { const x = e.target.closest("[data-k]"); if (!x) return; const d = +x.dataset.k; k.value = d === 0 ? "" : String(Math.max(vals[0], Math.min(vals[vals.length - 1], (cur ?? 0) + (cur == null ? 0 : d)))); k.dispatchEvent(new Event("change", { bubbles: true })); buildAsk(); };
+  /* the key signature: a drop-down list (Nat: "should be a list that opens"), the stored select itself, styled */
+  const k = $("#ask-key"), pill = $("#ask-key-pill"); if (!k || !pill) return;
+  if (k.parentNode !== pill) { pill.appendChild(k); pill.insertAdjacentHTML("beforeend", `<svg class="i"><use href="#down"/></svg>`); k.addEventListener("change", () => k.blur()); }
 }
 
 /* ---- Reading on the device: homr (open-source optical music recognition), free and offline ----

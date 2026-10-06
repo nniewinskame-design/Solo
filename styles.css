@@ -2019,3 +2019,13 @@ details.ask .ask-body .lbl{margin:10px 0 6px}
 .ask-key-c .ak-x{margin-left:auto;font:500 13px var(--font);color:var(--brand-ink);background:none;border:0}
 /* no "Co nowego" anywhere (Nat, 7 Oct) */
 #news-nudge,#news-det{display:none!important}
+/* clef glyphs: one box size for all, centred, so they line up in the chips */
+svg.cl,svg.cl.g,svg.cl.f,svg.cl.c{width:16px!important;height:22px!important;margin:0!important;display:block;flex:none}
+.clefchips>button{align-items:center!important}
+/* a drop-down shaped like a field: the native list opens on tap */
+.selpill{position:relative;display:flex;align-items:center;height:42px;border-radius:12px;background:var(--surface-2);max-width:260px}
+.selpill select{appearance:none;-webkit-appearance:none;width:100%;height:100%;border:0;background:none;padding:0 38px 0 14px;font:500 15px var(--font);color:var(--text);outline:none}
+.selpill svg.i{position:absolute;right:12px;width:18px;height:18px;pointer-events:none;color:var(--text-3)}
+details.ask .ask-key-c{display:none}
+details.ask .selpill select{display:block!important}
+svg.cl.g{height:27px!important;margin:-3px 0!important}
