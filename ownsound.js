@@ -82,14 +82,13 @@ function openOwnFlow() {
 }
 async function closeOwnFlow() { stopListening(); cancelAnimationFrame(of.raf); fadeOut($("#ownf"), 220); syncOwn(); }
 $("#ownf-x").addEventListener("click", closeOwnFlow);
+$("#ownf-body").addEventListener("click", () => { if (of.ctx && of.ctx.state !== "running") of.ctx.resume(); });
 async function startListening() {
   if (of.stream) return true;
-  const AC = window.AudioContext || window.webkitAudioContext; of.ctx = new AC(); try { of.ctx.resume(); } catch {}
-  try { of.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
-  catch (e) { hud(e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Możesz ją dać w ustawieniach przeglądarki." : "Nie udało się włączyć mikrofonu.", 4000); try { of.ctx.close(); } catch {} of.ctx = null; return false; }
-  try { await of.ctx.resume(); } catch {}
+  let m; try { m = await openMic(); } catch (e) { hud(micError(e), 4500); return false; }
+  of.stream = m.stream; of.ctx = m.ctx; const src0 = m.src;
   of.sr = of.ctx.sampleRate; of.ring = new Float32Array(Math.ceil(of.sr * 4)); of.rp = 0;
-  const src = of.ctx.createMediaStreamSource(of.stream), proc = of.ctx.createScriptProcessor(2048, 1, 1), mute = of.ctx.createGain(); mute.gain.value = 0;
+  const src = src0, proc = of.ctx.createScriptProcessor(2048, 1, 1), mute = of.ctx.createGain(); mute.gain.value = 0;
   proc.onaudioprocess = e => { const d = e.inputBuffer.getChannelData(0); for (let i = 0; i < d.length; i++) { of.ring[of.rp] = d[i]; of.rp = (of.rp + 1) % of.ring.length; } };
   src.connect(proc); proc.connect(mute); mute.connect(of.ctx.destination); of.proc = proc;
   return true;
@@ -104,6 +103,7 @@ function listenLoop(t) {
   if (of.state !== "listen") return;
   of.raf = requestAnimationFrame(listenLoop);
   if (t - (of.lastT || 0) < 33) return; of.lastT = t;
+  if (of.ctx && of.ctx.state !== "running") { of.ctx.resume().catch(() => {}); drawRing(0, null, "Dotknij, żeby włączyć"); return; }
   const target = of.targets[of.step], buf = lastAudio(0.09);
   let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v));
   const f = detectPitch(buf.length >= 4096 ? buf.subarray(buf.length - 4096) : buf, of.sr, 30, 1500), ok = f > 0 && detectPitch.clarity > 0.88;

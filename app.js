@@ -2557,24 +2557,41 @@ function detectPitch(buf, sr, minF = 40, maxF = 1500) {
   }
   return srD / (pick + shift);
 }
+/* The microphone first, then an audio context at the microphone's own rate. The other order fails on phones:
+   iPhone switches its audio mode when the mic starts and an earlier context hears silence; Chrome and Firefox
+   refuse to connect a mic running at another rate. Every failure is said on screen, not swallowed. */
+async function openMic() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("Ta przeglądarka nie daje dostępu do mikrofonu."), { name: "NoMic" });
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
+  catch (e) { if (e && e.name === "OverconstrainedError") stream = await navigator.mediaDevices.getUserMedia({ audio: true }); else throw e; }
+  const AC = window.AudioContext || window.webkitAudioContext, rate = stream.getAudioTracks()[0]?.getSettings?.().sampleRate;
+  let ctx; try { ctx = rate ? new AC({ sampleRate: rate }) : new AC(); } catch { ctx = new AC(); }
+  try { await ctx.resume(); } catch {}
+  let src; try { src = ctx.createMediaStreamSource(stream); }
+  catch { try { ctx.close(); } catch {} ctx = new AC(); try { await ctx.resume(); } catch {} src = ctx.createMediaStreamSource(stream); }
+  return { stream, ctx, src };
+}
+function micError(e) {
+  return e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Zezwól w ustawieniach strony (ikona obok adresu)." :
+    e && e.name === "NotFoundError" ? "Nie znaleziono mikrofonu." : e && e.name === "NotReadableError" ? "Mikrofon jest zajęty przez inną aplikację." :
+    (e && e.message) || "Nie udało się włączyć mikrofonu.";
+}
 async function tunerStart() {
-  /* the audio context is made inside the tap (iPhone needs that), the microphone without phone-call processing */
-  const AC = window.AudioContext || window.webkitAudioContext; tuner.ctx = new AC(); try { tuner.ctx.resume(); } catch {}
-  try {
-    tuner.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
-  } catch (e) {
-    try { tuner.ctx.close(); } catch {} tuner.ctx = null;
-    hud(e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Możesz ją dać w ustawieniach przeglądarki." : "Nie udało się włączyć mikrofonu.", 4000); return;
-  }
-  try { await tuner.ctx.resume(); } catch {}
+  $("#t-hz").textContent = "Włączam mikrofon…";
+  let m; try { m = await openMic(); }
+  catch (e) { $("#t-hz").textContent = micError(e); hud(micError(e), 4500); return; }
+  tuner.stream = m.stream; tuner.ctx = m.ctx;
   tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 4096; tuner.buf = new Float32Array(tuner.an.fftSize);
-  tuner.ctx.createMediaStreamSource(tuner.stream).connect(tuner.an);
+  m.src.connect(tuner.an);
   Object.assign(tuner, { on: true, hist: [], shown: null, cand: null, candN: 0, lastOn: 0, trace: [] }); syncTuner();
+  $("#t-hz").textContent = "Zagraj długi dźwięk";
   try { wakeLock = wakeLock || await navigator.wakeLock?.request("screen"); } catch {}
   tuner.raf = requestAnimationFrame(tunerLoop);
 }
 function tunerAnalyse(t) {
-  if (tuner.ctx.state !== "running") { tuner.ctx.resume?.().catch(() => {}); return; }
+  /* the phone paused the sound (a call, the screen, another app): one tap brings it back */
+  if (tuner.ctx.state !== "running") { tuner.ctx.resume?.().catch(() => {}); $("#t-hz").textContent = "Dotknij, żeby włączyć"; return; }
   tuner.an.getFloatTimeDomainData(tuner.buf);
   const f = detectPitch(tuner.buf, tuner.ctx.sampleRate, 27, 1400);
   if (!(f > 0) || detectPitch.clarity < (tuner.shown === null ? 0.9 : 0.85)) { tuner.trace.push({ t, c: null }); return; }
@@ -2631,6 +2648,7 @@ function tunerStop() {
   if (!playState && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
 }
 $("#t-go").addEventListener("click", () => tuner.on ? tunerStop() : tunerStart());
+$("#tuner2").addEventListener("click", e => { if (tuner.on && tuner.ctx && tuner.ctx.state !== "running" && !e.target.closest("#t-go")) tuner.ctx.resume(); });
 $$("#t-tol button").forEach(b => b.addEventListener("click", () => { tuner.tol = +b.dataset.tol; store.set("tunerTol", tuner.tol); syncTuner(); }));
 const setA4 = v => { tuner.a4 = Math.max(430, Math.min(450, v)); store.set("tunerA4", tuner.a4); syncTuner(); };
 $("#t-a-down").addEventListener("click", () => setA4(tuner.a4 - 1));
