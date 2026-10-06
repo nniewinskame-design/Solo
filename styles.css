@@ -229,6 +229,17 @@ body.immersive .dock{transform:translate(-50%,140%);opacity:0;pointer-events:non
 .peek canvas{width:100%;height:auto;border-radius:8px;background:#fff;display:block}
 .peek figcaption{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--ink-2);padding:0 4px}
 
+.editbar{position:fixed;left:0;right:0;bottom:calc(var(--dock-h,66px) + 26px + var(--safe-b));z-index:5;display:flex;justify-content:center;pointer-events:none}
+.edit-row{pointer-events:auto;display:flex;gap:4px;overflow-x:auto;max-width:min(100% - 24px,760px);padding:6px;border-radius:20px;background:var(--card);box-shadow:var(--shadow-2);scrollbar-width:none}
+.edit-row::-webkit-scrollbar{display:none}
+.edit-row button{flex:none;min-width:58px;min-height:54px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--ink);font:600 12px var(--sans)}
+.edit-row button b{font:700 20px/1 "Bravura Text",var(--sans)}
+.edit-row button:active{background:var(--fill)}
+.edit-row .ed-done{background:var(--primary);color:var(--on-primary)}
+.edit-row button:disabled{opacity:.35}
+body.editing .scroller{padding-bottom:calc(var(--dock-h,74px) + 120px + var(--safe-b))}
+#pages g.nsel,#pages g.nsel *{fill:#2F6FDB!important;stroke:#2F6FDB}
+
 /* ===== Lists / groups ===== */
 .lbl{font-size:13px;font-weight:600;color:var(--ink-2);margin:22px 4px 8px}
 .lbl.first{margin-top:6px}

@@ -341,6 +341,7 @@ document.addEventListener("click", e => {
   if (a) {
     const act = a.dataset.act;
     if (act === "example") { hideWelcome(); openPiece({ xml: exampleXml(), sourceType: "example", title: "", composer: null, instrument: "Puzon" }); }
+    if (act === "blank") { hideWelcome(); openPiece({ xml: blankXml(), sourceType: "own", title: "Moje nuty", composer: "", instrument: "Puzon" }); S.dirty = true; savePiece(); hud("Dotknij pauzy, potem „Nuta”, i przesuwaj ją w górę lub w dół", 4000); }
     if (act === "camera") { if (a.id === "w-camera") store.set("welcomed", "1"); openCamera(); }
     if (act === "print") closeSheetThen(printScore);
     if (act === "pdf") closeSheetThen(savePdf);
@@ -396,7 +397,7 @@ async function refreshLibrary(animate) {
   G.classList.toggle("stagger", !refreshLibrary.done && canAnimate()); refreshLibrary.done = true;
   list.forEach((p, idx) => {
     const b = document.createElement("div"); b.className = "card"; b.style.setProperty("--i", Math.min(idx, 14));
-    const meta = p.composer || (p.sourceType === "ai" || p.sourceType === "device" ? "Ze zdjęcia" : p.sourceType === "example" ? "Przykład" : "Z pliku");
+    const meta = p.composer || (p.sourceType === "ai" || p.sourceType === "device" ? "Ze zdjęcia" : p.sourceType === "example" ? "Przykład" : p.sourceType === "own" ? "Własne" : "Z pliku");
     b.innerHTML = `<button class="thumb" aria-label="Otwórz: ${esc(p.title || "Bez tytułu")}">${p.thumb ? `<img src="${esc(p.thumb)}" alt="">` : `<span class="ph">${esc(p.title || "Bez tytułu")}</span>`}${p.id === latest ? `<i class="ribbon" title="Ostatnio grane"></i>` : ""}</button>
       <div class="t" role="button" tabindex="0" aria-label="Zmień tytuł">${esc(p.title || "Bez tytułu")}</div><div class="m"><span class="c${p.composer ? "" : " ph"}" role="button" tabindex="0" aria-label="Zmień kompozytora">${esc(meta)}</span>${p.keyLabel ? `<button class="key" aria-label="Tonacja: ${esc(p.keyLabel)}">${esc(shortKey(p.keyLabel))}</button>` : ""}</div>`;
     b.querySelector(".thumb").addEventListener("click", () => openPiece(p, p.settings));
@@ -472,7 +473,7 @@ function openPiece(piece, settings) {
     $("#notice-text").textContent = n ? `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
   }
   updateTitles();
-  $("#peek").hidden = true;
+  $("#peek").hidden = true; S.undo = []; S.editSel = null; S.keepSel = null; $("#editbar").hidden = true; document.body.classList.remove("editing");
   $("#pages").innerHTML = `<div class="loading-page"><span class="spinner"></span></div>`;
   $("#scroller").scrollTop = 0;
   if (S.view !== "score") go("score");
@@ -507,7 +508,7 @@ function recordFromState() {
     id: S.piece.id || ("p" + now.toString(36) + Math.random().toString(36).slice(2, 7)),
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
-    issues: S.piece.issues || [], lines: S.piece.lines || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
+    issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
     settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, zoom: S.zoom, layout: S.layout },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
@@ -587,6 +588,7 @@ async function doRender() {
     const doubt = new Set(doubtfulBars(S.piece.issues));
     if (doubt.size) { const order = drawnBars(xml); $$("#pages g.measure").forEach((g, i) => g.classList.toggle("doubt", doubt.has(order[i]))); }
     S.fromMs = 0; S.fromBar = -1;
+    if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
     S.mode = mode; S.loadedKey = "view";
     S.baseBpm = scoreBpm();
     if (openSheetId === "more") syncTempo();
@@ -597,8 +599,101 @@ async function doRender() {
 }
 let lastW = window.innerWidth;
 window.addEventListener("resize", () => { if (Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; render(); } });
-/* tap a bar: it is selected and ▶ plays from there; tap it again (or outside the bars) to clear */
+/* ---------------- T18: correcting notes by tapping ---------------- */
+const ED_TYPES = ["16th", "eighth", "quarter", "half", "whole"], ED_LEN = { "16th": .25, eighth: .5, quarter: 1, half: 2, whole: 4 };
+function soloPartId() { const k = S.parts.filter(p => p.keep); return k.length === 1 ? k[0].id : null; }
+/* the drawn note -> the MusicXML <note>: same bar, same position among notes and rests */
+function locateNote(el) {
+  const m = el.closest("g.measure"); if (!m) return null;
+  const di = [...$$("#pages g.measure")].indexOf(m), bar = drawnBars(processedXml())[di];
+  const i = [...m.querySelectorAll("g.note, g.rest, g.mRest")].indexOf(el);
+  return bar && i >= 0 ? { bar, i, di } : null;
+}
+function xmlNoteAt(doc, sel) {
+  const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === soloPartId()); if (!part) return null;
+  const m = kids(part, "measure")[sel.bar - 1]; if (!m) return null;
+  return { part, m, n: kids(m, "note")[sel.i] || null };
+}
+function selectNote(sel) {
+  S.editSel = sel; document.body.classList.toggle("editing", !!sel); $("#editbar").hidden = !sel;
+  $$("#pages g.nsel").forEach(g => g.classList.remove("nsel"));
+  if (!sel) return;
+  const m = $$("#pages g.measure")[sel.di], el = m && [...m.querySelectorAll("g.note, g.rest, g.mRest")][sel.i];
+  if (el) el.classList.add("nsel");
+  const at = xmlNoteAt(parseXml(S.piece.xml), sel);
+  $("#ed-rest-t").textContent = at && at.n && kid(at.n, "rest") ? "Nuta" : "Pauza";
+  $("#ed-undo").disabled = !(S.undo && S.undo.length);
+}
+function divisionsAt(part, m) {
+  let div = 1;
+  for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div; }); if (mm === m) break; }
+  return div;
+}
+function editNote(op) {
+  if (op === "done") { selectNote(null); return; }
+  if (op === "undo") { if (!S.undo || !S.undo.length) return; S.piece.xml = S.undo.pop(); afterEdit(); return; }
+  const sel = S.editSel; if (!sel) return;
+  const doc = parseXml(S.piece.xml), at = xmlNoteAt(doc, sel); if (!at || !at.n) return;
+  const n = at.n, p = kid(n, "pitch"), fifths = S.srcKey ? S.srcKey.fifths : 0;
+  const dropAcc = () => kids(n, "accidental").forEach(a => a.remove());
+  const setAlter = v => { if (!p) return; let al = kid(p, "alter"); if (v) { if (!al) { al = doc.createElement("alter"); p.insertBefore(al, kid(p, "octave")); } al.textContent = String(v); } else if (al) al.remove(); dropAcc(); };
+  const move = d => { if (!p) return; const idx = parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")] + d, st = STEP_N[((idx % 7) + 7) % 7]; kid(p, "step").textContent = st; kid(p, "octave").textContent = String(Math.floor(idx / 7)); setAlter(keyAlter(fifths, st)); };
+  if (op === "up") move(1); else if (op === "down") move(-1);
+  else if (op === "octup") move(7); else if (op === "octdown") move(-7);
+  else if (op === "flat") setAlter(-1); else if (op === "sharp") setAlter(1); else if (op === "natural") setAlter(0);
+  else if (op === "shorter" || op === "longer") {
+    const div = divisionsAt(at.part, at.m), cur = txt(n, "type") || ED_TYPES.find(t => Math.abs(ED_LEN[t] * div - parseFloat(txt(n, "duration"))) < .01) || "quarter";
+    const ni = Math.max(0, Math.min(ED_TYPES.length - 1, ED_TYPES.indexOf(cur) + (op === "longer" ? 1 : -1))), nt = ED_TYPES[ni];
+    kids(n, "dot").forEach(d => d.remove());
+    const r = kid(n, "rest"); if (r) r.removeAttribute("measure");
+    kid(n, "duration").textContent = String(ED_LEN[nt] * div);
+    let ty = kid(n, "type"); if (!ty) { ty = doc.createElement("type"); n.insertBefore(ty, kid(n, "duration").nextSibling.nextSibling || null); }
+    ty.textContent = nt;
+  } else if (op === "rest") {
+    if (p) { const r = doc.createElement("rest"); n.replaceChild(r, p); dropAcc(); kids(n, "stem").forEach(s => s.remove()); }
+    else {
+      const prev = [...at.part.getElementsByTagName("pitch")].filter(x => x.compareDocumentPosition(n) & 4).pop();
+      const np = doc.createElement("pitch"); np.innerHTML = prev ? prev.innerHTML : (S.srcClef === "bass" ? "<step>B</step><octave>3</octave>" : "<step>B</step><octave>4</octave>");
+      const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes" && !kid(n, "type")) { const ty = doc.createElement("type"); ty.textContent = "whole"; n.appendChild(ty); }
+      n.replaceChild(np, r);
+    }
+  } else if (op === "add") {
+    /* a copy of the note right after it (a bar that was only a rest becomes a note): then move it where it belongs */
+    if (kid(n, "rest") && kid(n, "rest").getAttribute("measure") === "yes") { editNote("rest"); return; }
+    const c = n.cloneNode(true); kids(c, "chord").forEach(x => x.remove()); n.parentNode.insertBefore(c, n.nextSibling);
+    S.editSel = { ...sel, i: sel.i + 1 };
+  } else if (op === "delete") {
+    if (kids(at.m, "note").length > 1) { n.remove(); S.editSel = null; }
+    else { const r = doc.createElement("rest"); r.setAttribute("measure", "yes"); if (p) n.replaceChild(r, p); }
+  }
+  S.undo = S.undo || []; S.undo.push(S.piece.xml); if (S.undo.length > 60) S.undo.shift();
+  if (!S.piece.origXml) S.piece.origXml = S.undo[0];
+  S.piece.xml = new XMLSerializer().serializeToString(doc);
+  afterEdit();
+}
+function afterEdit() {
+  /* the rhythm check follows the edit: fixed bars lose their red, broken ones get it */
+  const other = (S.piece.issues || []).filter(t => !/wartości rytmicznych/.test(t));
+  S.piece.issues = [...barIssues(S.piece.xml), ...other].sort((a, b) => parseInt(a.slice(5), 10) - parseInt(b.slice(5), 10));
+  S.keepSel = S.editSel; changed();
+  $("#btn-restore").hidden = !S.piece.origXml;
+  const nums = doubtfulBars(S.piece.issues);
+  if (!$("#notice").hidden || nums.length) { $("#notice").hidden = !nums.length; if (nums.length) { $("#notice-title").textContent = `${nums.length} ${plural(nums.length, "takt", "takty", "taktów")} do sprawdzenia`; $("#notice-text").textContent = `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${nums.length > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.`; } }
+}
+$$("#editbar [data-ed]").forEach(b => b.addEventListener("click", () => editNote(b.dataset.ed)));
+$("#btn-restore").addEventListener("click", () => {
+  if (!S.piece.origXml) return;
+  S.undo = []; S.piece.xml = S.piece.origXml; delete S.piece.origXml; S.editSel = null; selectNote(null);
+  S.piece.issues = barIssues(S.piece.xml); afterEdit(); closeSheet(); hud("Przywrócono odczyt");
+});
+
+/* tap a note: correct it; tap a bar elsewhere: it is selected and ▶ plays from there; tap again (or outside the bars) to clear */
 $("#pages").addEventListener("click", e => {
+  const ne = e.target.closest("g.note, g.rest, g.mRest");
+  if (ne && S.piece && soloPartId()) {
+    const sel = locateNote(ne);
+    if (sel) { if (S.editSel && S.editSel.di === sel.di && S.editSel.i === sel.i) selectNote(null); else selectNote(sel); return; }
+  }
   const m = e.target.closest("g.measure");
   if (!m) { if (S.fromMs) clearFromBar(); else if (e.target.closest(".page")) document.body.classList.toggle("immersive"); return; }
   if (m.classList.contains("sel")) { clearFromBar(); return; }
@@ -1136,6 +1231,7 @@ $$("#layoutseg button").forEach(b => b.addEventListener("click", () => { S.layou
 function syncLayout() { $("#layout-box").hidden = !S.hasLines; $$("#layoutseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.layout === S.layout))); }
 function buildMoreSheet() {
   syncLayout();
+  $("#btn-restore").hidden = !(S.piece && S.piece.origXml);
   const P = $("#parts"); P.innerHTML = "";
   const isPiano = p => p.staves > 1 || PIANO_RE.test(p.name);
   const solo = S.parts.find(p => !isPiano(p));
@@ -1673,7 +1769,9 @@ const NEWS = { "3.7": ["Kilka pytań przed czytaniem: klucz, metrum i znaki przy
   "Odtwarzanie działa też w oknie prywatnym (incognito).",
   "Nuty ze zdjęcia mają tyle taktów w linii, ile na kartce („Jak w oryginale”, zmiana w Więcej).",
   "Bemole i krzyżyki odczytane ze zdjęcia są teraz widoczne w nutach.",
-  "Dotknij taktu, a nad nutami pokaże się ta linia ze zdjęcia oryginału."] };
+  "Dotknij taktu, a nad nutami pokaże się ta linia ze zdjęcia oryginału.",
+  "Poprawianie nut: dotknij nuty i przesuń ją, zmień długość, dodaj znak, zamień na pauzę. Cofnij i Przywróć odczyt.",
+  "Pusta pięciolinia: napisz własną melodię."] };
 /* ---------------- Install (T9) ---------------- */
 let installEvt = null;
 const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;

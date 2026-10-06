@@ -479,6 +479,29 @@ function drawnBars(xml) {
   });
   return out;
 }
+/* bars of the first part that don't add up to their metre (also used after editing) */
+function barIssues(xml) {
+  const part = parseXml(xml).getElementsByTagName("part")[0], out = []; if (!part) return out;
+  const ms = kids(part, "measure"); let div = 1, beats = 4, bt = 4;
+  ms.forEach((m, i) => {
+    kids(m, "attributes").forEach(a => {
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+    });
+    let sum = 0, whole = false;
+    kids(m, "note").forEach(n => { if (kid(n, "chord") || kid(n, "grace")) return; sum += parseFloat(txt(n, "duration")) || 0; const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true; });
+    const full = div * beats * 4 / bt, pickup = (i === 0 || i === ms.length - 1) && sum < full;
+    if (!whole && !m.getElementsByTagName("multiple-rest").length && sum > 0 && Math.abs(sum - full) > 0.01 && !pickup)
+      out.push(`Takt ${i + 1}: ${sum > full ? "za dużo" : "za mało"} wartości rytmicznych`);
+  });
+  return out;
+}
+/* T19: an empty piece to write your own tune: bass clef (trombone), 4/4, C major, 8 empty bars */
+function blankXml(bars = 8) {
+  let m = "";
+  for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>4</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes>` : ""}<note><rest measure="yes"/><duration>16</duration><voice>1</voice></note></measure>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>Moje nuty</work-title></work><part-list><score-part id="P1"><part-name>Głos solowy</part-name></score-part></part-list><part id="P1">${m}</part></score-partwise>`;
+}
 function doubtfulBars(issues) { return [...new Set((issues || []).map(t => parseInt((t.match(/Takt (\d+)/) || [])[1], 10)).filter(Boolean))]; }
 
 /* ---------------- AI JSON -> MusicXML ---------------- */

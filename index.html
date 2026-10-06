@@ -81,6 +81,7 @@
       <div class="libhead">
         <h2 class="h-l">Twoje nuty <span class="count" id="lib-count"></span></h2>
         <div class="libtools">
+          <button class="btn small tinted" data-act="blank"><svg class="i"><use href="#plus"/></svg><span>Pusta pięciolinia</span></button>
           <label class="search"><svg class="i"><use href="#search"/></svg><input id="lib-search" type="search" placeholder="Szukaj" autocomplete="off" aria-label="Szukaj w nutach"></label>
           <label class="sort"><select id="lib-sort" aria-label="Kolejność"><option value="opened">Ostatnio grane</option><option value="title">Tytuł</option><option value="composer">Kompozytor</option><option value="created">Ostatnio dodane</option></select><svg class="i"><use href="#down"/></svg></label>
         </div>
@@ -107,6 +108,7 @@
         
         <div class="row-btns">
           <button class="btn tinted" data-act="example"><span>Pokaż przykład</span></button>
+          <button class="btn tinted" data-act="blank"><span>Napisz własne nuty</span></button>
         </div>
       </div>
     </section>
@@ -129,6 +131,24 @@
     </div>
     <figure class="peek" id="peek" hidden><canvas id="peek-c"></canvas><figcaption><span id="peek-t">Oryginał</span><button class="x" id="peek-x" aria-label="Zamknij"><svg class="i"><use href="#x"/></svg></button></figcaption></figure>
     <div class="pages" id="pages"><div class="loading-page"><span class="spinner"></span></div></div>
+  </div>
+  <div class="editbar" id="editbar" role="toolbar" aria-label="Popraw nutę" hidden>
+    <div class="edit-row">
+      <button data-ed="up"><b>↑</b><span>W górę</span></button>
+      <button data-ed="down"><b>↓</b><span>W dół</span></button>
+      <button data-ed="octup"><b>8↑</b><span>Oktawa</span></button>
+      <button data-ed="octdown"><b>8↓</b><span>Oktawa</span></button>
+      <button data-ed="flat"><b>♭</b><span>Bemol</span></button>
+      <button data-ed="natural"><b>♮</b><span>Kasownik</span></button>
+      <button data-ed="sharp"><b>♯</b><span>Krzyżyk</span></button>
+      <button data-ed="shorter"><b>♪</b><span>Krótsza</span></button>
+      <button data-ed="longer"><b>𝅗𝅥</b><span>Dłuższa</span></button>
+      <button data-ed="rest"><b>𝄽</b><span id="ed-rest-t">Pauza</span></button>
+      <button data-ed="add"><b>+</b><span>Dodaj</span></button>
+      <button data-ed="delete"><b>×</b><span>Usuń</span></button>
+      <button data-ed="undo" id="ed-undo"><b>↶</b><span>Cofnij</span></button>
+      <button data-ed="done" class="ed-done"><b>✓</b><span>Gotowe</span></button>
+    </div>
   </div>
   <nav class="dock" id="dock" aria-label="Narzędzia">
     <div class="dock-group">
@@ -343,6 +363,7 @@
     <button class="li tap" id="btn-print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Plik MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" id="btn-restore" hidden><span class="ic"><svg class="i"><use href="#left"/></svg></span><span class="grow"><b>Przywróć odczyt</b><small>Cofa wszystkie poprawki nut</small></span></button>
     <button class="li tap" id="btn-report"><span class="ic"><svg class="i"><use href="#warn"/></svg></span><span class="grow"><b>Zgłoś problem</b><small>Wiadomość z wersją i ustawieniami, przez WhatsApp lub e-mail</small></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap danger" id="btn-delete"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń z biblioteki</b></span></button>
   </div>
