@@ -833,8 +833,8 @@ function endLines(root) {
     const B = ms.map((_, i) => i === n - 1 ? E : s0 + (i + 1) * W);                    // the new bar lines
     for (let i = 0; i < n; i++) if (!(bars[i] > (i ? bars[i - 1] : s0))) return;         // a drawing it can't read: left as drawn
     /* bar lines and staff lines move to the even places; inside a bar the room after its bar line (or the metre) is
-       kept, at least 1.5 staff spaces before the first note, its stem or its ♭/♮ (the engine sometimes puts an accidental
-       on the bar line), and only the music between the first and the last note stretches or narrows */
+       always the same: 1.5 staff spaces before the first note, its stem or its ♭/♮ (1.8 after the metre; the engine
+       sometimes puts an accidental on the bar line), so every bar starts alike (Gould; solo-zasady-zapisu 11a), and only the music between the first and the last note stretches or narrows */
     const ob = [s0, ...bars], nb = [s0, ...B];
     const lin = (os, ns) => x => {
       if (x <= os[0]) return ns[0] + (x - os[0]);
@@ -846,7 +846,7 @@ function endLines(root) {
       const L = ob[i], R = ob[i + 1], NL = nb[i], NR = nb[i + 1];
       const xs = [...m.querySelectorAll(":scope > g.staff > g.layer > *:not(.mRest):not(.multiRest)")].map(minX).filter(x => x != null && x < R);
       if (!xs.length) return lin([L, R], [NL, NR]);
-      const lo = Math.min(...xs), hi = Math.max(...xs), a = NL + Math.max(lo - L, (i ? 1.5 : 1.8) * sp), b = NR - (R - hi);
+      const lo = Math.min(...xs), hi = Math.max(...xs), a = NL + (i ? 1.5 : 1.8) * sp, b = NR - (R - hi);
       if (a >= NR - sp) return lin([L, R], [NL, NR]);
       const os = lo > L ? [L, lo] : [lo], ns = lo > L ? [NL, a] : [a];
       if (hi > lo && b > a + 1) { os.push(hi); ns.push(b); }
