@@ -1434,12 +1434,16 @@ async function play(fromMs) {
   const bpb = beatsPerBar(), first = Math.max(0, bars.findIndex((t, i) => t <= fromMs + 1 && (bars[i + 1] ?? Infinity) > fromMs + 1));
   const barSec = i => (((bars[i + 1] ?? (bars[i] + (bars[i] - (bars[i - 1] ?? bars[i] - 2000)))) - bars[i]) / 1000) * k;
   const clicks = [], useClick = pb.click !== "off";
-  const countLen = useClick ? barSec(first) : 0;
-  if (useClick) { const n = bpb[first] || 4; for (let j = 0; j < n; j++) clicks.push({ t: j * countLen / n, acc: j === 0 }); }
+  /* a pickup bar is short (§12): the count-in is a whole bar and then the beats before the pickup ("1 2 3 | 1 2", the
+     pickup on 3), so the pickup comes in on its own beat */
+  const pickSec = bars.length > 1 && barSec(0) < barSec(1) - 0.01 ? barSec(1) : 0;          // the full bar a pickup belongs to
+  const cN = bpb[first] || 4, cFull = first === 0 && pickSec ? pickSec : barSec(first), cStep = cFull / cN, cPick = first === 0 && pickSec ? Math.round(barSec(0) / cStep) : 0;
+  const countLen = useClick ? cFull + (cPick ? cFull - cPick * cStep : 0) : 0;
+  if (useClick) { for (let j = 0; j < cN; j++) clicks.push({ t: j * cStep, acc: j === 0 }); if (cPick) for (let j = 0; j < cN - cPick; j++) clicks.push({ t: cFull + j * cStep, acc: j === 0 }); }
   const rangeLen = Number.isFinite(B) ? (B - fromMs) / 1000 * k : Math.max(...ev.map(e => e.t + e.dur));
   if (pb.click === "all") for (let i = first; i < bars.length && bars[i] < (Number.isFinite(B) ? B : Infinity); i++) {
-    const n = bpb[i] || 4, t0 = (bars[i] - fromMs) / 1000 * k, len = barSec(i);
-    for (let j = 0; j < n; j++) { const t = t0 + j * len / n; if (t >= -0.01 && t < rangeLen - 0.01) clicks.push({ t: countLen + t, acc: j === 0 }); }
+    const n = bpb[i] || 4, t0 = (bars[i] - fromMs) / 1000 * k, len = barSec(i), pick = i === 0 && !!pickSec, step = (pick ? pickSec : len) / n, nb = pick ? Math.max(1, Math.round(len / step)) : n;
+    for (let j = 0; j < nb; j++) { const t = pick ? t0 + len - (nb - j) * step : t0 + j * step; if (t >= -0.01 && t < rangeLen - 0.01) clicks.push({ t: countLen + t, acc: !pick && j === 0 }); }
   }
   ev.forEach(e => { e.t += countLen; });
   const total = countLen + rangeLen, fileLen = pb.loop ? total : total + 0.5;
