@@ -3587,7 +3587,7 @@ function safariNotice(all) {
   if (!want) { if (el) el.hidden = true; return; }
   if (!el) {
     el = document.createElement("div"); el.className = "notice"; el.id = "safari-nudge";
-    el.innerHTML = `<svg class="i"><use href="#info"/></svg><div class="grow"><b>Dodaj Solo do ekranu początkowego</b><span>W karcie Safari nuty mogą zniknąć po 7 dniach bez otwierania. Zapisz kopię i wczytaj ją w Solo z ikony.</span></div><button class="link" id="safari-how">Jak?</button><button class="x" id="safari-x" aria-label="Później"><svg class="i"><use href="#x"/></svg></button>`;
+    el.innerHTML = `<svg class="i"><use href="#info"/></svg><div class="grow"><b>Dodaj Solo do ekranu</b><span>W Safari nuty mogą zniknąć po tygodniu przerwy.</span></div><button class="link" id="safari-how">Jak?</button><button class="x" id="safari-x" aria-label="Później"><svg class="i"><use href="#x"/></svg></button>`;
     $("#lib").insertBefore(el, $("#backup-nudge") || $("#cols"));
     $("#safari-how").addEventListener("click", () => { go("settings"); setTimeout(() => { const st = $("#install-steps"); if (st) st.scrollIntoView({ behavior: "smooth", block: "center" }); }, 450); });
     $("#safari-x").addEventListener("click", () => { store.set("safariLater", String(Date.now())); fadeOut(el, 180); });
