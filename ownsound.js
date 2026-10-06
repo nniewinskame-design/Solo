@@ -25,21 +25,73 @@ function ownTr() {
 }
 function noteLabel(midi) { return writtenName(midi, ownTr()); }
 
-/* ---------------- storage: 16-bit, 24 kHz, in IndexedDB-free localStorage (five short notes ≈ 0.5 MB) ---------------- */
+/* ---------------- storage: 16-bit, 24 kHz, one IndexedDB record per instrument (five short notes ≈ 0.4 MB) ----------------
+   Until 3.9 the recordings were base64 in localStorage, which holds only ~5 MB for everything: after a few
+   instruments a save failed without a word. They move over once; the old copy goes only after the new one is written. */
 function packF32(f) { const i16 = Int16Array.from(f, v => Math.max(-32767, Math.min(32767, Math.round(v * 32767)))); let s = ""; const u8 = new Uint8Array(i16.buffer); for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return btoa(s); }
 function unpackF32(b64) { const bin = atob(b64), a = new Int16Array(bin.length / 2); for (let i = 0; i < a.length; i++) a[i] = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); return Float32Array.from(a, v => v / 32767); }
-function saveOwn() {
-  try {
-    const out = {}; Object.entries(own.byInstr).forEach(([id, list]) => { if (list.length) out[id] = list.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, b64: packF32(x.data) })); });
-    store.set("ownSamples2", JSON.stringify(out));
-  } catch { hud("Za mało miejsca, żeby zapisać dźwięk", 3000); }
+const toPcm = f => Int16Array.from(f, v => Math.max(-32767, Math.min(32767, Math.round(v * 32767)))).buffer;
+const fromPcm = buf => Float32Array.from(new Int16Array(buf), v => v / 32767);
+const ownRec = (id, list) => ({ id, list: list.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, pcm: toPcm(x.data) })) });
+own.saved = new Map();                          // instrument → the list as last written (only changed ones are written again)
+/* a browser without IndexedDB keeps them in localStorage as before, but a failed write is now reported */
+function saveLS() {
+  const out = {}; Object.entries(own.byInstr).forEach(([id, list]) => { if (list && list.length) out[id] = list.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, b64: packF32(x.data) })); });
+  if (!store.set("ownSamples2", JSON.stringify(out))) throw Object.assign(new Error("localStorage full"), { name: "QuotaExceededError" });
 }
-(function loadOwn() {
-  try { const j = JSON.parse(store.get("ownSamples2", "null")); if (j) Object.entries(j).forEach(([id, list]) => { own.byInstr[id] = list.map(x => ({ ...x, data: unpackF32(x.b64) })); }); } catch {}
-  /* an earlier recording (one set, before instruments were told apart) belongs to the main instrument */
-  try { const old = JSON.parse(store.get("ownSamples", "null")); if (Array.isArray(old) && old.length && !own.byInstr[mainInstr().id]) { own.byInstr[mainInstr().id] = old.map(x => ({ ...x, data: unpackF32(x.b64) })); saveOwn(); } localStorage.removeItem("solo:ownSamples"); } catch {}
-  try { localStorage.removeItem("solo:ownSound"); } catch {}
+async function saveOwnNow() {
+  const put = [], dels = [];
+  Object.entries(own.byInstr).forEach(([id, list]) => { if (list && list.length && own.saved.get(id) !== list) put.push([id, list]); });
+  own.saved.forEach((_, id) => { if (!(own.byInstr[id] && own.byInstr[id].length)) dels.push(id); });
+  if (!put.length && !dels.length) return true;
+  try {
+    if (DB.ok) await DB.putIn("samples", put.map(([id, list]) => ownRec(id, list)), dels); else saveLS();
+    put.forEach(([id, list]) => own.saved.set(id, list)); dels.forEach(id => own.saved.delete(id));
+    return true;
+  } catch (e) {
+    console.warn("own sound", e);
+    hud(e && e.name === "QuotaExceededError" ? "Za mało miejsca, żeby zapisać dźwięk." : "Nie udało się zapisać dźwięku. Spróbuj jeszcze raz.", 4000);
+    return false;
+  }
+}
+/* writes what changed; true when it is safely stored, otherwise the person is told */
+async function saveOwn() { await own.ready; return saveOwnNow(); }
+own.ready = (async function loadOwn() {
+  try {
+    (await DB.getAllIn("samples")).forEach(r => { if (r && Array.isArray(r.list) && r.list.length) { own.byInstr[r.id] = r.list.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, data: fromPcm(x.pcm) })); own.saved.set(r.id, own.byInstr[r.id]); } });
+  } catch (e) { console.warn("own sound", e); return; }          // unreadable now: the old copy stays where it is
+  /* the move from localStorage (3.8–3.9), and the very first format (one set, before instruments were told apart) */
+  const moved = {};
+  try { const j = JSON.parse(store.get("ownSamples2", "null")); if (j) Object.entries(j).forEach(([id, list]) => { if (!own.byInstr[id] && Array.isArray(list) && list.length) moved[id] = list.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, data: unpackF32(x.b64) })); }); } catch (e) { console.warn(e); }
+  try { const old = JSON.parse(store.get("ownSamples", "null")), id = mainInstr().id; if (Array.isArray(old) && old.length && !own.byInstr[id] && !moved[id]) moved[id] = old.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, data: unpackF32(x.b64) })); } catch (e) { console.warn(e); }
+  if (!DB.ok) { Object.entries(moved).forEach(([id, list]) => { own.byInstr[id] = list; own.saved.set(id, list); }); }   // they stay in localStorage
+  else {
+    Object.entries(moved).forEach(([id, list]) => { own.byInstr[id] = list; });
+    if (Object.keys(moved).length && !(await saveOwnNow())) return;             // kept in localStorage for the next try
+    store.del("ownSamples2"); store.del("ownSamples");
+  }
+  store.del("ownSound");
+  if (typeof syncOwn === "function" && $("#own-list")) { try { syncOwn(); } catch (e) { console.warn(e); } }
 })();
+/* for the backup: the recordings as text; and back (an instrument already recorded on this device stays as it is) */
+function ownExport() {
+  const out = {}; Object.entries(own.byInstr).forEach(([id, list]) => { if (list && list.length) out[id] = list.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, b64: packF32(x.data) })); });
+  return out;
+}
+async function ownImport(sounds) {
+  if (!sounds || typeof sounds !== "object") return 0;
+  await own.ready;
+  let n = 0;
+  Object.entries(sounds).forEach(([id, list]) => {
+    if (!INSTRUMENTS.some(i => i.id === id) || (own.byInstr[id] && own.byInstr[id].length) || !Array.isArray(list)) return;
+    const ok = list.filter(x => x && [x.midi, x.rate, x.ls, x.le].every(Number.isFinite) && typeof x.b64 === "string" && x.b64.length % 4 === 0 && /^[A-Za-z0-9+/=]+$/.test(x.b64));
+    if (!ok.length) return;
+    try { own.byInstr[id] = ok.map(x => ({ midi: x.midi, rate: x.rate, ls: x.ls, le: x.le, data: unpackF32(x.b64) })); n++; } catch (e) { console.warn(e); }
+  });
+  if (n && !(await saveOwn())) return 0;
+  if (n && typeof syncOwn === "function") { try { syncOwn(); } catch (e) { console.warn(e); } }
+  return n;
+}
 /* ---------------- playback: the nearest anchor, shifted, looping its steady middle ---------------- */
 function ownVoice(instrId) { const list = own.byInstr[instrId]; return list && list.length ? (ctx, out, f, st, en) => samplerNote(list, ctx, out, f, st, en) : null; }
 function samplerNote(list, ctx, out, f, st, en) {
@@ -228,7 +280,7 @@ function renderOwn() {
     body.querySelectorAll(".of-tile").forEach(b => b.addEventListener("click", async () => { if (!(await startListening())) return; of.step = +b.dataset.i; of.revisit = true; of.state = "listen"; renderOwn(); }));
     if (got) {
       $("#of-scale").addEventListener("click", () => playScale(of.done.filter(Boolean)));
-      $("#of-save").addEventListener("click", () => { own.byInstr[of.instr] = of.done.filter(Boolean).sort((a, b) => a.midi - b.midi); saveOwn(); store.set("ownUse", "1"); closeOwnFlow(); hud(`${m.name}: Solo zagra Twoim dźwiękiem`, 2500); });
+      $("#of-save").addEventListener("click", () => { own.byInstr[of.instr] = of.done.filter(Boolean).sort((a, b) => a.midi - b.midi); store.set("ownUse", "1"); closeOwnFlow(); saveOwn().then(ok => ok && hud(`${m.name}: Solo zagra Twoim dźwiękiem`, 2500)); });   // said only once it is stored
     } else $("#of-close").addEventListener("click", closeOwnFlow);
   }
 }

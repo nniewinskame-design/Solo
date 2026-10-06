@@ -146,6 +146,7 @@ def cmd_test():
         if p.name not in SITE_KEEP:
             shutil.rmtree(p) if p.is_dir() else p.unlink()
     copy_tree(SITE_DIR, git("ls-files").splitlines())
+    rebuild_zip(SITE_DIR / ZIP)               # AGPL: the test site offers the source of exactly what it runs
     apply_overlay(SITE_DIR, build)
     add_test_pages(SITE_DIR)
     bf.write_text(f"{build}\n")
@@ -157,19 +158,46 @@ def cmd_test():
 
 
 # ---------------- going live ----------------
-def rebuild_zip():
-    zp = REPO / ZIP
-    with zipfile.ZipFile(zp) as old:   # files kept from the current zip (they don't live in the repo)
-        kept = {n: old.read(n) for n in ("CZYTAJ.txt", "_headers") if n in old.namelist()}
+CZYTAJ = """Solo: kod źródłowy aplikacji (https://nniewinskame-design.github.io/Solo/)
+
+© 2026 Meow Studios. Licencja: GNU Affero General Public License v3 (plik LICENSE.txt).
+
+W archiwum: wszystkie pliki aplikacji (HTML, CSS, JavaScript, manifest, service worker), fonts/fonts.css,
+narzędzia z katalogu tools/ oraz pliki JavaScript czytnika nut z katalogu homr/ w wersji, która działa w Solo.
+Nie ma tu modeli homr, plików onnxruntime-web, bibliotek z vendor/, fontów ani zdjęć: to cudze, niezmienione
+pliki, opisane niżej i w licencje.html.
+
+Odczyt nut na urządzeniu korzysta z biblioteki homr-web (AGPL-3.0, https://github.com/jymen/homr-web, wersja 0.2.0)
+i modeli homr (https://github.com/liebharc/homr). Pliki homr/homr.js i homr/worker.js zbudowano tak:
+  git clone https://github.com/jymen/homr-web && cd homr-web && npm ci && npm run build
+  HOMR_WEB_MODELS_RELEASE=models-homr0.7.0 ./tools/download-models.sh
+  echo 'export { createRecognizer } from "./dist/index.js";' > entry-main.js
+  npx esbuild entry-main.js --bundle --format=esm --platform=browser --target=es2022 --minify --outfile=homr/homr.js
+  npx esbuild dist/worker.js --bundle --format=esm --platform=browser --target=es2022 --minify --external:fs --external:path --external:crypto --external:url --external:worker_threads --outfile=homr/worker.js
+  modele: homr/models/<sha256>/<plik>.onnx, pliki onnxruntime-web: homr/ort/
+Biblioteki w vendor/: Verovio (LGPL-3.0), pdf.js (Apache-2.0), JSZip (MIT).
+Fonty: Geist, Bricolage Grotesque, Atkinson Hyperlegible Next (SIL Open Font License 1.1).
+"""
+
+
+def source_files():
+    """What the AGPL source archive holds: Solo's own code as it runs, never models, binaries or private notes."""
     tracked = git("ls-files").splitlines()
-    app = sorted(f for f in tracked if "/" not in f and (f.endswith((".js", ".css", ".html")) or f == "manifest.webmanifest"))
+    own = lambda f: ("/" not in f and (f.endswith((".js", ".css", ".html")) or f == "manifest.webmanifest")) \
+        or f == "fonts/fonts.css" or f.startswith("tools/") \
+        or (f.startswith("homr/") and f.endswith(".js") and f.count("/") == 1)
+    return sorted(f for f in tracked if own(f))
+
+
+def rebuild_zip(dest=None):
+    zp = dest or REPO / ZIP
     lic = ["LICENSE.txt", "homr/LICENSE-homr-web.txt", "homr/NOTICE-homr-web.txt"]
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in app + lic:
+        for f in source_files() + lic:
             z.write(REPO / f, f)
-        for n, data in kept.items():
-            z.writestr(n, data)
+        z.writestr("CZYTAJ.txt", CZYTAJ)
+    zp.parent.mkdir(parents=True, exist_ok=True)
     zp.write_bytes(buf.getvalue())
 
 

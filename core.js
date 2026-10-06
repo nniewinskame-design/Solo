@@ -5,10 +5,15 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const xesc = esc;
+/* small settings only (localStorage is ~5 MB and synchronous); set() says whether it was kept, so a full or
+   blocked storage is never mistaken for a save */
 const store = {
   get(k, d = null) { try { const v = localStorage.getItem("solo:" + k); return v === null ? d : v; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem("solo:" + k, v); } catch {} }
+  set(k, v) { try { localStorage.setItem("solo:" + k, v); return true; } catch (e) { console.warn("store.set", k, e); return false; } },
+  del(k) { try { localStorage.removeItem("solo:" + k); } catch {} }
 };
+/* search without Polish letters or case: "wlazl" finds "Wlazł", "trabka" finds "Trąbka" */
+const fold = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l");
 function hud(msg, ms = 2400) {
   const h = $("#toast"); if (!h) return;
   h.textContent = msg; h.classList.add("show");
@@ -760,45 +765,154 @@ function exampleXml() {
 }
 
 
-/* Tata's library lives here, per web address (origin). Never rename the database or store, and never
-   move the live address, without a migration: the pieces would look gone. */
+/* Tata's library lives here, per web address (origin). Never rename the database or a store, and never
+   move the live address, without a migration: the pieces would look gone.
+   v2: page photos sit in "images" (written only when they change, not on every autosave; records saved by v1
+   still carry them inline and move over on their next save), own-sound recordings in "samples".
+   iOS drops the connection of an app left in the background ("Connection to Indexed Database server lost"):
+   every call reopens and tries once more instead of failing until a reload. A failed read is an error for the
+   caller, never an empty library. */
 const DB = {
-  db: null, mem: new Map(), ok: true,
-  async open() {
-    if (this.db || !this.ok) return this.db;
-    try {
-      this.db = await new Promise((res, rej) => {
-        const r = indexedDB.open("pulpit-nutowy", 1);
-        r.onupgradeneeded = () => r.result.createObjectStore("pieces", { keyPath: "id" });
-        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-      });
-      try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {}
-    } catch (e) { this.ok = false; console.warn(e); }
-    return this.db;
+  db: null, opening: null, ok: true, imgStored: new Map(),
+  mem: { pieces: new Map(), images: new Map(), samples: new Map() },        // only where the browser has no IndexedDB
+  open() {
+    if (this.db) return Promise.resolve(this.db);
+    if (!this.ok) return Promise.resolve(null);
+    if (this.opening) return this.opening;
+    let r; try { if (!self.indexedDB) throw new Error("no IndexedDB"); r = indexedDB.open("pulpit-nutowy", 2); }
+    catch (e) { console.warn(e); this.ok = false; return Promise.resolve(null); }
+    this.opening = new Promise((res, rej) => {
+      /* an open can hang on iOS: after 6 s the caller gets an error (and a retry button), a late success is still kept */
+      const t = setTimeout(() => rej(Object.assign(new Error("IndexedDB open timeout"), { name: "TimeoutError" })), 6000);
+      r.onupgradeneeded = () => { const d = r.result; ["pieces", "images", "samples"].forEach(n => { if (!d.objectStoreNames.contains(n)) d.createObjectStore(n, { keyPath: "id" }); }); };
+      r.onblocked = () => hud("Zamknij Solo w innych kartach przeglądarki.", 5000);   // an older Solo still holds version 1
+      r.onsuccess = () => {
+        const d = r.result; clearTimeout(t);
+        d.onversionchange = () => { d.close(); if (this.db === d) this.db = null; };
+        d.onclose = () => { if (this.db === d) this.db = null; };
+        if (this.db && this.db !== d) d.close(); else this.db = d;
+        res(this.db);
+      };
+      r.onerror = () => { clearTimeout(t); rej(r.error); };
+    }).finally(() => { this.opening = null; });
+    return this.opening;
   },
-  async tx(mode, fn) {
-    const db = await this.open();
-    if (!db) return fn(null);
+  lost: e => !!e && /^(InvalidStateError|UnknownError|TransactionInactiveError|TimeoutError)$/.test(e.name),
+  async run(fn) {
+    let db = await this.open();
+    try { return await fn(db); }
+    catch (e) {
+      if (!db || !this.lost(e)) throw e;
+      console.warn("IndexedDB: reopening after", e);
+      if (this.db === db) { try { db.close(); } catch {} this.db = null; }
+      db = await this.open(); return fn(db);
+    }
+  },
+  /* one transaction; body(t) may return a function giving the result once everything is written */
+  tx(db, stores, mode, body) {
     return new Promise((res, rej) => {
-      const t = db.transaction("pieces", mode); const st = t.objectStore("pieces");
-      let out; Promise.resolve(fn(st)).then(v => (out = v));
-      t.oncomplete = () => res(out); t.onerror = () => rej(t.error);
+      const t = db.transaction(stores, mode); let done;
+      t.oncomplete = () => res(typeof done === "function" ? done() : done);
+      t.onabort = t.onerror = () => rej(t.error || Object.assign(new Error("transaction aborted"), { name: "AbortError" }));
+      done = body(t);
     });
   },
-  async all() {
-    const db = await this.open();
-    if (!db) return Array.from(this.mem.values());
-    return new Promise((res, rej) => { const r = db.transaction("pieces").objectStore("pieces").getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); });
+  join(p, list) {
+    if (list) { p.images = list; this.imgStored.set(p.id, list); }
+    else { if (!Array.isArray(p.images)) p.images = []; if (p.images.length) this.imgStored.delete(p.id); else this.imgStored.set(p.id, p.images); }
+    return p;
   },
-  async put(p) { const db = await this.open(); if (!db) { this.mem.set(p.id, p); return; } return new Promise((res, rej) => { const t = db.transaction("pieces", "readwrite"); t.objectStore("pieces").put(p); t.oncomplete = res; t.onerror = () => rej(t.error); }); },
-  async del(id) { const db = await this.open(); if (!db) { this.mem.delete(id); return; } return new Promise((res, rej) => { const t = db.transaction("pieces", "readwrite"); t.objectStore("pieces").delete(id); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+  all() {
+    return this.run(db => {
+      if (!db) return Array.from(this.mem.pieces.values());
+      return this.tx(db, ["pieces", "images"], "readonly", t => {
+        const ps = t.objectStore("pieces").getAll(), is = t.objectStore("images").getAll();
+        return () => { const im = new Map((is.result || []).map(x => [x.id, x.list])); return (ps.result || []).map(p => this.join(p, im.get(p.id))); };
+      });
+    });
+  },
+  get(id) {
+    return this.run(db => {
+      if (!db) return this.mem.pieces.get(id);
+      return this.tx(db, ["pieces", "images"], "readonly", t => {
+        const p = t.objectStore("pieces").get(id), i = t.objectStore("images").get(id);
+        return () => p.result ? this.join(p.result, i.result && i.result.list) : undefined;
+      });
+    });
+  },
+  /* each piece in turn with its photos, without holding the whole library twice (the backup) */
+  each(fn, start) {                               // start(): called again if the read has to begin anew
+    return this.run(db => {
+      if (start) start();
+      if (!db) { this.mem.pieces.forEach(p => fn(p)); return; }
+      return this.tx(db, ["pieces", "images"], "readonly", t => {
+        const is = t.objectStore("images");
+        t.objectStore("pieces").openCursor().onsuccess = e => {
+          const c = e.target.result; if (!c) return;
+          const p = c.value; is.get(p.id).onsuccess = ev => { const x = ev.target.result; p.images = x ? x.list : Array.isArray(p.images) ? p.images : []; fn(p); c.continue(); };
+        };
+      });
+    });
+  },
+  put(p) {
+    const imgs = Array.isArray(p.images) ? p.images : [], prev = this.imgStored.get(p.id);
+    const same = !!prev && (prev === imgs || (prev.length === imgs.length && prev.every((x, i) => x === imgs[i])));
+    const rec = { ...p }; delete rec.images;
+    return this.run(db => {
+      if (!db) { this.mem.pieces.set(p.id, { ...rec, images: imgs }); return; }
+      return this.tx(db, ["pieces", "images"], "readwrite", t => {
+        t.objectStore("pieces").put(rec);
+        if (!same) { if (imgs.length) t.objectStore("images").put({ id: p.id, list: imgs }); else t.objectStore("images").delete(p.id); }
+        return () => { this.imgStored.set(p.id, imgs); };
+      });
+    });
+  },
+  del(id) {
+    return this.run(db => {
+      if (!db) { this.mem.pieces.delete(id); return; }
+      return this.tx(db, ["pieces", "images"], "readwrite", t => { t.objectStore("pieces").delete(id); t.objectStore("images").delete(id); return () => { this.imgStored.delete(id); }; });
+    });
+  },
+  /* other stores (own-sound recordings): records with an "id" */
+  getAllIn(name) { return this.run(db => db ? this.tx(db, [name], "readonly", t => { const r = t.objectStore(name).getAll(); return () => r.result || []; }) : Array.from(this.mem[name].values())); },
+  putIn(name, list, dels = []) {
+    return this.run(db => {
+      if (!db) { list.forEach(v => this.mem[name].set(v.id, v)); dels.forEach(k => this.mem[name].delete(k)); return; }
+      return this.tx(db, [name], "readwrite", t => { const st = t.objectStore(name); list.forEach(v => st.put(v)); dels.forEach(k => st.delete(k)); });
+    });
+  }
 };
+/* what to tell the person when a save failed: only a full device is "no space" */
+function saveErrorText(e) {
+  if (e && (e.name === "QuotaExceededError" || (e.inner && e.inner.name === "QuotaExceededError"))) return "Brak miejsca na urządzeniu. Usuń niepotrzebne nuty lub zdjęcia z telefonu.";
+  return "Nie udało się zapisać. Spróbuj jeszcze raz.";
+}
 
 function download(name, data, type) {
   const blob = data instanceof Blob ? data : new Blob([data], { type });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+/* an app on the iPhone home screen cannot follow a download link (a preview with no way back, or nothing):
+   the share sheet ("Zachowaj w Plikach") takes the file instead. "shared", "cancelled", "blocked" or "downloaded" */
+const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isStandalone = () => !!(navigator.standalone || (self.matchMedia && matchMedia("(display-mode: standalone)").matches));
+async function saveFile(name, blob) {
+  if (isIOS() && isStandalone() && navigator.canShare) {
+    const file = new File([blob], name, { type: blob.type || "application/octet-stream" });
+    if (navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return "shared"; }
+      catch (e) { if (e && e.name === "AbortError") return "cancelled"; if (e && e.name === "NotAllowedError") return "blocked"; console.warn(e); }
+    }
+  }
+  download(name, blob); return "downloaded";
+}
+/* a photo kept as a data: URL, as a file to share (no fetch: the page's CSP allows no data: requests) */
+function dataUrlBlob(u) {
+  const i = u.indexOf(","), head = u.slice(0, i), bin = atob(u.slice(i + 1)), a = new Uint8Array(bin.length);
+  for (let k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k);
+  return new Blob([a], { type: (head.match(/^data:([^;,]+)/) || [])[1] || "application/octet-stream" });
 }
 const safeName = s => (s || "nuty").replace(/[\\/:*?"<>|]+/g, "").trim().slice(0, 60) || "nuty";
 

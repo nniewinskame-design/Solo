@@ -1,4 +1,5 @@
 {
+  "id": "./",
   "name": "Solo",
   "short_name": "Solo",
   "description": "Nuty ze zdjęcia: sama partia solowa, w Twoim kluczu i tonacji.",
@@ -34,7 +35,11 @@
       "action": "./",
       "accept": {
         "application/vnd.recordare.musicxml+xml": [
-          ".musicxml"
+          ".musicxml",
+          ".xml"
+        ],
+        "application/vnd.recordare.musicxml": [
+          ".mxl"
         ],
         "application/pdf": [
           ".pdf"
