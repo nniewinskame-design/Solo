@@ -7,7 +7,6 @@ const CACHE = "solo-v31";
 const LIBS = "solo-libs";
 const SHELL = ["./", "index.html", "styles.css", "theme.js", "core.js", "arrange.js", "motion.js", "app.js", "profile.js", "ownsound.js", "clefs.js", "manifest.webmanifest",
   "prywatnosc.html", "regulamin.html", "licencje.html", "legal.js",
-  "img/window.jpg", "img/brass.jpg", "img/flatlay.jpg", "img/piano.jpg",
   "icons/favicon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 const LIB_FILES = ["fonts/fonts.css", "fonts/geist-latin.woff2", "fonts/geist-latinext.woff2",
   

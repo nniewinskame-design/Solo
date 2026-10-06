@@ -425,11 +425,10 @@ document.addEventListener("keydown", e => {
 
 /* ---------------- Home / library ---------------- */
 /* the welcome screen has the flat-lay photo; the library uses the others, so no photo appears twice */
-const HERO = [
-  { src: "img/window.jpg", pos: "50% 42%" }, { src: "img/piano.jpg", pos: "35% 50%" },
-  { src: "img/brass.jpg", pos: "30% 50%" }
-];
+const HERO = [];          /* no stock photos: the masthead and the welcome screen are drawn (a staff, coloured notes) */
 function setupHero() {
+  const st = $("#w-stage"); if (st && !st.innerHTML && typeof STAGE_SVG === "string") st.innerHTML = STAGE_SVG;
+  if (!HERO.length) return;
   const h = HERO[Math.floor(Date.now() / 86400000) % HERO.length];
   const img = $("#hero-img"); if (!img) return;          // the library has a drawn masthead now
   img.addEventListener("load", () => img.classList.add("loaded"), { once: true });
