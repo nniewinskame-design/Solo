@@ -230,6 +230,7 @@ function openSheet(name) {
   const f = el.querySelector(".done, button, input"); if (f && matchMedia("(pointer:fine)").matches) f.focus({ preventScroll: true });
 }
 function hideSheet(instant, keepScrim) {
+  if (openSheetId === "pdf" && pickPdfPages.cancel) { const c = pickPdfPages.cancel; setTimeout(c, 0); }
   if (!openSheetId) return;
   const name = openSheetId, el = $("#sh-" + name);
   openSheetId = null;
@@ -409,6 +410,7 @@ async function refreshLibrary(animate) {
   });
   const has = all.length > 0;
   nudgeBackup(all);
+  const nn = $("#news-nudge"); if (nn) nn.hidden = !(all.length && NEWS[VERSION] && store.get("newsSeen") !== VERSION);
   $("#lib").hidden = !has; $("#lib-empty").hidden = has;
   $("#lib-count").textContent = has ? String(all.length) : "";
   $("#lib-none").hidden = !(has && q && !list.length);
@@ -656,7 +658,7 @@ function setPlayUi(on) {
 function stopPlayback() {
   playToken++;
   if (!playState) return;
-  try { player.pause(); } catch {}
+  try { (playState.src || player).pause(); } catch {}
   cancelAnimationFrame(playState.raf);
   const url = playState.url; if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
   $$("#pages g.playing").forEach(g => g.classList.remove("playing"));
@@ -713,6 +715,11 @@ async function play(fromMs = 0) {
     const bus = off.createGain(); bus.gain.value = 0.18; bus.connect(off.destination);
     ev.forEach(e => synthNote(off, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), LEAD + e.t, LEAD + e.t + e.dur * 0.95));
     const buf = await off.startRendering();
+    /* private windows (Safari, Firefox, Brave) add random noise to rendered audio against fingerprinting:
+       the lead-in must be silent, and if it isn't, play the notes live instead of from the rendered file */
+    const ch = buf.getChannelData(0); let lead = 0;
+    for (let i = 0, n = Math.floor(LEAD * sr * 0.8); i < n; i++) lead = Math.max(lead, Math.abs(ch[i]));
+    if (lead > 1e-4) { if (token === playToken) playLive(ev, end, token, k, fromMs); return; }
     const w = wavBlob(buf); peak = w.peak; url = URL.createObjectURL(w.blob);
   } catch (e) { console.warn(e); if (token === playToken) { setPlayUi(false); hud("Nie udało się przygotować dźwięku"); } return; }
   if (token !== playToken) { URL.revokeObjectURL(url); return; }      // stopped while it was being prepared
@@ -724,11 +731,27 @@ async function play(fromMs = 0) {
     return;
   }
   if (token !== playToken) { player.pause(); URL.revokeObjectURL(url); return; }
-  playState = { raf: 0, k, fromMs, url, peak }; setPlayUi(true);
+  playState = { raf: 0, k, fromMs, url, peak, src: player }; setPlayUi(true);
+  follow(ev, end, token);
+}
+/* live playback through Web Audio: used when rendered audio comes back noisy */
+async function playLive(ev, end, token, k, fromMs) {
+  const AC = window.AudioContext || window.webkitAudioContext; const ctx = new AC();
+  try { await ctx.resume(); } catch {}
+  const bus = ctx.createGain(); bus.gain.value = 0.18; bus.connect(ctx.destination);
+  const t0 = ctx.currentTime + 0.12;
+  ev.forEach(e => synthNote(ctx, bus, 440 * Math.pow(2, (e.pitch - 69) / 12), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95));
+  const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > end + LEAD + 0.3; }, pause() { try { ctx.close(); } catch {} } };
+  if (token !== playToken) { src.pause(); return; }
+  playState = { raf: 0, k, fromMs, url: null, peak: 1, src }; setPlayUi(true);
+  follow(ev, end, token);
+}
+/* highlight the playing notes, move the line, keep the music in view */
+function follow(ev, end, token) {
   const sc = $("#scroller"); let lastScroll = 0;
   const step = () => {
     if (!playState || token !== playToken) return;
-    const now = player.currentTime - LEAD;
+    const now = playState.src.currentTime - LEAD;
     ev.forEach(e => {
       const on = now >= e.t && now < e.t + e.dur;
       const el = e.el || (e.el = document.getElementById(e.id)); if (!el) return;
@@ -748,7 +771,7 @@ async function play(fromMs = 0) {
         }
       } else if (!on && e.lit) { el.classList.remove("playing"); e.lit = false; }
     });
-    if (player.ended || now > end + 0.3) { stopPlayback(); return; }
+    if (playState.src.ended || now > end + 0.3) { stopPlayback(); return; }
     playState.raf = requestAnimationFrame(step);
   };
   playState.raf = requestAnimationFrame(step);
@@ -785,7 +808,7 @@ if (window.ResizeObserver) new ResizeObserver(([e]) => $("#score").style.setProp
   }, { passive: true });
 })();
 /* where playback is now, in score milliseconds (independent of tempo) */
-const playPos = () => playState ? playState.fromMs + Math.max(0, player.currentTime - LEAD) * 1000 / playState.k : 0;
+const playPos = () => playState ? playState.fromMs + Math.max(0, playState.src.currentTime - LEAD) * 1000 / playState.k : 0;
 document.addEventListener("visibilitychange", () => { if (document.hidden) stopPlayback(); });
 
 /* ---------------- Print & export ---------------- */
@@ -950,11 +973,11 @@ function buildClefSheet() {
 
 /* ---------------- Key sheet ---------------- */
 const PRESETS = [
-  { t: "Trąbka, klarnet lub inny instrument w stroju B", iv: { d: -8, s: -14 } },
-  { t: "Waltornia w stroju F", iv: { d: -4, s: -7 } },
-  { t: "Saksofon altowy w stroju Es", iv: { d: -12, s: -21 } },
-  { t: "Skrzypce, flet (dźwięki o oktawę niżej)", iv: { d: -7, s: -12 } },
-  { t: "Puzon, eufonium lub baryton w stroju B (klucz wiolinowy)", iv: { d: -8, s: -14 } }
+  { t: "Trąbka, klarnet", s: "w B", iv: { d: -8, s: -14 } },
+  { t: "Waltornia", s: "w F", iv: { d: -4, s: -7 } },
+  { t: "Saksofon altowy", s: "w Es", iv: { d: -12, s: -21 } },
+  { t: "Skrzypce, flet", s: "oktawę niżej", iv: { d: -7, s: -12 } },
+  { t: "Puzon, eufonium, baryton", s: "w B, klucz wiolinowy", iv: { d: -8, s: -14 } }
 ];
 /* indexes are stored with each piece, so new presets are appended and only the display order changes */
 const PRESET_ORDER = [4, 0, 1, 2, 3];
@@ -989,7 +1012,7 @@ function buildKeySheet() {
   [-1, ...PRESET_ORDER].forEach(idx => {
     const p = idx < 0 ? { t: "Nie" } : PRESETS[idx];
     const b = document.createElement("button"); b.className = "li tap"; b.dataset.p = idx;
-    b.innerHTML = `<span class="radio"></span><span class="grow">${esc(p.t)}</span>`;
+    b.innerHTML = `<span class="radio"></span><span class="grow">${esc(p.t)}${p.s ? `<small>${esc(p.s)}</small>` : ""}</span>`;
     b.addEventListener("click", () => {
       if (idx < 0) { if (S.preset >= 0) S.iv = { d: 0, s: 0 }; S.preset = -1; }
       else { S.iv = fixEnharmonic(PRESETS[idx].iv, S.srcKey.fifths); S.clef = "bass"; S.preset = idx; maybeTrombone(); }
@@ -1000,9 +1023,21 @@ function buildKeySheet() {
   const solo = S.parts.find(p => p.keep) || S.parts[0];
   const inB = solo && (solo.transp === -2 || /\b(in|w)\s*(Bb|B♭|B)(?![a-z])/i.test(solo.name) || /tr[aą]bk|trumpet|klarnet|clarinet/i.test(solo.name));
   $("#preset-hint").hidden = !inB;
-  $("#preset-hint").textContent = `Nuty na „${solo ? solo.name : ""}”? Wybierz „Trąbka, klarnet…”.`;
+  $("#preset-hint").textContent = `Nuty na „${solo ? solo.name : ""}”? Wybierz „Trąbka, klarnet”.`;
   syncKeySheet();
 }
+/* quick named intervals (Tata: "o sekundę, tercję albo kwartę w górę lub w dół") */
+const IVS = [["sekunda", 1, 2], ["tercja", 2, 4], ["kwarta", 3, 5], ["kwinta", 4, 7]];
+(() => {
+  const box = $("#ivs");
+  [1, -1].forEach(dir => IVS.forEach(([name, d, s]) => {
+    const b = document.createElement("button"); b.dataset.d = d * dir; b.dataset.s = s * dir;
+    b.innerHTML = `${name}<small>${dir > 0 ? "w górę ↑" : "w dół ↓"}</small>`;
+    b.setAttribute("aria-label", `O ${name.replace(/a$/, "ę")} ${dir > 0 ? "w górę" : "w dół"}`);
+    b.addEventListener("click", () => { S.iv = { d: d * dir, s: s * dir }; S.preset = -1; changed(); });
+    box.appendChild(b);
+  }));
+})();
 function syncKeySheet() {
   const { k, oct } = kOct();
   const moved = !(S.iv.d === 0 && S.iv.s === 0);
@@ -1018,6 +1053,7 @@ function syncKeySheet() {
   $("#oct-down").disabled = oct <= -2; $("#oct-up").disabled = oct >= 2;
   $("#key-down").disabled = k <= -6; $("#key-up").disabled = k >= 6;
   $$("#preset-list .li").forEach(b => b.classList.toggle("on", Number(b.dataset.p) === S.preset));
+  $$("#ivs button").forEach(b => b.classList.toggle("on", S.preset < 0 && +b.dataset.d === S.iv.d && +b.dataset.s === S.iv.s));
 }
 /* Key slider: the handle follows the finger 1:1, then snaps to the nearest key with a spring.
    A flick carries on: the landing key is chosen from the projected position. */
@@ -1137,6 +1173,22 @@ $("#zoom-out").addEventListener("click", () => setZoom(S.zoom - .1));
 [["#f-title", "title"], ["#f-composer", "composer"], ["#f-instrument", "instrument"]].forEach(([sel, k]) => {
   $(sel).addEventListener("change", e => { S.piece[k] = e.target.value.trim(); if (k === "title" && !S.piece.title) S.piece.title = "Bez tytułu"; changed(); if (k === "instrument" && openSheetId === "more") buildMoreSheet(); });
 });
+$("#btn-report").addEventListener("click", async () => {
+  const p = S.piece || {}, nums = doubtfulBars(p.issues);
+  const text = [`Solo ${VERSION}${BUILD ? " · test " + BUILD : ""}: problem z utworem „${p.title || "Bez tytułu"}”.`,
+    `Tonacja: ${curKeyName()}; klucz: ${CLEF_PL[curClef()] || ""}; ${cap(intervalPl(S.iv)) || "bez transpozycji"}; wielkość ${Math.round(S.zoom * 100)}%.`,
+    nums.length ? `Takty do sprawdzenia: ${nums.join(", ")}.` : "", "Co jest nie tak:", ""].filter(Boolean).join("\n");
+  const data = { title: "Solo: zgłoszenie", text };
+  try {
+    /* the original photo goes along only if the system share sheet can carry files; the person picks the app */
+    if (p.images && p.images[0] && navigator.canShare) {
+      const blob = await (await fetch(p.images[0])).blob(), file = new File([blob], "oryginal.jpg", { type: "image/jpeg" });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ ...data, files: [file] }); return; }
+    }
+    if (navigator.share) { await navigator.share(data); return; }
+  } catch (e) { if (e && e.name === "AbortError") return; }
+  location.href = "mailto:nniewinskame@gmail.com?subject=" + encodeURIComponent("Solo: zgłoszenie") + "&body=" + encodeURIComponent(text);
+});
 $("#btn-delete").addEventListener("click", () => {
   $("#confirm-t").textContent = `Usunąć „${S.piece.title || "Bez tytułu"}”?`;
   $("#confirm-text").textContent = "Nuty i zdjęcie oryginału znikną z tego urządzenia.";
@@ -1155,7 +1207,7 @@ function buildOrigSheet() {
 }
 /* ---------------- New music: files, photos, reading ---------------- */
 let pending = [];
-const MAX_PAGES = 4;
+const MAX_PAGES = 12;
 const isXmlFile = f => /\.(musicxml|xml|mxl)$/i.test(f.name) || /musicxml/.test(f.type);
 async function handleFiles(files) {
   files = Array.from(files || []); if (!files.length) return;
@@ -1189,15 +1241,10 @@ async function addPages(files) {
       if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
         const pdf = await pdfjsLib.getDocument({ data: await f.arrayBuffer(), isEvalSupported: false }).promise;
-        if (pdf.numPages > MAX_PAGES - pending.length) hud(`PDF ma ${pdf.numPages} str. Biorę pierwsze ${MAX_PAGES - pending.length}.`, 3500);
-        for (let i = 1; i <= pdf.numPages && pending.length < MAX_PAGES; i++) {
-          const page = await pdf.getPage(i);
-          const vp0 = page.getViewport({ scale: 1 });
-          const vp = page.getViewport({ scale: 2400 / Math.max(vp0.width, vp0.height) });
-          const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
-          const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
-          await page.render({ canvasContext: g, viewport: vp }).promise;
-          pending.push({ big: canvasToJpeg(c, 2400, 0.9), keep: canvasToJpeg(c, 1600, 0.82) });
+        const pick = pdf.numPages > 1 ? await pickPdfPages(pdf) : [1];
+        for (const i of pick) {
+          if (pending.length >= MAX_PAGES) { hud(`Najwyżej ${MAX_PAGES} stron naraz`); break; }
+          pending.push(await renderPdfPage(pdf, i));
         }
       } else if (f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|gif|bmp)$/i.test(f.name)) {
         const url = URL.createObjectURL(f);
@@ -1209,6 +1256,35 @@ async function addPages(files) {
     } catch (e) { console.error(e); hud(e.message || "Nie udało się otworzyć pliku.", 4000); }
   }
   drawPending();
+}
+async function renderPdfPage(pdf, i, edge = 2400) {
+  const page = await pdf.getPage(i), vp0 = page.getViewport({ scale: 1 });
+  const vp = page.getViewport({ scale: edge / Math.max(vp0.width, vp0.height) });
+  const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: g, viewport: vp }).promise;
+  return edge < 1000 ? c.toDataURL("image/jpeg", .7) : { big: canvasToJpeg(c, 2400, 0.9), keep: canvasToJpeg(c, 1600, 0.82) };
+}
+/* a PDF with several pages: show them all small and let the user tick the ones to read (T13) */
+function pickPdfPages(pdf) {
+  return new Promise(resolve => {
+    const box = $("#pdf-pages"), chosen = new Set();
+    box.innerHTML = ""; $("#pdf-count").textContent = `${pdf.numPages} ${plural(pdf.numPages, "strona", "strony", "stron")}`;
+    const sync = () => { $("#pdf-add").disabled = !chosen.size; $("#pdf-add span").textContent = chosen.size ? `Dodaj ${chosen.size} ${plural(chosen.size, "stronę", "strony", "stron")}` : "Wybierz strony"; };
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const b = document.createElement("button"); b.setAttribute("aria-pressed", "false"); b.setAttribute("aria-label", `Strona ${i}`);
+      b.innerHTML = `<span>${i}</span>`;
+      b.addEventListener("click", () => { const on = !chosen.has(i); on ? chosen.add(i) : chosen.delete(i); b.setAttribute("aria-pressed", String(on)); sync(); });
+      box.appendChild(b);
+      renderPdfPage(pdf, i, 300).then(u => { const im = new Image(); im.src = u; im.alt = ""; b.prepend(im); }).catch(() => {});
+    }
+    sync();
+    const done = list => { $("#pdf-add").onclick = null; pickPdfPages.cancel = null; resolve(list); };
+    $("#pdf-add").onclick = () => { const list = [...chosen].sort((a, b) => a - b); done(list); closeSheet(); };
+    $("#pdf-all").onclick = () => { for (let i = 1; i <= pdf.numPages; i++) chosen.add(i); $$("#pdf-pages button").forEach(b => b.setAttribute("aria-pressed", "true")); sync(); };
+    pickPdfPages.cancel = () => done([]);
+    openSheet("pdf");
+  });
 }
 function drawPending() {
   const t = $("#pending"); t.innerHTML = "";
@@ -1371,6 +1447,7 @@ async function startReading() {
 
 function preparePages() {
   $("#first-model").hidden = !!store.get("modelReady");
+  $("#slow-read").hidden = !!navigator.gpu || store.get("homrPrefer") === "webgpu-ok";
   ["clef", "time", "key"].forEach(k => { $("#ask-" + k).value = store.get("ask-" + k, ""); });
   $("#ask").open = ["clef", "time", "key"].some(k => store.get("ask-" + k, ""));
 }
@@ -1485,13 +1562,16 @@ $("#s-sub").addEventListener("click", e => {
 
 /* ---------------- Settings ---------------- */
 function syncSettings() {
+  syncInstall();
+  const items = NEWS[VERSION] || [];
+  $("#news").innerHTML = `<p class="txt"><b>Wersja ${esc(VERSION)}</b></p><ul class="news">${items.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
   const th = store.get("theme") === "dark" ? "dark" : "light";
   $$("#themeseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.theme === th)));
   $("#ver").textContent = BUILD ? `${VERSION} · test ${BUILD}` : VERSION;
   DB.all().then(all => {
     $("#store-count").textContent = all.length ? `${all.length} ${plural(all.length, "utwór", "utwory", "utworów")} w bibliotece` : "Biblioteka jest pusta";
   }).catch(() => {});
-  navigator.storage?.estimate?.().then(e => { $("#store-size").textContent = `Zajęte: ${(e.usage / 1048576).toFixed(1).replace(".", ",")} MB`; }).catch(() => {});
+  navigator.storage?.estimate?.().then(e => { $("#store-size").textContent = `Zajęte: ${(e.usage / 1048576).toFixed(1).replace(".", ",")} MB${store.get("modelReady") ? ", w tym ok. 150 MB to program do czytania nut" : ""}`; }).catch(() => {});
 }
 $$("#themeseg button").forEach(b => b.addEventListener("click", () => {
   const t = b.dataset.theme; store.set("theme", t);
@@ -1527,6 +1607,8 @@ function nudgeBackup(all) {
   el.hidden = !(changed && due);
 }
 $("#nudge-save")?.addEventListener("click", async () => { const n = await saveBackup(); if (n) hud(`Zapisano kopię: ${n} ${plural(n, "utwór", "utwory", "utworów")}`, 3000); });
+$("#news-open")?.addEventListener("click", () => { store.set("newsSeen", VERSION); $("#news-nudge").hidden = true; go("settings"); setTimeout(() => $("#news").scrollIntoView({ behavior: "smooth", block: "center" }), 450); });
+$("#news-x")?.addEventListener("click", () => { store.set("newsSeen", VERSION); fadeOut($("#news-nudge"), 180); });
 $("#nudge-x")?.addEventListener("click", () => { store.set("nudgeLater", String(Date.now())); fadeOut($("#backup-nudge"), 180); });
 $("#in-backup").addEventListener("change", async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -1546,6 +1628,31 @@ $("#in-backup").addEventListener("change", async e => {
     $("#backup-status").textContent = `Wczytano ${n} ${plural(n, "utwór", "utwory", "utworów")}.` +
       (newer ? ` ${newer} ${plural(newer, "utwór masz", "utwory masz", "utworów masz")} już w nowszej wersji.` : ""); syncSettings();
   } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
+});
+
+const NEWS = { "3.7": ["Kilka pytań przed czytaniem: klucz, metrum i znaki przy kluczu poprawiają odczyt.",
+  "Takty, które się nie zgadzają, są zaznaczone na czerwono, z licznikiem do sprawdzenia.",
+  "Pauzy wielotaktowe nie zasłaniają już kolejnych taktów.",
+  "Nuty od 50 do 200%, rozciąganie dwoma palcami, wielkość zapamiętana dla utworu.",
+  "Grana nuta jest wyraźna, a linia idzie za muzyką. Dotknij taktu, żeby grać od niego.",
+  "Szybkie interwały w Tonacji: sekunda, tercja, kwarta, kwinta w górę i w dół.",
+  "Z PDF-u wybierasz strony; do 12 stron naraz.",
+  "Przypomnienie o kopii zapasowej i bezpieczne wczytywanie kopii.",
+  "Odtwarzanie działa też w oknie prywatnym (incognito)."] };
+/* ---------------- Install (T9) ---------------- */
+let installEvt = null;
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function syncInstall() {
+  $("#installed").hidden = !standalone();
+  $("#btn-install").hidden = standalone() || !installEvt;
+  $("#install-steps").hidden = standalone();
+}
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; syncInstall(); });
+window.addEventListener("appinstalled", () => { installEvt = null; syncInstall(); hud("Solo jest na ekranie początkowym", 3000); });
+$("#btn-install").addEventListener("click", async () => {
+  if (!installEvt) return;
+  installEvt.prompt(); try { await installEvt.userChoice; } catch {}
+  installEvt = null; syncInstall();
 });
 
 /* ---------------- Welcome ---------------- */

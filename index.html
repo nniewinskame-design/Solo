@@ -85,6 +85,12 @@
           <label class="sort"><select id="lib-sort" aria-label="Kolejność"><option value="opened">Ostatnio grane</option><option value="title">Tytuł</option><option value="composer">Kompozytor</option><option value="created">Ostatnio dodane</option></select><svg class="i"><use href="#down"/></svg></label>
         </div>
       </div>
+      <div class="notice" id="news-nudge" hidden>
+        <svg class="i"><use href="#info"/></svg>
+        <div class="grow"><b>Nowa wersja Solo</b><span>Zobacz, co się zmieniło.</span></div>
+        <button class="link" id="news-open">Pokaż</button>
+        <button class="x" id="news-x" aria-label="Zamknij"><svg class="i"><use href="#x"/></svg></button>
+      </div>
       <div class="notice" id="backup-nudge" hidden>
         <svg class="i"><use href="#download"/></svg>
         <div class="grow"><b>Zapisz kopię nut</b><span>Na wypadek, gdyby przeglądarka wyczyściła pamięć.</span></div>
@@ -163,12 +169,17 @@
 
     <h3 class="lbl">Na ekranie początkowym</h3>
     <div class="group">
-      <div class="li col">
+      <button class="li tap" id="btn-install" hidden><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Dodaj Solo do ekranu</b><small>Solo stanie się aplikacją z własną ikoną</small></span><svg class="i chev"><use href="#right"/></svg></button>
+      <div class="li" id="installed" hidden><span class="ic"><svg class="i"><use href="#check"/></svg></span><span class="grow"><b>Solo jest na ekranie początkowym</b><small>Aktualizuje się samo, ikonę dodaje się tylko raz</small></span></div>
+      <div class="li col" id="install-steps">
         <p class="txt"><b>iPad, iPhone:</b> w Safari dotknij <b>Udostępnij</b>, potem <b>Do ekranu początkowego</b>.</p>
-        <p class="txt"><b>Android:</b> w Chrome otwórz menu <b>⋮</b> i wybierz <b>Dodaj do ekranu głównego</b>.</p>
+        <p class="txt"><b>Android:</b> w Chrome otwórz menu <b>⋮</b> i wybierz <b>Dodaj do ekranu głównego</b> (albo <b>Zainstaluj aplikację</b>). Wtedy Solo pojawi się też w Ustawieniach telefonu, w Aplikacjach. W innych przeglądarkach, np. DuckDuckGo, może powstać tylko skrót: otwórz Solo w Chrome.</p>
         <p class="txt"><b>Windows:</b> w Edge lub Chrome kliknij ikonę instalacji na końcu paska adresu.</p>
       </div>
     </div>
+
+    <h3 class="lbl">Co nowego</h3>
+    <div class="group"><div class="li col" id="news"></div></div>
 
     <h3 class="lbl">Informacje prawne</h3>
     <div class="group">
@@ -252,6 +263,7 @@
   <div class="shead"><h2 class="h-m" id="sh-pages-t">Nowe nuty</h2><button class="done ghost" data-close>Anuluj</button></div>
   <div class="thumbs" id="pending"></div>
   <p class="note" id="first-model" hidden>Pierwszy odczyt pobierze ok. 150 MB. Najlepiej przez Wi-Fi.</p>
+  <p class="note" id="slow-read" hidden>Ta przeglądarka czyta nuty wolniej (bez przyspieszenia grafiki), może to potrwać kilka minut. Szybciej będzie w Chrome lub Safari.</p>
   <details class="ask" id="ask">
     <summary>Kilka pytań <small>(nieobowiązkowe, poprawiają odczyt)</small></summary>
     <label class="ask-row" for="ask-clef"><span>Klucz w nutach</span><select id="ask-clef"><option value="">Nie wiem</option><option value="F">Basowy w całym utworze</option><option value="G">Wiolinowy w całym utworze</option><option value="C4">Tenorowy w całym utworze</option><option value="C3">Altowy w całym utworze</option></select></label>
@@ -260,6 +272,14 @@
   </details>
   <p class="err" id="read-error" hidden></p>
   <button class="btn primary wide" id="btn-read"><svg class="i"><use href="#wand"/></svg><span>Odczytaj nuty</span></button>
+</div>
+
+<div class="sheet" id="sh-pdf" role="dialog" aria-modal="true" aria-labelledby="sh-pdf-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-pdf-t">Które strony?</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <p class="note"><span id="pdf-count"></span>. Dotknij stron z nutami, które chcesz przeczytać. <button class="link" id="pdf-all" type="button">Zaznacz wszystkie</button></p>
+  <div class="pdfpick" id="pdf-pages"></div>
+  <button class="btn primary wide" id="pdf-add"><svg class="i"><use href="#plus"/></svg><span>Wybierz strony</span></button>
 </div>
 
 <div class="sheet" id="sh-doc" role="dialog" aria-modal="true" aria-labelledby="sh-doc-t" hidden>
@@ -286,9 +306,11 @@
     <input type="range" id="key-range" min="-6" max="6" step="1" aria-label="Tonacja: przesuń w lewo, żeby obniżyć, w prawo, żeby podwyższyć">
   </div>
   <div class="slide-ends"><button class="pill" id="key-down"><svg class="i"><use href="#minus"/></svg><span>Niżej</span></button><button class="pill" id="key-up"><span>Wyżej</span><svg class="i"><use href="#plus"/></svg></button></div>
+  <h3 class="lbl">O interwał</h3>
+  <div class="ivs" id="ivs"></div>
   <h3 class="lbl">Oktawa</h3>
   <div class="stepper"><button class="pill round" id="oct-down" aria-label="Oktawę niżej"><svg class="i"><use href="#minus"/></svg></button><span id="oct-val"></span><button class="pill round" id="oct-up" aria-label="Oktawę wyżej"><svg class="i"><use href="#plus"/></svg></button></div>
-  <h3 class="lbl">To nuty na inny instrument?</h3>
+  <h3 class="lbl">Nuty na inny instrument</h3>
   <div class="list" id="preset-list"></div>
   <p class="note" id="preset-hint" hidden></p>
 </div>
@@ -315,6 +337,7 @@
     <button class="li tap" id="btn-print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Plik MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" id="btn-report"><span class="ic"><svg class="i"><use href="#warn"/></svg></span><span class="grow"><b>Zgłoś problem</b><small>Wiadomość z wersją i ustawieniami, przez WhatsApp lub e-mail</small></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap danger" id="btn-delete"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń z biblioteki</b></span></button>
   </div>
 </div>
