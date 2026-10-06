@@ -1838,3 +1838,18 @@ body.immersive .loopbar{display:none}
 .ed-tabs button[aria-selected="true"]{padding:0 12px!important}
 .ed-tabs .ed-bar{background:var(--brand-tint)!important;color:var(--brand-ink)!important;font-weight:650!important;position:relative;margin-right:10px!important}
 .ed-tabs .ed-bar::after{content:"";position:absolute;right:-8px;top:10px;bottom:10px;width:1px;background:var(--hairline-2)}
+
+/* ---- home: one very delicate gradient at the top (light blue → light violet), fading into the page ---- */
+#home{position:relative;isolation:isolate}
+#home::before{content:"";position:absolute;left:0;right:0;top:0;height:320px;z-index:-1;pointer-events:none;
+  background:linear-gradient(110deg,#DDE9FF,#E6E3FF 55%,#EFE4FF);
+  -webkit-mask:var(--fade-g);mask:var(--fade-g)}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){ #home::before{background:linear-gradient(in oklch 110deg,#DAE7FF,#EEE3FF)} }
+
+/* ---- smaller headings ---- */
+.mast .h-xl{font-size:28px!important;letter-spacing:-.035em}
+.mast .brand{font-size:16px}
+.h-l,.page-title,.tabtitle{font-size:20px!important;letter-spacing:-.025em}
+.h-m{font-size:17px!important}
+#score .stitle .a{font-size:17px!important}
+.onb .h-l{font-size:24px!important}
