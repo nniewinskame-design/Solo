@@ -982,3 +982,32 @@ body.playing .pstrip{opacity:0;pointer-events:none}
 .ed-pane button .i,.card2 .i,.dock.transport .play svg.i{width:var(--ic-l);height:var(--ic-l)}
 .sbar .pill.round{width:44px;height:44px}
 .pchip.off{opacity:.45;background:var(--fill);box-shadow:none}
+/* the one way to add music: a round "+" above the tab bar in Nuty; it turns into × while its sheet is open */
+.fab{position:fixed;left:50%;bottom:calc(84px + var(--safe-b));z-index:5;width:64px;height:64px;margin-left:-32px;border-radius:50%;background:var(--primary);color:var(--on-primary);display:none;align-items:center;justify-content:center;box-shadow:0 8px 24px color-mix(in srgb,var(--primary) 40%,transparent);transition:transform 260ms var(--ease-out)}
+.fab .i{width:30px;height:30px;stroke-width:2.2}
+body.onhome .fab{display:flex}
+body.onhome.sheet-add .fab{transform:rotate(45deg)}
+.fab:active{transform:scale(.94)}
+.addlist .li{min-height:64px}
+.addlist .li b{font-size:17px}
+/* instrument picker: search, "Twoje", families of chips */
+.ip-search{display:flex;margin:4px 0 2px;height:48px}
+.ichips{display:flex;flex-wrap:wrap;gap:8px}
+.ichip{min-height:44px;padding:0 16px;border-radius:99px;background:var(--fill);color:var(--ink);font:600 15px var(--sans);border:2px solid transparent}
+.ichip[aria-pressed="true"]{background:var(--card);border-color:var(--primary)}
+.ichip:active{transform:scale(.97)}
+.steps{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.step{display:flex;flex-direction:column;gap:4px;background:var(--fill);border-radius:16px;padding:14px}
+.step b{font-size:15px}.step span{font-size:16px;line-height:1.5}
+.step .i{width:18px;height:18px;vertical-align:-3px}
+.tile.danger{color:#C93A2E}
+.card .thumb{-webkit-touch-callout:none;user-select:none}
+/* Apple-like motion: springs with a small overshoot (response ~0.35 s, damping ~0.8) */
+:root{--spring:cubic-bezier(.32,1.25,.5,1);--spring-soft:cubic-bezier(.25,1.1,.4,1)}
+.card .thumb{transition:transform 380ms var(--spring),box-shadow 300ms ease}
+.card.pressing .thumb{transform:scale(.96);transition-duration:480ms;transition-timing-function:ease-out}
+.card.lifted .thumb{transform:scale(1.03);box-shadow:0 18px 40px rgba(20,6,10,.22)}
+.fab{transition:transform 420ms var(--spring)}
+.pchip,.ichip,.tile,.ed-pane button,.tabbar button,.dock.transport .tool{transition:transform 300ms var(--spring),background-color 200ms ease,color 200ms ease}
+.pchip:active,.ichip:active,.tile:active,.ed-pane button:active,.tabbar button:active,.dock.transport .tool:active{transform:scale(.94);transition-duration:120ms}
+@media (prefers-reduced-motion:reduce){.card .thumb,.fab,.pchip,.ichip,.tile,.ed-pane button,.tabbar button,.dock.transport .tool{transition:none}}

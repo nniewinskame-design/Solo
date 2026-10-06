@@ -95,17 +95,12 @@
       <div class="hero-copy">
         <h1 class="h-xl">Co dziś gramy?</h1>
       </div>
-      <div class="hero-acts">
-        <label class="btn glass" for="in-files"><svg class="i"><use href="#file"/></svg><span>Z pliku</span></label>
-        <button class="btn cream" data-act="camera"><svg class="i"><use href="#camera"/></svg><span>Sfotografuj nuty</span></button>
-      </div>
     </header>
 
     <section class="lib" id="lib">
       <div class="libhead">
         <h2 class="h-l">Twoje nuty <span class="count" id="lib-count"></span></h2>
         <div class="libtools">
-          <button class="btn small tinted" data-act="blank"><svg class="i"><use href="#pencil"/></svg><span>Nowa melodia</span></button>
           <label class="search"><svg class="i"><use href="#search"/></svg><input id="lib-search" type="search" placeholder="Szukaj" autocomplete="off" aria-label="Szukaj w nutach"></label>
           <label class="sort"><select id="lib-sort" aria-label="Kolejność"><option value="opened">Ostatnio grane</option><option value="title">Tytuł</option><option value="composer">Kompozytor</option><option value="created">Ostatnio dodane</option></select><svg class="i"><use href="#down"/></svg></label>
         </div>
@@ -132,7 +127,7 @@
         
         <div class="row-btns">
           <button class="btn tinted" data-act="example"><span>Pokaż przykład</span></button>
-          <button class="btn tinted" data-act="blank"><span>Napisz własne nuty</span></button>
+          <button class="btn primary" data-sheet="add"><svg class="i"><use href="#plus"/></svg><span>Dodaj pierwsze nuty</span></button>
         </div>
       </div>
     </section>
@@ -212,7 +207,7 @@
 <!-- =============== SETTINGS =============== -->
 <section id="settings" class="view tabview" hidden>
   <div class="wrap narrow">
-    <h1 class="h-l page-title tabtitle">Ty</h1>
+    <h1 class="h-l page-title tabtitle">Ja</h1>
 
     <h3 class="lbl">Profil</h3>
     <div class="group"><button class="li tap" id="btn-profile"><span class="ic"><svg class="i"><use href="#user"/></svg></span><span class="grow"><b>Twój instrument</b><small id="prof-sum"></small></span><svg class="i chev"><use href="#right"/></svg></button></div>
@@ -277,11 +272,23 @@
 <section id="metrov" class="view tabview" hidden>
   <div class="wrap narrow"><h1 class="h-l page-title tabtitle">Metronom</h1><div class="host" id="metro-tab-host"></div></div>
 </section>
+<button class="fab" id="fab" data-sheet="add" aria-label="Dodaj nuty"><svg class="i"><use href="#plus"/></svg></button>
+<div class="sheet" id="sh-add" role="dialog" aria-modal="true" aria-label="Dodaj nuty" hidden>
+  <div class="grab"></div>
+  <div class="list addlist first">
+    <button class="li tap" data-act="camera"><span class="ic"><svg class="i"><use href="#camera"/></svg></span><span class="grow"><b>Zrób zdjęcie</b></span></button>
+    <label class="li tap" for="in-gallery"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Z galerii</b></span></label>
+    <label class="li tap" for="in-files"><span class="ic"><svg class="i"><use href="#file"/></svg></span><span class="grow"><b>Z pliku</b><small>PDF, MusicXML</small></span></label>
+    <button class="li tap" data-sheet="mail"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Z maila</b></span></button>
+    <button class="li tap" data-act="blank"><span class="ic"><svg class="i"><use href="#pencil"/></svg></span><span class="grow"><b>Nowa melodia</b></span></button>
+  </div>
+</div>
+
 <nav class="tabbar" id="tabbar" aria-label="Zakładki">
   <button data-tab="home" aria-current="page"><svg class="i"><use href="#music"/></svg><span>Nuty</span></button>
   <button data-tab="tunerv"><svg class="i"><use href="#fork"/></svg><span>Stroik</span></button>
   <button data-tab="metrov"><svg class="i"><use href="#metronome"/></svg><span>Metronom</span></button>
-  <button data-tab="settings"><svg class="i"><use href="#user"/></svg><span>Ty</span></button>
+  <button data-tab="settings"><svg class="i"><use href="#user"/></svg><span>Ja</span></button>
 </nav>
 
 <!-- =============== FIRST START: PROFILE =============== -->
@@ -533,7 +540,6 @@
     <button class="tile" id="btn-share"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
     <button class="tile" data-sheet="tuner"><svg class="i"><use href="#fork"/></svg><span>Stroik</span></button>
     <button class="tile" data-sheet="tools"><svg class="i"><use href="#metronome"/></svg><span>Metronom</span></button>
-    <button class="tile" data-sheet="partfor"><svg class="i"><use href="#trombone"/></svg><span>Osobny plik</span></button>
   </div>
   <h3 class="lbl">Partie</h3>
   <div class="list" id="parts"></div>
@@ -557,10 +563,10 @@
   <div class="list">
     <button class="li tap" id="btn-print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" id="btn-xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Plik MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" id="btn-xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-restore" hidden><span class="ic"><svg class="i"><use href="#undo"/></svg></span><span class="grow"><b>Przywróć odczyt</b></span></button>
     <button class="li tap" id="btn-report"><span class="ic"><svg class="i"><use href="#warn"/></svg></span><span class="grow"><b>Zgłoś problem</b></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap danger" id="btn-delete"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń z biblioteki</b></span></button>
+    <button class="li tap danger" id="btn-delete"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń</b></span></button>
   </div>
 </div>
 
@@ -573,8 +579,7 @@
       <button class="tile wide" data-quick="duo"><svg class="i"><use href="#user"/></svg><span>Duet</span></button>
       <button class="tile wide" data-quick="trio"><svg class="i"><use href="#music"/></svg><span>Trio</span></button>
     </div>
-    <h3 class="lbl">Instrument</h3>
-    <div class="tiles three" id="ap-instr"></div>
+    <div id="ap-instr"></div>
   </div>
   <div id="ap-step2" hidden>
     <h3 class="lbl first" id="ap-for"></h3>
@@ -628,12 +633,34 @@
   <div class="orig" id="orig-imgs"></div>
 </div>
 
+<div class="sheet" id="sh-mail" role="dialog" aria-modal="true" aria-labelledby="sh-mail-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-mail-t">Z maila</h2><button class="done" data-close>Gotowe</button></div>
+  <div class="steps first">
+    <div class="step"><b>Android</b><span>Otwórz załącznik w poczcie → <svg class="i"><use href="#share"/></svg> Udostępnij → Solo</span></div>
+    <div class="step"><b>iPhone</b><span>Przytrzymaj załącznik → Zachowaj w Plikach → tu: Z pliku</span></div>
+  </div>
+  <label class="btn primary wide" for="in-files"><svg class="i"><use href="#file"/></svg><span>Z pliku</span></label>
+</div>
+
+<div class="sheet" id="sh-card" role="dialog" aria-modal="true" aria-labelledby="sh-card-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-card-t"></h2><button class="done ghost" data-close>Anuluj</button></div>
+  <div class="tiles first">
+    <button class="tile" id="cd-open"><svg class="i"><use href="#music"/></svg><span>Otwórz</span></button>
+    <button class="tile" id="cd-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
+    <button class="tile" id="cd-rename"><svg class="i"><use href="#pencil"/></svg><span>Nazwa</span></button>
+    <button class="tile danger" id="cd-del"><svg class="i"><use href="#trash"/></svg><span>Usuń</span></button>
+  </div>
+</div>
+
 <div class="sheet" id="sh-share" role="dialog" aria-modal="true" aria-labelledby="sh-share-t" hidden>
   <div class="grab"></div>
-  <div class="shead"><h2 class="h-m" id="sh-share-t">Udostępnij</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <div class="shead"><h2 class="h-m" id="sh-share-t">Wyślij</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <div id="share-parts" hidden><h3 class="lbl first">Partie</h3><div class="ichips" id="share-chips"></div></div>
   <div class="list">
-    <button class="li tap" data-act="send-pdf"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Wyślij PDF</b><small>E-mail, WhatsApp i inne</small></span><svg class="i chev"><use href="#right"/></svg></button>
-    <button class="li tap" data-act="send-img"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Wyślij jako obraz</b><small>Pierwsza strona jako zdjęcie</small></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" data-act="send-pdf"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Wyślij PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" data-act="send-img"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Wyślij obraz</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" data-act="print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" data-act="pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" data-act="xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Plik MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>
@@ -651,6 +678,7 @@
 <div id="print-area" aria-hidden="true"></div>
 
 <input type="file" id="in-camera" accept="image/*" capture="environment" hidden>
+<input type="file" id="in-gallery" accept="image/*" multiple hidden>
 <input type="file" id="in-files" accept="image/*,application/pdf,.pdf,.musicxml,.xml,.mxl,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml" multiple hidden>
 <input type="file" id="in-backup" accept="application/json,.json" hidden>
 

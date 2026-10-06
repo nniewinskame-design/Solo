@@ -7,23 +7,87 @@
 /* clef as Solo names it; tr = semitones from the sounding note to the written one (B♭ trumpet: +2);
    lo/hi = practical sounding range (MIDI); voice = playback timbre */
 const INSTRUMENTS = [
-  { id: "puzon", name: "Puzon", clef: "bass", tr: 0, lo: 40, hi: 77, voice: "brass", group: "Blaszane" },
-  { id: "puzon-b", name: "Puzon basowy", clef: "bass", tr: 0, lo: 34, hi: 70, voice: "brass", group: "Blaszane" },
-  { id: "trabka", name: "Trąbka B", clef: "treble", tr: 2, lo: 52, hi: 82, voice: "brass", group: "Blaszane" },
-  { id: "kornet", name: "Kornet B", clef: "treble", tr: 2, lo: 52, hi: 82, voice: "brass", group: "Blaszane" },
-  { id: "eufonium", name: "Eufonium, baryton", clef: "bass", tr: 0, lo: 40, hi: 74, voice: "brass", group: "Blaszane" },
-  { id: "tuba", name: "Tuba", clef: "bass", tr: 0, lo: 26, hi: 65, voice: "brass", group: "Blaszane" },
-  { id: "waltornia", name: "Waltornia F", clef: "treble", tr: 7, lo: 35, hi: 77, voice: "brass", group: "Blaszane" },
-  { id: "klarnet", name: "Klarnet B", clef: "treble", tr: 2, lo: 50, hi: 94, voice: "reed", group: "Drewniane" },
-  { id: "sax-a", name: "Saksofon altowy Es", clef: "treble", tr: 9, lo: 49, hi: 80, voice: "reed", group: "Drewniane" },
-  { id: "sax-t", name: "Saksofon tenorowy B", clef: "treble", tr: 14, lo: 44, hi: 75, voice: "reed", group: "Drewniane" },
-  { id: "flet", name: "Flet", clef: "treble", tr: 0, lo: 60, hi: 96, voice: "flute", group: "Drewniane" },
-  { id: "oboj", name: "Obój", clef: "treble", tr: 0, lo: 58, hi: 93, voice: "reed", group: "Drewniane" },
-  { id: "skrzypce", name: "Skrzypce", clef: "treble", tr: 0, lo: 55, hi: 100, voice: "string", group: "Inne" },
-  { id: "wiolonczela", name: "Wiolonczela", clef: "bass", tr: 0, lo: 36, hi: 81, voice: "string", group: "Inne" },
-  { id: "fortepian", name: "Fortepian", clef: "treble", tr: 0, lo: 21, hi: 108, voice: "piano", group: "Inne" },
-  { id: "glos", name: "Głos", clef: "treble", tr: 0, lo: 48, hi: 81, voice: "voice", group: "Inne" }
+  /* Dęte blaszane */
+  { id: "puzon", name: "Puzon", clef: "bass", tr: 0, lo: 40, hi: 77, voice: "brass", group: "Dęte blaszane" },
+  { id: "puzon-alt", name: "Puzon altowy", clef: "alto", tr: 0, lo: 45, hi: 79, voice: "brass", group: "Dęte blaszane" },
+  { id: "puzon-b", name: "Puzon basowy", clef: "bass", tr: 0, lo: 34, hi: 70, voice: "brass", group: "Dęte blaszane" },
+  { id: "trabka", name: "Trąbka B", clef: "treble", tr: 2, lo: 52, hi: 82, voice: "brass", group: "Dęte blaszane" },
+  { id: "trabka-c", name: "Trąbka C", clef: "treble", tr: 0, lo: 54, hi: 84, voice: "brass", group: "Dęte blaszane" },
+  { id: "kornet", name: "Kornet B", clef: "treble", tr: 2, lo: 52, hi: 82, voice: "brass", group: "Dęte blaszane" },
+  { id: "flugelhorn", name: "Flugelhorn B", clef: "treble", tr: 2, lo: 52, hi: 79, voice: "brass", group: "Dęte blaszane" },
+  { id: "waltornia", name: "Waltornia F", clef: "treble", tr: 7, lo: 35, hi: 77, voice: "brass", group: "Dęte blaszane" },
+  { id: "sakshorn-a", name: "Sakshorn altowy Es", clef: "treble", tr: 9, lo: 43, hi: 74, voice: "brass", group: "Dęte blaszane" },
+  { id: "sakshorn-t", name: "Sakshorn tenorowy B", clef: "treble", tr: 14, lo: 40, hi: 72, voice: "brass", group: "Dęte blaszane" },
+  { id: "eufonium", name: "Eufonium", clef: "bass", tr: 0, lo: 40, hi: 74, voice: "brass", group: "Dęte blaszane" },
+  { id: "baryton", name: "Baryton B", clef: "treble", tr: 14, lo: 40, hi: 72, voice: "brass", group: "Dęte blaszane" },
+  { id: "tuba", name: "Tuba", clef: "bass", tr: 0, lo: 26, hi: 65, voice: "brass", group: "Dęte blaszane" },
+  { id: "suzafon", name: "Suzafon", clef: "bass", tr: 0, lo: 28, hi: 62, voice: "brass", group: "Dęte blaszane" },
+  /* Dęte drewniane */
+  { id: "flet", name: "Flet", clef: "treble", tr: 0, lo: 60, hi: 96, voice: "flute", group: "Dęte drewniane" },
+  { id: "piccolo", name: "Flet piccolo", clef: "treble", tr: -12, lo: 74, hi: 108, voice: "flute", group: "Dęte drewniane" },
+  { id: "flet-a", name: "Flet altowy G", clef: "treble", tr: 5, lo: 55, hi: 86, voice: "flute", group: "Dęte drewniane" },
+  { id: "flet-p", name: "Flet prosty", clef: "treble", tr: -12, lo: 72, hi: 98, voice: "flute", group: "Dęte drewniane" },
+  { id: "oboj", name: "Obój", clef: "treble", tr: 0, lo: 58, hi: 93, voice: "reed", group: "Dęte drewniane" },
+  { id: "rozek", name: "Rożek angielski F", clef: "treble", tr: 7, lo: 52, hi: 81, voice: "reed", group: "Dęte drewniane" },
+  { id: "klarnet", name: "Klarnet B", clef: "treble", tr: 2, lo: 50, hi: 94, voice: "reed", group: "Dęte drewniane" },
+  { id: "klarnet-a", name: "Klarnet A", clef: "treble", tr: 3, lo: 49, hi: 93, voice: "reed", group: "Dęte drewniane" },
+  { id: "klarnet-es", name: "Klarnet Es", clef: "treble", tr: -3, lo: 55, hi: 98, voice: "reed", group: "Dęte drewniane" },
+  { id: "klarnet-bas", name: "Klarnet basowy B", clef: "treble", tr: 14, lo: 38, hi: 77, voice: "reed", group: "Dęte drewniane" },
+  { id: "fagot", name: "Fagot", clef: "bass", tr: 0, lo: 34, hi: 75, voice: "reed", group: "Dęte drewniane" },
+  { id: "kontrafagot", name: "Kontrafagot", clef: "bass", tr: 12, lo: 22, hi: 53, voice: "reed", group: "Dęte drewniane" },
+  { id: "sax-s", name: "Saksofon sopranowy B", clef: "treble", tr: 2, lo: 56, hi: 87, voice: "reed", group: "Dęte drewniane" },
+  { id: "sax-a", name: "Saksofon altowy Es", clef: "treble", tr: 9, lo: 49, hi: 80, voice: "reed", group: "Dęte drewniane" },
+  { id: "sax-t", name: "Saksofon tenorowy B", clef: "treble", tr: 14, lo: 44, hi: 75, voice: "reed", group: "Dęte drewniane" },
+  { id: "sax-b", name: "Saksofon barytonowy Es", clef: "treble", tr: 21, lo: 36, hi: 68, voice: "reed", group: "Dęte drewniane" },
+  /* Smyczkowe */
+  { id: "skrzypce", name: "Skrzypce", clef: "treble", tr: 0, lo: 55, hi: 100, voice: "string", group: "Smyczkowe" },
+  { id: "altowka", name: "Altówka", clef: "alto", tr: 0, lo: 48, hi: 88, voice: "string", group: "Smyczkowe" },
+  { id: "wiolonczela", name: "Wiolonczela", clef: "bass", tr: 0, lo: 36, hi: 81, voice: "string", group: "Smyczkowe" },
+  { id: "kontrabas", name: "Kontrabas", clef: "bass", tr: 12, lo: 28, hi: 67, voice: "string", group: "Smyczkowe" },
+  /* Klawiszowe */
+  { id: "fortepian", name: "Fortepian", clef: "treble", tr: 0, lo: 21, hi: 108, voice: "piano", group: "Klawiszowe" },
+  { id: "organy", name: "Organy", clef: "treble", tr: 0, lo: 36, hi: 96, voice: "reed", group: "Klawiszowe" },
+  { id: "akordeon", name: "Akordeon", clef: "treble", tr: 0, lo: 41, hi: 93, voice: "reed", group: "Klawiszowe" },
+  { id: "keyboard", name: "Keyboard", clef: "treble", tr: 0, lo: 36, hi: 96, voice: "piano", group: "Klawiszowe" },
+  /* Szarpane */
+  { id: "gitara", name: "Gitara", clef: "treble", tr: 12, lo: 40, hi: 83, voice: "piano", group: "Szarpane" },
+  { id: "gitara-bas", name: "Gitara basowa", clef: "bass", tr: 12, lo: 28, hi: 67, voice: "piano", group: "Szarpane" },
+  { id: "ukulele", name: "Ukulele", clef: "treble", tr: 0, lo: 60, hi: 81, voice: "piano", group: "Szarpane" },
+  { id: "mandolina", name: "Mandolina", clef: "treble", tr: 0, lo: 55, hi: 88, voice: "piano", group: "Szarpane" },
+  { id: "harfa", name: "Harfa", clef: "treble", tr: 0, lo: 24, hi: 103, voice: "piano", group: "Szarpane" },
+  /* Perkusyjne (melodyczne) */
+  { id: "dzwonki", name: "Dzwonki", clef: "treble", tr: -24, lo: 79, hi: 108, voice: "piano", group: "Perkusyjne" },
+  { id: "ksylofon", name: "Ksylofon", clef: "treble", tr: -12, lo: 65, hi: 108, voice: "piano", group: "Perkusyjne" },
+  { id: "marimba", name: "Marimba", clef: "treble", tr: 0, lo: 45, hi: 96, voice: "piano", group: "Perkusyjne" },
+  { id: "wibrafon", name: "Wibrafon", clef: "treble", tr: 0, lo: 53, hi: 89, voice: "piano", group: "Perkusyjne" },
+  /* Głos */
+  { id: "sopran", name: "Sopran", clef: "treble", tr: 0, lo: 60, hi: 84, voice: "voice", group: "Głos" },
+  { id: "alt", name: "Alt", clef: "treble", tr: 0, lo: 53, hi: 77, voice: "voice", group: "Głos" },
+  { id: "tenor", name: "Tenor", clef: "treble", tr: 12, lo: 48, hi: 72, voice: "voice", group: "Głos" },
+  { id: "bas", name: "Bas", clef: "bass", tr: 0, lo: 40, hi: 64, voice: "voice", group: "Głos" }
 ];
+const INSTR_GROUPS = ["Dęte blaszane", "Dęte drewniane", "Smyczkowe", "Klawiszowe", "Szarpane", "Perkusyjne", "Głos"];
+/* the instrument picker (benchmark: MuseScore, StaffPad, Dorico, BandLab): search, "yours" first, then families */
+function instrPicker(box, { selected = [], multi = false, onPick }) {
+  const p = profile(), mine = [...new Set([...(p.instruments || []), ...JSON.parse(store.get("recentInstr", "[]"))])].filter(id => INSTRUMENTS.some(i => i.id === id)).slice(0, 8);
+  const chip = i => `<button class="ichip" data-i="${i.id}" aria-pressed="${selected.includes(i.id)}">${esc(i.name)}</button>`;
+  const draw = q => {
+    const f = (q || "").trim().toLowerCase(), hit = i => !f || i.name.toLowerCase().includes(f);
+    let h = "";
+    if (!f && mine.length) h += `<h3 class="lbl">Twoje</h3><div class="ichips">${mine.map(id => chip(instrById(id))).join("")}</div>`;
+    INSTR_GROUPS.forEach(g => { const list = INSTRUMENTS.filter(i => i.group === g && hit(i)); if (list.length) h += `<h3 class="lbl">${g}</h3><div class="ichips">${list.map(chip).join("")}</div>`; });
+    box.querySelector(".ip-list").innerHTML = h || `<p class="note">Brak takiego instrumentu.</p>`;
+  };
+  box.innerHTML = `<label class="search ip-search">${icon("search")}<input type="search" placeholder="Szukaj instrumentu" autocomplete="off"></label><div class="ip-list"></div>`;
+  box.querySelector("input").addEventListener("input", e => draw(e.target.value));
+  box.querySelector(".ip-list").addEventListener("click", e => {
+    const b = e.target.closest("[data-i]"); if (!b) return;
+    if (multi) { const i = selected.indexOf(b.dataset.i); if (i >= 0) selected.splice(i, 1); else selected.push(b.dataset.i); $$(`[data-i="${b.dataset.i}"]`, box).forEach(x => x.setAttribute("aria-pressed", String(selected.includes(b.dataset.i)))); }
+    onPick(b.dataset.i);
+  });
+  draw("");
+}
+function rememberInstr(id) { const r = JSON.parse(store.get("recentInstr", "[]")).filter(x => x !== id); r.unshift(id); store.set("recentInstr", JSON.stringify(r.slice(0, 6))); }
 const instrById = id => INSTRUMENTS.find(i => i.id === id) || INSTRUMENTS[0];
 const PROFILE_DEFAULT = { instruments: ["puzon"], main: "puzon", reading: "written", role: "", a4: 440, done: false };
 function profile() {
@@ -35,7 +99,7 @@ const mainInstr = () => instrById(profile().main);
 /* what the tuner shows: the written note for a transposing instrument (as the player reads it) */
 function applyProfile() {
   const p = profile(), m = instrById(p.main);
-  if (store.get("tunerTr") == null || p.done) { tuner.tr = p.reading === "written" ? m.tr % 12 : 0; }
+  if (store.get("tunerTr") == null || p.done) { tuner.tr = p.reading === "written" ? ((m.tr % 12) + 12) % 12 : 0; }
   tuner.a4 = p.a4 || 440;
   const s = $("#prof-sum"); if (s) s.textContent = profileSummary();
 }
@@ -78,13 +142,11 @@ function renderOnb() {
   if (name === "hello") {
     h = `<div class="onb-brand"><svg class="mark"><use href="#note"/></svg><span>Solo</span></div>
       <h1 class="h-xl">Kilka pytań na start</h1>
-      <p class="onb-lead">Solo ustawi się pod Ciebie. Wszystko zmienisz później w zakładce „Ty”.</p>
+      <p class="onb-lead">Solo ustawi się pod Ciebie. Wszystko zmienisz później w zakładce „Ja”.</p>
       <p class="w-legal">Korzystając z Solo, akceptujesz <a href="regulamin.html">regulamin</a> i&nbsp;<a href="prywatnosc.html">politykę&nbsp;prywatności</a>.</p>`;
     next = "Zaczynamy";
   } else if (name === "instr") {
-    h = `<h2 class="h-l">Na czym grasz?</h2><p class="onb-lead">Możesz zaznaczyć kilka.</p>` +
-      ["Blaszane", "Drewniane", "Inne"].map(g => `<h3 class="lbl">${g}</h3><div class="onb-grid">` +
-        INSTRUMENTS.filter(i => i.group === g).map(i => tile(p.instruments.includes(i.id), i.name, `data-instr="${i.id}"`)).join("") + `</div>`).join("");
+    h = `<h2 class="h-l">Na czym grasz?</h2><div id="onb-picker"></div>`;
   } else if (name === "main") {
     h = `<h2 class="h-l">Główny instrument</h2><div class="onb-grid one">` +
       p.instruments.map(id => tile(p.main === id, instrById(id).name, `data-main="${id}"`)).join("") + `</div>`;
@@ -106,6 +168,7 @@ function renderOnb() {
     next = "Zacznij";
   }
   box.innerHTML = h; box.scrollTop = 0;
+  if (name === "instr") instrPicker($("#onb-picker"), { selected: p.instruments, multi: true, onPick: () => { if (!p.instruments.includes(p.main)) p.main = p.instruments[0] || "puzon"; if (p.instruments.length === 1) p.main = p.instruments[0]; $("#onb-next").disabled = !p.instruments.length; } });
   $("#onb-next span").textContent = next;
   $("#onb-next").disabled = name === "instr" && !p.instruments.length;
   $("#onb-skip").hidden = name === "done";
@@ -113,7 +176,7 @@ function renderOnb() {
 $("#onb-body").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   const p = onb.p;
-  if (b.dataset.instr) {
+  if (b.dataset.instr && false) {
     const id = b.dataset.instr, i = p.instruments.indexOf(id);
     if (i >= 0) p.instruments.splice(i, 1); else p.instruments.push(id);
     if (!p.instruments.includes(p.main)) p.main = p.instruments[0] || "puzon";

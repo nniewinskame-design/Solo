@@ -111,7 +111,7 @@ function show(v, dir, opt = {}) {
 /* ---------------- tabs: Nuty, Stroik, Metronom, Ty. A piece opens full screen above them ---------------- */
 const TABS = ["home", "tunerv", "metrov", "settings"];
 function tabShown(v, from) {
-  document.body.classList.toggle("tabs", TABS.includes(v));
+  document.body.classList.toggle("tabs", TABS.includes(v)); document.body.classList.toggle("onhome", v === "home");
   $$("#tabbar [data-tab]").forEach(b => b.toggleAttribute("aria-current", b.dataset.tab === v));
   if (from === "tunerv" && v !== "tunerv" && tuner.on) tunerStop();
   if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerStart(); }
@@ -244,8 +244,8 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet })[name]?.();
-  openSheetId = name;
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet, share: buildShareSheet })[name]?.();
+  openSheetId = name; document.body.classList.toggle("sheet-add", name === "add");
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
   const f = el.querySelector(".done, button, input"); if (f && matchMedia("(pointer:fine)").matches) f.focus({ preventScroll: true });
@@ -255,7 +255,7 @@ function hideSheet(instant, keepScrim) {
   if (openSheetId === "pdf" && pickPdfPages.cancel) { const c = pickPdfPages.cancel; setTimeout(c, 0); }
   if (!openSheetId) return;
   const name = openSheetId, el = $("#sh-" + name);
-  openSheetId = null;
+  openSheetId = null; document.body.classList.remove("sheet-add");
   const v = sheetVelocity; sheetVelocity = undefined;
   if (instant) {
     ctl(el).spring.stop(); el.hidden = true; el.style.transform = ""; el.classList.remove("out", "pre");
@@ -363,9 +363,9 @@ document.addEventListener("click", e => {
   if (a) {
     const act = a.dataset.act;
     if (act === "example") { hideWelcome(); openPiece({ xml: exampleXml(), sourceType: "example", title: "", composer: null, instrument: "Puzon" }); }
-    if (act === "blank") { hideWelcome(); openSheet("new"); }
-    if (act === "camera") { if (a.id === "w-camera") store.set("welcomed", "1"); openCamera(); }
-    if (act === "print") closeSheetThen(printScore);
+    if (act === "blank") { hideWelcome(); if (openSheetId) closeSheetThen(() => openSheet("new")); else openSheet("new"); }
+    if (act === "camera") { if (a.id === "w-camera") store.set("welcomed", "1"); if (openSheetId) closeSheetThen(openCamera); else openCamera(); }
+    if (act === "print") closeSheetThen(() => exportParts.length === 1 ? withOnly(exportParts[0], printScore) : exportParts.length ? hud("Do druku wybierz jedną partię albo pobierz PDF", 3500) : printScore());
     if (act === "pdf") closeSheetThen(savePdf);
     if (act === "send-pdf") closeSheetThen(() => savePdf(true));
     if (act === "send-img") closeSheetThen(sendImage);
@@ -424,7 +424,14 @@ async function refreshLibrary(animate) {
     const meta = p.composer || (p.sourceType === "ai" || p.sourceType === "device" ? "Ze zdjęcia" : p.sourceType === "example" ? "Przykład" : p.sourceType === "own" ? "Własne" : "Z pliku");
     b.innerHTML = `<button class="thumb" aria-label="Otwórz: ${esc(p.title || "Bez tytułu")}">${p.thumb ? `<img src="${esc(p.thumb)}" alt="">` : `<span class="ph">${esc(p.title || "Bez tytułu")}</span>`}${p.id === latest ? `<i class="ribbon" title="Ostatnio grane"></i>` : ""}</button>
       <div class="t" role="button" tabindex="0" aria-label="Zmień tytuł">${esc(p.title || "Bez tytułu")}</div><div class="m"><span class="c${p.composer ? "" : " ph"}" role="button" tabindex="0" aria-label="Zmień kompozytora">${esc(meta)}</span>${p.keyLabel ? `<button class="key" aria-label="Tonacja: ${esc(p.keyLabel)}">${esc(shortKey(p.keyLabel))}</button>` : ""}</div>`;
-    b.querySelector(".thumb").addEventListener("click", () => openPiece(p, p.settings));
+    b.querySelector(".thumb").addEventListener("click", () => { if (b._long) { b._long = false; return; } openPiece(p, p.settings); });
+    { let t = 0; const th = b.querySelector(".thumb");
+      /* Haptic Touch: the card sinks while pressed, lifts when the menu comes, settles back with a spring */
+      const up = () => { clearTimeout(t); b.classList.remove("pressing"); };
+      th.addEventListener("pointerdown", () => { b._long = false; b.classList.add("pressing"); t = setTimeout(() => { b._long = true; b.classList.remove("pressing"); b.classList.add("lifted"); navigator.vibrate?.(10); openCardSheet(p, b); setTimeout(() => b.classList.remove("lifted"), 420); }, 480); });
+      ["pointerup", "pointerleave", "pointercancel"].forEach(ev => th.addEventListener(ev, up));
+      th.addEventListener("pointermove", e => { if (Math.abs(e.movementY) > 4 || Math.abs(e.movementX) > 4) up(); });
+      th.addEventListener("contextmenu", e => { e.preventDefault(); openCardSheet(p, b); }); }
     const k = b.querySelector(".key"); if (k) k.addEventListener("click", () => { openPiece(p, p.settings); setTimeout(() => S.view === "score" && openSheet("key"), 520); });
     const edit = (el, field, ph) => inlineEdit(el, { value: p[field] || "", placeholder: ph, onSave: v => renameInLibrary(p, field, v) });
     const tEl = b.querySelector(".t"), cEl = b.querySelector(".c");
@@ -1505,37 +1512,63 @@ function buildPdf(images, w, h, title) {
   return new Blob(parts, { type: "application/pdf" });
 }
 let pdfBusy = false;
+/* the score (or one part of it) as PDF pages */
+async function pdfBlob(xml, title) {
+  tk.setOptions(a4Options({}, 1)); tk.loadData(xml);
+  const svgs = []; for (let i = 1; i <= tk.getPageCount(); i++) svgs.push(tk.renderToSVG(i));
+  S.loadedKey = null;
+  const images = [];
+  for (let i = 0; i < svgs.length; i++) {
+    const el = await pageCanvas(svgs[i]); if (i === 0) enlargeTitle(el, 1.9);
+    const c = await rasterPage(el); images.push(await pageImage(c)); c.width = c.height = 1;    // free the memory before the next page
+  }
+  return buildPdf(images, PDF_W, PDF_H, title);
+}
+/* parts chosen in the share sheet: one PDF per part, its name on top ("Puzon II") */
+let exportParts = [];
 async function savePdf(send) {
   if (!S.piece || pdfBusy) return;
   pdfBusy = true; stopPlayback();
   hud("Przygotowuję PDF…", 60000);
   try {
     await engineReady;
-    tk.setOptions(a4Options());
-    tk.loadData(processedXml());
-    const svgs = []; for (let i = 1; i <= tk.getPageCount(); i++) svgs.push(tk.renderToSVG(i));
-    S.loadedKey = null;
-    const images = [];
-    for (let i = 0; i < svgs.length; i++) {
-      const el = await pageCanvas(svgs[i]); if (i === 0) enlargeTitle(el, 1.9);
-      const c = await rasterPage(el);
-      images.push(await pageImage(c));
-      c.width = c.height = 1;                      // free the memory before the next page
-    }
-    const title = S.piece.title || "Nuty", name = safeName(title) + ".pdf";
-    const blob = buildPdf(images, PDF_W, PDF_H, title);
-    const file = new File([blob], name, { type: "application/pdf" });
+    const title = S.piece.title || "Nuty", files = [];
+    if (exportParts.length) {
+      const keep = S.parts.map(p => p.keep), instr = S.piece.instrument;
+      try {
+        for (const id of exportParts) {
+          const nm = partName(id); S.parts.forEach(p => (p.keep = p.id === id)); S.piece.instrument = nm;
+          files.push(new File([await pdfBlob(processedXml(), title)], `${safeName(title)} - ${safeName(nm)}.pdf`, { type: "application/pdf" }));
+        }
+      } finally { S.parts.forEach((p, i) => (p.keep = keep[i])); S.piece.instrument = instr; }
+    } else files.push(new File([await pdfBlob(processedXml(), title)], safeName(title) + ".pdf", { type: "application/pdf" }));
     // iPhone and iPad: the share sheet (Save to Files, AirDrop…); everywhere else a normal download
     const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
     let shared = false;
-    if ((apple || send) && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title }); shared = true; } catch (e) { if (e && e.name === "AbortError") shared = true; }
+    if ((apple || send) && navigator.canShare && navigator.canShare({ files })) {
+      try { await navigator.share({ files, title }); shared = true; } catch (e) { if (e && e.name === "AbortError") shared = true; }
     }
-    if (!shared) { download(name, blob, "application/pdf"); hud("Pobrano " + name, 3000); }
+    if (!shared) {
+      files.forEach(f => download(f.name, f, "application/pdf"));
+      if (send) { location.href = `mailto:?subject=${encodeURIComponent(title)}`; hud("Pobrano. Dołącz plik do wiadomości.", 4000); }
+      else hud(files.length > 1 ? `Pobrano ${files.length} pliki PDF` : "Pobrano " + files[0].name, 3000);
+    }
     else hud("Gotowe", 1200);
   } catch (e) { console.error(e); hud("Nie udało się zapisać PDF. Spróbuj jeszcze raz.", 4000); }
   finally { pdfBusy = false; if (S.view === "score") render(); }
 }
+function buildShareSheet() {
+  const many = S.parts.length > 1; $("#share-parts").hidden = !many; if (!many) { exportParts = []; return; }
+  exportParts = exportParts.filter(id => S.parts.some(p => p.id === id));
+  $("#share-chips").innerHTML = `<button class="ichip" data-all aria-pressed="${!exportParts.length}">Partytura</button>` +
+    S.parts.map(p => `<button class="ichip" data-p="${p.id}" aria-pressed="${exportParts.includes(p.id)}">${esc(partName(p.id))}</button>`).join("");
+}
+$("#share-chips").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.hasAttribute("data-all")) exportParts = [];
+  else { const i = exportParts.indexOf(b.dataset.p); if (i >= 0) exportParts.splice(i, 1); else exportParts.push(b.dataset.p); }
+  buildShareSheet();
+});
 /* T20: the first page as a picture, for chats that show images better than PDFs */
 async function sendImage() {
   if (!S.piece || pdfBusy) return;
@@ -1883,17 +1916,28 @@ $("#btn-report").addEventListener("click", async () => {
   } catch (e) { if (e && e.name === "AbortError") return; }
   location.href = "mailto:nniewinskame@gmail.com?subject=" + encodeURIComponent("Solo: zgłoszenie") + "&body=" + encodeURIComponent(text);
 });
-$("#btn-delete").addEventListener("click", () => {
-  $("#confirm-t").textContent = `Usunąć „${S.piece.title || "Bez tytułu"}”?`;
-  $("#confirm-text").textContent = "Nuty i zdjęcie oryginału znikną z tego urządzenia.";
+let delTarget = null;
+function askDelete(p, fromLibrary) {
+  delTarget = { id: p.id, fromLibrary };
+  $("#confirm-t").textContent = `Usunąć „${p.title || "Bez tytułu"}”?`;
+  $("#confirm-text").textContent = "Nuty i zdjęcie znikną z tego urządzenia.";
   openSheet("confirm");
-});
+}
+$("#btn-delete").addEventListener("click", () => askDelete(S.piece, false));
 $("#confirm-yes").addEventListener("click", async () => {
-  const id = S.piece && S.piece.id;
-  if (!id) { closeSheet(); return; }
-  await DB.del(id); S.piece = null;
-  closeSheetThen(() => { hud("Usunięto"); go("home"); });
+  const t = delTarget || { id: S.piece && S.piece.id }; delTarget = null;
+  if (!t.id) { closeSheet(); return; }
+  await DB.del(t.id);
+  if (t.fromLibrary) { closeSheetThen(() => { hud("Usunięto"); refreshLibrary(); }); return; }
+  S.piece = null; closeSheetThen(() => { hud("Usunięto"); go("home"); });
 });
+/* a long press on a piece in the library: open, send, rename, delete */
+let cardPiece = null, cardEl = null;
+function openCardSheet(p, el) { cardPiece = p; cardEl = el; $("#sh-card-t").textContent = p.title || "Bez tytułu"; openSheet("card"); }
+$("#cd-open").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => openPiece(p, p.settings)); });
+$("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => { openPiece(p, p.settings); whenDrawn(() => openSheet("share")); }); });
+$("#cd-rename").addEventListener("click", () => { const el = cardEl; closeSheetThen(() => { const t = el && el.querySelector(".t"); if (t) t.click(); }); });
+$("#cd-del").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => askDelete(p, true)); });
 
 /* ---------------- Original photo ---------------- */
 function buildOrigSheet() {
@@ -1995,7 +2039,7 @@ function drawPending() {
   }
   $("#btn-read").disabled = !pending.length;
 }
-["#in-camera", "#in-files"].forEach(sel => $(sel).addEventListener("change", e => { const fs = Array.from(e.target.files); e.target.value = ""; handleFiles(fs); }));
+["#in-camera", "#in-files", "#in-gallery"].forEach(sel => $(sel).addEventListener("change", e => { const fs = Array.from(e.target.files); e.target.value = ""; handleFiles(fs); }));
 
 /* ---- Camera ---- */
 const cam = { open: false, stream: null, track: null, busy: false, torch: false };
@@ -2328,7 +2372,9 @@ $("#in-backup").addEventListener("change", async e => {
   } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
 });
 
-const NEWS = { "3.8": ["Zakładki na dole: Nuty, Stroik, Metronom, Ty.",
+const NEWS = { "3.8": ["Zakładki: Nuty, Stroik, Metronom, Ja. Nuty dodajesz jednym „+”: zdjęcie, galeria, plik, mail, nowa melodia.",
+  "Przytrzymaj utwór: otwórz, wyślij, zmień nazwę, usuń.",
+  "Ponad 50 instrumentów w rodzinach, z wyszukiwarką. Każda partia osobno do PDF.",
   "Na start kilka pytań: instrument (kilka), strój, rola. Zmienisz je w zakładce „Ty”.",
   "Stroik słucha na żywo: nuta, centy, wykres dźwięku, strój A, instrumenty w B, Es, F.",
   "Strona A4 jak na papierze, powiększanie dwoma palcami jak w PDF.",
@@ -2732,7 +2778,6 @@ $("#new-go").addEventListener("click", () => {
 
 /* ---------------- 3.8 parts: chips under the title, "+" adds a part written automatically ----------------
    (benchmark: MuseScore, Flat, StaffPad, BandLab, Logic Session Players, Soundslice, iReal Pro) */
-const AP_INSTR = ["puzon", "trabka", "klarnet", "sax-a", "flet", "fortepian", "tuba", "waltornia", "eufonium", "puzon-b", "sax-t", "kornet"];
 const ap = { instr: null, role: "voice2", int: 0, show: "staff" };
 const partName = id => { const sp = [...parseXml(S.piece.xml).getElementsByTagName("score-part")].find(x => x.getAttribute("id") === id); return sp ? txt(sp, "part-name") : id; };
 function renderPartStrip() {
@@ -2775,7 +2820,7 @@ $("#pp-only").addEventListener("click", () => { closeSheet(); showOnly(S.only ==
 $("#pp-mute").addEventListener("click", () => { const id = partSheetId; if (pb.mute.has(id)) pb.mute.delete(id); else pb.mute.add(id); buildPartSheet(); renderPartStrip(); if (playState) play(playPos()); });
 async function withOnly(pid, fn) { const prev = S.only; showOnly(pid); await new Promise(r => setTimeout(r, 300)); try { await fn(); } finally { showOnly(prev); } }
 $("#pp-print").addEventListener("click", () => closeSheetThen(() => withOnly(partSheetId, printScore)));
-$("#pp-send").addEventListener("click", () => closeSheetThen(() => withOnly(partSheetId, () => savePdf(true))));
+$("#pp-send").addEventListener("click", () => closeSheetThen(async () => { const keep = exportParts; exportParts = [partSheetId]; try { await savePdf(true); } finally { exportParts = keep; } }));
 $("#pp-del").addEventListener("click", () => {
   const id = partSheetId, doc = parseXml(S.piece.xml), root = doc.documentElement;
   kids(root, "part").forEach(p => { if (p.getAttribute("id") === id) p.remove(); });
@@ -2808,14 +2853,13 @@ function numberParts(xml, base) {
   return new XMLSerializer().serializeToString(doc);
 }
 function buildAddPartSheet() {
-  const p = profile(), list = [...new Set([...p.instruments, ...AP_INSTR])].slice(0, 12);
-  $("#ap-instr").innerHTML = list.map(id => `<button class="tile" data-i="${id}">${icon(id === "fortepian" ? "piano" : "trombone")}<span>${esc(instrById(id).name)}</span></button>`).join("");
+  instrPicker($("#ap-instr"), { onPick: id => { rememberInstr(id); apStep2(id); } });
   $("#ap-step1").hidden = false; $("#ap-step2").hidden = true; $("#ap-back").hidden = true; $("#sh-addpart-t").textContent = "Dodaj partię";
 }
 function apStep2(id) {
   ap.instr = id; const ins = instrById(id), melodyName = S.piece.instrument || "";
   const sameInstr = melodyName && instrById(id).name.split(" ")[0] === melodyName.split(" ")[0];
-  ap.role = id === "fortepian" ? "chords" : ["tuba", "puzon-b"].includes(id) ? "bass" : "voice2";
+  ap.role = ["Klawiszowe", "Szarpane"].includes(ins.group) && !["ukulele", "mandolina"].includes(id) ? "chords" : ins.lo < 36 ? "bass" : "voice2";
   ap.show = "staff";
   $("#ap-for").textContent = ins.name; $("#sh-addpart-t").textContent = "Co ma grać?";
   $("#ap-showbox").hidden = !sameInstr;
@@ -2828,7 +2872,6 @@ function syncAp() {
   $$("#ap-show button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.show === ap.show)));
   $("#ap-v2opts").hidden = ap.role !== "voice2";
 }
-$("#ap-instr").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if (b) apStep2(b.dataset.i); });
 $("#ap-back").addEventListener("click", buildAddPartSheet);
 $$("#ap-role [data-role]").forEach(b => b.addEventListener("click", () => { ap.role = b.dataset.role; syncAp(); }));
 $$("#ap-int button").forEach(b => b.addEventListener("click", () => { ap.int = +b.dataset.int; syncAp(); }));

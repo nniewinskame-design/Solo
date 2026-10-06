@@ -113,8 +113,8 @@ function partForInstrument(xml, iv, srcFifths = 0) {
    role: "melody" (the same tune), "voice2" (harmony under it: thirds, sixths or fifths, chosen to move smoothly),
    "chords" (one chord per bar), "bass" (the chord root per bar). The new part is written for its instrument:
    its transposition (trumpet in B♭ reads a tone higher), its clef, and an octave that suits its range. */
-const TR_IV = { 0: { d: 0, s: 0 }, 2: { d: 1, s: 2 }, 7: { d: 4, s: 7 }, 9: { d: 5, s: 9 }, 14: { d: 8, s: 14 } };
-const PART_CLEF = { bass: "<sign>F</sign><line>4</line>", treble: "<sign>G</sign><line>2</line>" };
+const TR_IV = { 0: { d: 0, s: 0 }, 2: { d: 1, s: 2 }, 3: { d: 2, s: 3 }, 5: { d: 3, s: 5 }, 7: { d: 4, s: 7 }, 9: { d: 5, s: 9 }, 12: { d: 7, s: 12 }, 14: { d: 8, s: 14 }, 21: { d: 12, s: 21 }, "-3": { d: -2, s: -3 }, "-12": { d: -7, s: -12 }, "-24": { d: -14, s: -24 } };
+const PART_CLEF = { bass: "<sign>F</sign><line>4</line>", treble: "<sign>G</sign><line>2</line>", alto: "<sign>C</sign><line>3</line>", tenor: "<sign>C</sign><line>4</line>" };
 function partPitches(part) { return [...part.getElementsByTagName("pitch")].map(midiOf); }
 function median(a) { const b = [...a].sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 60; }
 /* a one-part score with just this part (so transposition and chords work on it alone) */
