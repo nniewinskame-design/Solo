@@ -34,6 +34,7 @@
   <symbol id="left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
   <symbol id="right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
   <symbol id="down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="beam" viewBox="0 0 24 24"><ellipse cx="6.5" cy="18" rx="3" ry="2.2" transform="rotate(-20 6.5 18)" fill="currentColor" stroke="none"/><ellipse cx="17" cy="16" rx="3" ry="2.2" transform="rotate(-20 17 16)" fill="currentColor" stroke="none"/><path d="M9 17.5V6.5M19.5 15.5V4.5"/><path d="M9 6.5l10.5-2v3l-10.5 2z" fill="currentColor"/></symbol>
   <symbol id="dur" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M10 2.5h4M18.5 6.5l1.2-1.2"/></symbol>
   <symbol id="star" viewBox="0 0 24 24"><path d="M12 3.5l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z"/></symbol>
   <symbol id="play" viewBox="0 0 24 24"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.6-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z" fill="currentColor" stroke="none"/></symbol>
@@ -203,6 +204,7 @@
       <button data-ed="left" aria-label="Przesuń w lewo"><svg class="i"><use href="#left"/></svg></button>
       <button data-ed="right" aria-label="Przesuń w prawo"><svg class="i"><use href="#right"/></svg></button>
       <button data-ed="add" aria-label="Powiel nutę"><svg class="i"><use href="#plus"/></svg></button>
+      <button data-ed="beam" id="ed-beam" aria-label="Połącz belką z następną nutą" aria-pressed="false"><svg class="i"><use href="#beam"/></svg></button>
       <button data-ed="rest" id="ed-rest" aria-label="Zamień na pauzę"><svg class="i"><use href="#rest"/></svg></button>
       <button data-ed="delete" aria-label="Usuń"><svg class="i"><use href="#trash"/></svg></button>
     </div>
@@ -683,9 +685,10 @@
 <div class="sheet" id="sh-part" role="dialog" aria-modal="true" aria-labelledby="sh-part-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-part-t">Partia</h2><button class="done" data-close>Gotowe</button></div>
-  <h3 class="lbl first">Słuchanie</h3>
-  <div class="tiles two">
+  <h3 class="lbl first">Widok i słuchanie</h3>
+  <div class="tiles three">
     <button class="tile" id="pp-only"><svg class="i"><use href="#eye"/></svg><span>Tylko ta</span></button>
+    <button class="tile" id="pp-hide"><svg class="i"><use href="#x"/></svg><span>Ukryj</span></button>
     <button class="tile" id="pp-mute" aria-pressed="false"><svg class="i"><use href="#mute"/></svg><span>Wycisz</span></button>
   </div>
   <h3 class="lbl">Brzmienie</h3>

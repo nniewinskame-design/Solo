@@ -196,7 +196,7 @@ function processedXml() {
   const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
 }
 function processedXmlNow() {
-  const doc = autoBeam(addAccidentals(parseXml(S.piece.xml)));
+  const doc = autoBeam(cleanBeams(addAccidentals(parseXml(S.piece.xml))));
   const root = doc.documentElement;
   const keep = new Set(S.parts.filter(p => p.keep).map(p => p.id));
   const removed = S.parts.some(p => !p.keep);
@@ -992,6 +992,61 @@ function autoBeam(doc) {
   return doc;
 }
 /* <beam> goes after <type>, <dot>s, <accidental>, <time-modification> and <stem>, before <notations> and <lyric> */
+/* beams set by hand in a bar (the editor's "Belka") are kept; when later edits leave them wrong (a beam on a quarter
+   or a rest, a group that never ends), the bar goes back to automatic beaming */
+function cleanBeams(doc) {
+  [...doc.getElementsByTagName("measure")].forEach(m => {
+    if (!m.getElementsByTagName("beam").length) return;
+    const voices = new Map();
+    kids(m, "note").filter(n => !kid(n, "chord") && !kid(n, "grace")).forEach(n => { const v = (txt(n, "voice") || "1") + "/" + (txt(n, "staff") || "1"); if (!voices.has(v)) voices.set(v, []); voices.get(v).push(n); });
+    let ok = true;
+    voices.forEach(list => { let open = false; list.forEach(n => {
+      const b = [...n.getElementsByTagName("beam")].find(x => (x.getAttribute("number") || "1") === "1"), t = b && b.textContent.trim();
+      if (b && (kid(n, "rest") || !BEAMABLE[txt(n, "type")])) ok = false;
+      if (t === "begin") { if (open) ok = false; open = true; } else if (t === "continue" || t === "end") { if (!open) ok = false; if (t === "end") open = false; } else if (open) ok = false;
+    }); if (open) ok = false; });
+    if (!ok) [...m.getElementsByTagName("beam")].forEach(b => b.remove());
+  });
+  return doc;
+}
+/* the editor's "Belka": join the chosen note to the next one with a beam, or part them; the bar's beams become
+   explicit (copied from the automatic ones first) so the choice stays */
+function setBeamJoin(doc, m, n, join) {
+  if (!m.getElementsByTagName("beam").length) {
+    const tmp = autoBeam(parseXml(new XMLSerializer().serializeToString(doc)));
+    const part = m.parentNode, pi = [...doc.getElementsByTagName("part")].indexOf(part), mi = kids(part, "measure").indexOf(m);
+    const am = kids(tmp.getElementsByTagName("part")[pi], "measure")[mi], an = kids(am, "note");
+    kids(m, "note").forEach((x, i) => kids(an[i], "beam").forEach(b => insertBeam(x, doc.importNode(b, true))));
+  }
+  const v = (txt(n, "voice") || "1") + "/" + (txt(n, "staff") || "1");
+  const list = kids(m, "note").filter(x => !kid(x, "chord") && !kid(x, "grace") && (txt(x, "voice") || "1") + "/" + (txt(x, "staff") || "1") === v);
+  const i = list.indexOf(n); if (i < 0 || i + 1 >= list.length) return "last";
+  const lvl = x => (kid(x, "rest") ? 0 : BEAMABLE[txt(x, "type")] || 0);
+  if (join && (!lvl(n) || !lvl(list[i + 1]))) return "long";
+  const b1 = x => { const b = [...x.getElementsByTagName("beam")].find(y => (y.getAttribute("number") || "1") === "1"); return b ? b.textContent.trim() : ""; };
+  const joined = list.map((x, k) => k + 1 < list.length && ["begin", "continue"].includes(b1(x)) && ["continue", "end"].includes(b1(list[k + 1])));
+  joined[i] = join;
+  /* rewrite this voice's beams from the joins: level 1 over each run, level 2+ between neighbouring 16ths, a hook for a lone one */
+  const chordOf = x => { const out = [x]; let y = x.nextElementSibling; while (y && y.tagName === "note" && kid(y, "chord")) { out.push(y); y = y.nextElementSibling; } return out; };
+  list.forEach(x => chordOf(x).forEach(y => kids(y, "beam").forEach(b => b.remove())));
+  let k = 0;
+  while (k < list.length) {
+    let e = k; while (e < list.length - 1 && joined[e]) e++;
+    if (e > k) {
+      const run = list.slice(k, e + 1);
+      run.forEach((x, j) => {
+        const put = (num, t) => { const b = doc.createElement("beam"); b.setAttribute("number", String(num)); b.textContent = t; insertBeam(x, b); };
+        put(1, j === 0 ? "begin" : j === run.length - 1 ? "end" : "continue");
+        for (let L = 2; L <= lvl(x); L++) {
+          const p = run[j - 1], q = run[j + 1], lp = p && lvl(p) >= L, lq = q && lvl(q) >= L;
+          put(L, lp && lq ? "continue" : lp ? "end" : lq ? "begin" : (q ? "forward hook" : "backward hook"));
+        }
+      });
+    }
+    k = e + 1;
+  }
+  return "ok";
+}
 function insertBeam(note, beam) {
   const after = ["notations", "lyric", "play", "listen"].map(t => kid(note, t)).find(Boolean);
   note.insertBefore(beam, after || null);

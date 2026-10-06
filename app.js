@@ -866,6 +866,22 @@ function nearestNote(x, y, max = 90, sel = NOTE_SEL) {
   });
   return bd < max * max ? best : null;
 }
+/* "Belka": the chosen note and the next one are joined by a beam, or parted when they already are */
+function beamJoined(doc, at) {
+  const auto = at.m.getElementsByTagName("beam").length ? doc : autoBeam(parseXml(new XMLSerializer().serializeToString(doc)));
+  const a2 = auto === doc ? at : xmlNoteAt(auto, S.editSel);
+  const b = a2 && a2.n && [...a2.n.getElementsByTagName("beam")].find(y => (y.getAttribute("number") || "1") === "1");
+  return !!b && ["begin", "continue"].includes(b.textContent.trim());
+}
+function beamTap() {
+  const sel = S.editSel; if (!sel) return;
+  const doc = parseXml(S.piece.xml), at = xmlNoteAt(doc, sel); if (!at || !at.n) return;
+  const join = !beamJoined(doc, at), r = setBeamJoin(doc, at.m, at.n, join);
+  if (r === "last") { hud("To ostatnia nuta w takcie: belka łączy nuty w jednym takcie"); return; }
+  if (r === "long") { hud("Belką łączy się ósemki i krótsze nuty"); return; }
+  pushUndo(); S.piece.xml = new XMLSerializer().serializeToString(doc); S.keepSel = sel;
+  afterEdit(); hud(join ? "Połączone belką z następną" : "Rozdzielone");
+}
 function xmlNoteAt(doc, sel) {
   const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === sel.pid); if (!part) return null;
   const m = kids(part, "measure")[sel.bar - 1]; if (!m) return null;
@@ -910,6 +926,7 @@ function selectNote(sel) {
   const cur = n ? (txt(n, "type") || "whole") : (S.inLen || "quarter");
   $$("#editbar [data-len]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.len === cur)));
   $("#ed-dot").setAttribute("aria-pressed", String(!!(n && kid(n, "dot"))));
+  if (n) { const docB = parseXml(S.piece.xml), atB = xmlNoteAt(docB, sel), on = !!atB && beamJoined(docB, atB); $("#ed-beam").setAttribute("aria-pressed", String(on)); $("#ed-beam").setAttribute("aria-label", on ? "Rozdziel belkę z następną nutą" : "Połącz belką z następną nutą"); $("#ed-beam").disabled = isRest || !BEAMABLE[txt(n, "type")]; }
   $("#ed-rest").innerHTML = icon(isRest ? "n-quarter" : "rest"); $("#ed-rest").setAttribute("aria-label", isRest ? "Zamień na nutę" : "Zamień na pauzę");
   if (!n) { $("#ed-info").innerHTML = `Wybierz długość <svg class="i"><use href="#n-${cur === "16th" ? "16th" : cur}"/></svg> i dotknij pięciolinii`; return; }
   const el = drawnNote(sel); if (el) el.classList.add("nsel");
@@ -1100,6 +1117,7 @@ function editNote(op) {
   if (op === "done") { setEditMode(false); return; }
   if (op.startsWith("len:") && !S.editSel) return;
   if (op === "bar") { openSheet("bar"); return; }
+  if (op === "beam") { beamTap(); return; }
   if (op === "undo") { undo(); return; }
   if (op === "redo") { redo(); return; }
   const sel = S.editSel; if (!sel) return;
@@ -3594,6 +3612,7 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Mikrofon włącza się dopiero, gdy go potrzebujesz, i gaśnie po wyjściu ze stroika.",
   "Naprawione: po pętli i dotknięciu strony znikały przyciski. Nowy utwór nie zapisuje się już dwa razy.",
   "Klucz każdej partii i tonację całego utworu zmieniasz w edycji (Takt). W „⋯” zostały tylko widok i udostępnianie.",
+  "Belki ósemek: Nuta → Belka łączy z następną nutą albo rozdziela. Partię ukryjesz z nut w jej menu (Ukryj).",
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
   "Nowa melodia: wybierasz klucz, tonację (dur albo moll) i dowolne metrum.",
@@ -4275,7 +4294,7 @@ function buildPartSheet() {
   const pid = partSheetId, pp = S.parts.find(p => p.id === pid); $("#sh-part-t").textContent = pp ? partLabel(pp) : partName(pid);
   $("#pp-mute").setAttribute("aria-pressed", String(pb.mute.has(pid)));
   $("#pp-only").setAttribute("aria-pressed", String(S.only === pid));
-  $("#pp-del").disabled = S.parts.length < 2; $("#pp-only").disabled = S.parts.length < 2;
+  $("#pp-del").disabled = S.parts.length < 2; $("#pp-only").disabled = S.parts.length < 2; $("#pp-hide").disabled = S.parts.filter(p => p.keep).length < 2;
   $("#pp-only span").textContent = S.only === pid ? "Wszystkie" : "Tylko ta";
   $("#pp-instr").disabled = (S.parts.find(p => p.id === pid) || {}).staves > 1;
   $("#pp-instr-now").textContent = instrById(instrOfPart(pid)).name;
@@ -4297,6 +4316,13 @@ $("#pp-role").addEventListener("click", e => {
   } catch (err) { console.error(err); hud("Nie udało się zmienić partii"); }
 });
 $("#pp-only").addEventListener("click", () => { closeSheet(); showOnly(S.only === partSheetId ? null : partSheetId); });
+/* "Ukryj": the part leaves the page (its chip stays, faded; a tap brings it back); the last shown part stays */
+$("#pp-hide").addEventListener("click", () => {
+  const pid = partSheetId, part = S.parts.find(p => p.id === pid); if (!part) return;
+  if (S.parts.filter(p => p.keep).length < 2) { hud("To jedyna widoczna partia"); return; }
+  if (S.only) { S.only = null; S.keepBefore = null; }
+  part.keep = false; closeSheet(); changed(); renderPartStrip(); hud("Ukryta. Dotknij jej nazwy, żeby wróciła");
+});
 $("#pp-mute").addEventListener("click", () => { const id = partSheetId; if (pb.mute.has(id)) pb.mute.delete(id); else pb.mute.add(id); buildPartSheet(); renderPartStrip(); if (playState) play(playPos()); });
 async function withOnly(pid, fn) { const prev = S.only; showOnly(pid); await new Promise(r => setTimeout(r, 300)); try { await fn(); } finally { showOnly(prev); } }
 $("#pp-print").addEventListener("click", () => closeSheetThen(() => withOnly(partSheetId, printScore)));
