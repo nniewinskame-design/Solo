@@ -1904,3 +1904,4 @@ body.immersive .loopbar{display:none}
 .ed-pane.bar-pane{max-height:min(34vh,300px)}
 .bar-pane #bar-clefnote{display:none}
 body.editmode .ed-info:has(+ .bar-pane:not([hidden])){display:none}
+.meter .mt-own.on input,.meter .mt-own.on i,.meter .mt-own.on input::placeholder{color:#fff!important}

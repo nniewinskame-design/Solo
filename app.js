@@ -3614,7 +3614,7 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Naprawione: po pętli i dotknięciu strony znikały przyciski. Nowy utwór nie zapisuje się już dwa razy.",
   "Klucz każdej partii i tonację całego utworu zmieniasz w edycji (Takt). W „⋯” zostały tylko widok i udostępnianie.",
   "Belki ósemek: Nuta → Belka łączy z następną nutą albo rozdziela. Partię ukryjesz z nut w jej menu (Ukryj).",
-  "Edycja zaczyna się od Taktu, który jest w dolnym panelu (nuty zostają widoczne). W metronomie dotknij liczby, żeby wpisać dowolne tempo.",
+  "Edycja zaczyna się od Taktu, który jest w dolnym panelu (nuty zostają widoczne). W metronomie dowolne metrum (np. 5/4, 7/8, 3+2+2/8) i wpisane tempo.",
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
   "Nowa melodia: wybierasz klucz, tonację (dur albo moll) i dowolne metrum.",
@@ -3629,12 +3629,14 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Klucz i oktawa dobrane tak, żeby nuty mieściły się na pięciolinii.",
   "Gotowe melodie, kanon, trio z trzech instrumentów, zmiana instrumentu partii i oktawy."] };
 /* ---------------- T22 metronome, T23 tuner ---------------- */
-const metro = { on: false, bpm: 100, beats: 4, ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [], acc: null, dots: [], taps: [], ramp: null };
+const metro = { on: false, bpm: 100, beats: 4, unit: 4, meter: "4/4", ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [], acc: null, dots: [], taps: [], ramp: null };
 /* accents: one flag per beat (the first beat by default); tapping a dot changes it */
 function metroAcc() {
   if (!metro.acc || metro.acc.length !== metro.beats) {
-    const s = store.get("metroAcc" + metro.beats, "");
-    metro.acc = Array.from({ length: metro.beats }, (_, i) => s.length === metro.beats ? s[i] === "1" : i === 0);
+    /* accents: the first beat, and in an additive metre (3+2+2) the start of every group */
+    const s = store.get("metroAcc" + metro.meter, ""), starts = new Set([0]);
+    String(metro.meter.split("/")[0]).split("+").reduce((a, g) => { starts.add(a); return a + (parseInt(g, 10) || 0); }, 0);
+    metro.acc = Array.from({ length: metro.beats }, (_, i) => s.length === metro.beats ? s[i] === "1" : starts.has(i));
   }
   return metro.acc;
 }
@@ -3645,13 +3647,13 @@ function tempoName(bpm) {
 }
 function buildToolsSheet() {
   if (S.view !== "metrov") $("#metro-sheet-host").appendChild($("#metro-ui"));
-  if (!metro.on) { metro.bpm = S.piece && S.view === "score" ? curBpm() : (+store.get("metroBpm", 100) || 100); const t = S.piece && S.view === "score" ? (processedXml().match(/<beats>(\d+)<\/beats>/) || [])[1] : null; metro.beats = [2, 3, 4, 6].includes(+t) ? +t : (+store.get("metroBeats", 4) || 4); }
+  if (!metro.on) { metro.bpm = S.piece && S.view === "score" ? curBpm() : (+store.get("metroBpm", 100) || 100); const x = S.piece && S.view === "score" ? processedXml().match(/<beats>([\d+]+)<\/beats>\s*<beat-type>(\d+)<\/beat-type>/) : null; setMetroMeter(x ? `${x[1]}/${x[2]}` : store.get("metroMeter", "") || (+store.get("metroBeats", 4) === 6 ? "6/8" : `${+store.get("metroBeats", 4) || 4}/4`), false); }
   syncMetro();
 }
 function syncMetro() {
   $("#m-bpm").textContent = metro.bpm;
   const nm = $("#m-name"); if (nm) nm.textContent = tempoName(metro.bpm);
-  $$("#m-meter button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.b === metro.beats)));
+  meterPicker($("#m-meter"), metro.meter, v => setMetroMeter(v, true));
   const acc = metroAcc();
   $("#m-beats").innerHTML = acc.map((a, i) => `<button type="button" class="${i === 0 ? "one" : ""}" data-i="${i}" data-acc="${a ? 1 : 0}" aria-pressed="${a}" aria-label="Akcent na ${i + 1}"></button>`).join("");
   metro.dots = $$("#m-beats > *");
@@ -3660,7 +3662,7 @@ function syncMetro() {
 $("#m-beats").addEventListener("click", e => {
   const b = e.target.closest("[data-i]"); if (!b) return;
   const acc = metroAcc(), i = +b.dataset.i; acc[i] = !acc[i];
-  store.set("metroAcc" + metro.beats, acc.map(a => (a ? "1" : "0")).join(""));
+  store.set("metroAcc" + metro.meter, acc.map(a => (a ? "1" : "0")).join(""));
   b.dataset.acc = acc[i] ? "1" : "0"; b.setAttribute("aria-pressed", String(acc[i]));
 });
 function metroClick(t, accent) {
@@ -3668,7 +3670,16 @@ function metroClick(t, accent) {
   o.frequency.value = accent ? 1500 : 1000; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(accent ? .9 : .55, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .06);
   o.connect(g); g.connect(metro.out || c.destination); o.start(t); o.stop(t + .08);
 }
-const metroBeatLen = () => (metro.beats === 6 ? 30 : 60) / metro.bpm;
+/* one click per beat of the metre: a quarter in x/4, an eighth in x/8, a half in x/2 (the tempo counts quarters) */
+const metroBeatLen = () => 60 / metro.bpm * 4 / (metro.unit || 4);
+/* any metre, as in the editor: 2/4 … 12/8, 5/4, 7/8 or 3+2+2/8; at most 32 clicks a bar */
+function setMetroMeter(v, mine) {
+  const [t, b] = String(v || "4/4").split("/"), beats = beatsOf(t), unit = +b;
+  if (!(beats >= 1 && beats <= 32) || ![1, 2, 4, 8, 16, 32].includes(unit)) return;
+  if (metro.meter === `${t}/${b}`) return;
+  metro.meter = `${t}/${b}`; metro.beats = beats; metro.unit = unit; metro.n = 0; metro.acc = null;
+  if (mine) { store.set("metroMeter", metro.meter); syncMetro(); }
+}
 /* look ahead 120 ms, so the clicks stay exact even when the page is busy. When the page was held up (a phone call,
    a long task), the missed clicks are skipped: the next one comes on its beat, never a burst of them. */
 function metroTick() {
@@ -3724,14 +3735,13 @@ $("#m-bpm").addEventListener("click", () => {
 const setMetroBpm = v => { metro.bpm = Math.max(30, Math.min(240, Math.round(v))); store.set("metroBpm", metro.bpm); syncMetro(); };
 $("#m-down").addEventListener("click", () => setMetroBpm(metro.bpm - (metro.bpm > 120 ? 4 : 2)));
 $("#m-up").addEventListener("click", () => setMetroBpm(metro.bpm + (metro.bpm >= 120 ? 4 : 2)));
-$$("#m-meter button").forEach(b => b.addEventListener("click", () => { metro.beats = +b.dataset.b; store.set("metroBeats", metro.beats); metro.n = 0; metro.acc = null; syncMetro(); }));
 /* tap tempo: the average of the last 4 taps; a pause of 2 s starts again */
 function tapTempo(now = performance.now()) {
   const t = metro.taps; if (t.length && now - t[t.length - 1] > 2000) t.length = 0;
   t.push(now); if (t.length > 4) t.shift();
   if (t.length < 2) return null;
   const bpm = 60000 / ((t[t.length - 1] - t[0]) / (t.length - 1));
-  setMetroBpm(metro.beats === 6 ? bpm / 2 : bpm); return metro.bpm;
+  setMetroBpm(bpm * 4 / (metro.unit || 4)); return metro.bpm;
 }
 { const tap = $("#m-tap"); if (tap) tap.addEventListener("pointerdown", e => { e.preventDefault(); tapTempo(); }); }
 /* the metronome speeds up by itself (Pro Metronome's "Automator"): metroRamp({ to: 120, step: 4, bars: 4 }) adds
