@@ -346,15 +346,19 @@ function mergeAsVoice2(xml, srcId, newId) {
   const doc = parseXml(xml), root = doc.documentElement, parts = kids(root, "part");
   const a = parts.find(p => p.getAttribute("id") === srcId), b = parts.find(p => p.getAttribute("id") === newId); if (!a || !b) return xml;
   const am = kids(a, "measure"), bm = kids(b, "measure");
+  /* <stem> in schema order: after type, dots, accidental, time-modification; before notehead, staff, beam, notations */
+  const putStem = (n, dir) => { kids(n, "stem").forEach(s => s.remove()); const st = doc.createElement("stem"); st.textContent = dir; n.insertBefore(st, ["notehead", "notehead-text", "staff", "beam", "notations", "lyric", "play", "listen"].map(t => kid(n, t)).find(Boolean) || null); };
   am.forEach((m, i) => {
     const notes = kids(m, "note"); if (!bm[i]) return;
-    notes.forEach(n => { if (kid(n, "chord") || kid(n, "grace")) return; kids(n, "stem").forEach(s => s.remove()); const st = doc.createElement("stem"); st.textContent = "up"; (kid(n, "type") || kid(n, "duration")).after(st); });
-    const total = notes.reduce((s, n) => s + ((kid(n, "chord") || kid(n, "grace")) ? 0 : (parseFloat(txt(n, "duration")) || 0)), 0);
-    const bk = doc.createElement("backup"); bk.innerHTML = `<duration>${total}</duration>`; m.appendChild(bk);
+    notes.forEach(n => { if (kid(n, "chord") || kid(n, "grace") || (txt(n, "voice") || "1") !== "1") return; putStem(n, "up"); });
+    /* back to the start of the bar from wherever the bar's last voice ended; the new voice goes before the closing barline */
+    let pos = 0; [...m.children].forEach(el => { const d = parseFloat(txt(el, "duration")) || 0; if (el.tagName === "backup") pos -= d; else if (el.tagName === "forward") pos += d; else if (el.tagName === "note" && !kid(el, "chord") && !kid(el, "grace")) pos += d; });
+    const end = kids(m, "barline").find(x => (x.getAttribute("location") || "right") === "right") || null;
+    const bk = doc.createElement("backup"); bk.innerHTML = `<duration>${pos}</duration>`; m.insertBefore(bk, end);
     kids(bm[i], "note").forEach(n => {
-      const c = doc.importNode(n, true); kids(c, "voice").forEach(v => (v.textContent = "2")); kids(c, "stem").forEach(s => s.remove());
-      if (!kid(c, "rest")) { const st = doc.createElement("stem"); st.textContent = "down"; (kid(c, "type") || kid(c, "duration")).after(st); }
-      m.appendChild(c);
+      const c = doc.importNode(n, true); kids(c, "voice").forEach(v => (v.textContent = "2"));
+      if (!kid(c, "rest")) putStem(c, "down"); else kids(c, "stem").forEach(s => s.remove());
+      m.insertBefore(c, end);
     });
   });
   b.remove(); const pl = kid(root, "part-list"); kids(pl, "score-part").forEach(sp => { if (sp.getAttribute("id") === newId) sp.remove(); });
@@ -721,16 +725,21 @@ function orchestrate(xml, instrOf, newId = null) {
   const fam = {}; info.forEach(x => { if (!x.ins || x.two) return; const f = SECTION[x.ins.id] || x.ins.name; (fam[f] = fam[f] || []).push(x); });
   Object.entries(fam).forEach(([f, list]) => {
     list.sort((a, b) => (SECTION_RANK[a.ins.id] ?? 1) - (SECTION_RANK[b.ins.id] ?? 1) || a.isNew - b.isNew || a.num - b.num || a.k - b.k);
-    list.forEach((x, i) => { x.sec = i; kid(x.sp, "part-name").textContent = list.length > 1 ? `${f} ${ROMAN[i] || i + 1}` : x.ins.name; });
+    /* Solo's own names (and new parts) are numbered; a part named by its file ("Trombone 1") keeps its name */
+    const ours = x => x.isNew || !txt(x.sp, "part-name") || INSTRUMENTS.some(i => i.name === txt(x.sp, "part-name").replace(/ (I|II|III|IV|V|VI|\d+)$/, "").trim()) || /^(Głos|Melodia)/.test(txt(x.sp, "part-name"));
+    list.forEach((x, i) => { x.sec = i; if (ours(x)) kid(x.sp, "part-name").textContent = list.length > 1 ? `${f} ${ROMAN[i] || i + 1}` : x.ins.name; });
   });
   /* score order */
   const rank = x => { const id = x.ins ? x.ins.id : x.two ? "fortepian" : null; const r = id ? SCORE_ORDER.indexOf(id) : -1; return r < 0 ? 999 : r; };
   const famRank = x => x.ins ? Math.min(...(fam[SECTION[x.ins.id] || x.ins.name] || [x]).map(rank)) : rank(x);
   const sorted = [...info].sort((a, b) => famRank(a) - famRank(b) || (a.sec ?? 0) - (b.sec ?? 0) || a.k - b.k);
+  /* brackets: the order unchanged keeps them where they are; one bracket round everything stays round everything;
+     several brackets (woodwinds, brass) cannot follow a new order and are dropped rather than merged into one */
+  if (sorted.every((x, i) => x === info[i])) return new XMLSerializer().serializeToString(doc);
   const groups = kids(pl, "part-group"), starts = groups.filter(g => g.getAttribute("type") === "start"), stops = groups.filter(g => g.getAttribute("type") === "stop");
   groups.forEach(g => g.remove());
   sorted.forEach(x => pl.appendChild(x.sp));
-  starts.reverse().forEach(g => pl.insertBefore(g, pl.firstChild)); stops.forEach(g => pl.appendChild(g));
+  if (starts.length === 1 && stops.length === 1) { pl.insertBefore(starts[0], pl.firstChild); pl.appendChild(stops[0]); }
   sorted.forEach(x => { if (x.p) root.appendChild(x.p); });
   return new XMLSerializer().serializeToString(doc);
 }

@@ -131,7 +131,7 @@ function analyseXml(xml, pref = null) {
   const parts = kids(root, "part").map(p => {
     const id = p.getAttribute("id");
     let staves = 1; const st = p.getElementsByTagName("staves")[0]; if (st) staves = parseInt(st.textContent, 10) || 1;
-    const clefEl = p.getElementsByTagName("clef")[0];
+    const clefEl = [...p.getElementsByTagName("clef")].find(c => (c.getAttribute("number") || "1") === "1");     // staff 1, not a piano's bass
     const trEl = p.getElementsByTagName("transpose")[0];
     const transp = trEl ? (parseInt(txt(trEl, "chromatic") || "0", 10) || 0) + 12 * (parseInt(txt(trEl, "octave-change") || "0", 10) || 0) : 0;   // sounding − written
     const name = names[id] || "Głos";
@@ -145,7 +145,10 @@ function analyseXml(xml, pref = null) {
   const keyEl = pEl && pEl.getElementsByTagName("key")[0];
   if (keyEl) { fifths = parseInt(txt(keyEl, "fifths") || "0", 10) || 0; const md = txt(keyEl, "mode"); mode = md === "minor" || (!md && detectMode(pEl, fifths) === "minor") ? "minor" : "major"; }
   let title = txt(kid(root, "work") || root, "work-title") || txt(root, "movement-title");
-  if (!title) { const c = $$("credit credit-words", doc)[0]; if (c) title = c.textContent.trim(); }
+  if (!title) {         /* the credit marked as the title; a file without credit types: its first credit (old programs) */
+    const cr = kids(root, "credit"), typed = cr.filter(c => kid(c, "credit-type")), t = typed.find(c => txt(c, "credit-type") === "title");
+    const w = t ? kid(t, "credit-words") : !typed.length && cr[0] ? kid(cr[0], "credit-words") : null; if (w) title = w.textContent.trim();
+  }
   const ident = kid(root, "identification");
   const composer = ident ? (Array.from(ident.getElementsByTagName("creator")).find(c => c.getAttribute("type") === "composer")?.textContent.trim() || "") : "";
   return { parts, key: { fifths, mode }, title, composer };
@@ -176,7 +179,14 @@ function readingPartId() {
   const m = shown.find(p => !(p.staves > 1 || PIANO_RE.test(p.name))) || shown[0];
   return m && m.id;
 }
+/* the score as it is drawn; the same piece and settings give the same text, so taps and bar lookups do not parse,
+   beam and serialise the whole score again */
 function processedXml() {
+  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody].join("\u0001");
+  if (processedXml.key === key) return processedXml.out;
+  const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
+}
+function processedXmlNow() {
   const doc = autoBeam(addAccidentals(parseXml(S.piece.xml)));
   const root = doc.documentElement;
   const keep = new Set(S.parts.filter(p => p.keep).map(p => p.id));
@@ -245,6 +255,8 @@ function processedXml() {
       if (S.readOct) [...p.getElementsByTagName("octave")].forEach(o => { o.textContent = String((parseInt(o.textContent, 10) || 0) + S.readOct); });
       if (!map) return;
       const clefs = Array.from(p.getElementsByTagName("clef"));
+      /* the part's own clef chosen again (a trombone in the bass clef): its clef changes (tenor passages) stay */
+      const own = clefs.find(c => (c.getAttribute("number") || "1") === "1"); if (own && clefNameOf(own) === S.clef) return;
       clefs.forEach(c => {
         const n = c.getAttribute("number"); if (n && n !== "1") return;
         let sign = kid(c, "sign"), line = kid(c, "line");
@@ -313,9 +325,14 @@ function splitHomrParts(doc) {
         const d = m.getElementsByTagName("divisions")[0]; if (d) div = parseFloat(d.textContent) || div;
         const bt = m.getElementsByTagName("beats")[0], bty = m.getElementsByTagName("beat-type")[0];
         if (bt) beats = parseInt(bt.textContent, 10) || beats; if (bty) beatType = parseInt(bty.textContent, 10) || beatType;
-        let voice = null, count = 0;
+        let voice = null, count = 0, last = null;
         [...m.children].forEach(ch => {
+          /* a hidden gap (<forward>) in the kept voice becomes a rest, so its later notes keep their place */
+          if (ch.tagName === "forward" && (txt(ch, "staff") || "1") === String(s) && (voice === null || (txt(ch, "voice") || last || voice) === voice)) {
+            const r = doc.createElement("note"); r.innerHTML = `<rest/><duration>${txt(ch, "duration")}</duration><voice>${voice || "1"}</voice>`; ch.replaceWith(r); count++; return;
+          }
           if (ch.tagName === "backup" || ch.tagName === "forward") { ch.remove(); return; }
+          if (ch.tagName === "note") last = txt(ch, "voice") || "1";
           if (ch.tagName === "direction") { const sf = txt(ch, "staff"); if (sf && sf !== String(s)) ch.remove(); else kids(ch, "staff").forEach(e => e.remove()); return; }
           if (ch.tagName !== "note") return;
           if ((txt(ch, "staff") || "1") !== String(s)) { ch.remove(); return; }
@@ -444,13 +461,15 @@ function addAccidentals(doc) {
         const tiedIn = [...n.getElementsByTagName("tie")].some(t => t.getAttribute("type") === "stop") && !seen.has(key);
         const cur = state.has(key) ? state.get(key) : keyAlter(fifths, step);
         const first = !seen.has(key); seen.add(key);
-        state.set(key, alt); if (alt !== keyAlter(fifths, step)) altered.set(key, alt);
+        /* a note tied in over the barline carries its sign without a new one, but only itself: a later note on that
+           line in the bar is measured against the key again (Gould) */
+        if (!tiedIn) { state.set(key, alt); if (alt !== keyAlter(fifths, step)) altered.set(key, alt); }
         if (kid(n, "accidental") || tiedIn || !ACC_BY_ALTER[String(alt)]) return;
         let cautionary = false;
         if (alt === cur) { if (!(first && prevAltered.has(key) && prevAltered.get(key) !== alt)) return; cautionary = true; }
         const acc = doc.createElement("accidental"); acc.textContent = ACC_BY_ALTER[String(alt)]; if (cautionary) acc.setAttribute("cautionary", "yes");
-        const after = kids(n, "dot").pop() || kid(n, "type");
-        if (after) n.insertBefore(acc, after.nextSibling); else n.insertBefore(acc, kid(n, "notations") || kid(n, "stem") || null);
+        /* schema order: … type, dot, accidental, time-modification, stem, notehead, staff, beam, notations, lyric */
+        n.insertBefore(acc, ["time-modification", "stem", "notehead", "notehead-text", "staff", "beam", "notations", "lyric", "play", "listen"].map(t => kid(n, t)).find(Boolean) || null);
       });
       prevAltered = altered;
     });
@@ -470,6 +489,9 @@ function checkReading(xml, ans = {}) {
       });
       const mr = m.getElementsByTagName("multiple-rest")[0]; if (!mr) return;
       const n = parseInt(mr.textContent, 10) || 1; let after = m;
+      /* a file that already has the empty bars (MuseScore, Finale do) keeps them as they are */
+      const nx = kids(part, "measure"), at = nx.indexOf(m), follow = nx.slice(at + 1, at + n);
+      if (follow.length === n - 1 && follow.every(x => !x.getElementsByTagName("pitch").length)) return;
       for (let k = 1; k < n; k++) {
         const e = doc.createElement("measure");
         e.innerHTML = `<note><rest measure="yes"/><duration>${Math.round(dv * bts * 4 / btt)}</duration><voice>1</voice></note>`;
@@ -484,7 +506,8 @@ function checkReading(xml, ans = {}) {
     const len = t => (parseInt(txt(t, "beats"), 10) || 4) * 4 / (parseInt(txt(t, "beat-type"), 10) || 4);
     let want = null;
     if (ans.time) want = ans.time.split("/").map(Number);
-    else if (times.length > 1 && times.every(t => len(t) === len(times[0]))) {
+    /* a misread C / ¢ (4/4 among 2/2) is one metre; 3/4 against 6/8 is a real change (hemiola) and stays */
+    else if (times.length > 1 && times.every(t => ["4/4", "2/2"].includes(txt(t, "beats") + "/" + txt(t, "beat-type")))) {
       const four = times.find(t => txt(t, "beats") === "4" && txt(t, "beat-type") === "4");
       const t0 = four || times[0]; want = [parseInt(txt(t0, "beats"), 10), parseInt(txt(t0, "beat-type"), 10)];
     }
@@ -534,10 +557,9 @@ function checkReading(xml, ans = {}) {
         const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
         const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
       });
-      let sum = 0, whole = false;
+      let sum = barFill(m), whole = false;          // the longest voice (two voices: <backup>), not every note added up
       kids(m, "note").forEach(n => {
         if (kid(n, "chord") || kid(n, "grace")) return;
-        sum += parseFloat(txt(n, "duration")) || 0;
         const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true;
         const p = kid(n, "pitch");
         if (p) midis.push({ i, m: 12 * (parseInt(txt(p, "octave"), 10) + 1) + [0, 2, 4, 5, 7, 9, 11][STEP_I[txt(p, "step")]] + (parseFloat(txt(p, "alter")) || 0) });
@@ -577,8 +599,8 @@ function barIssues(xml) {
       const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
       const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
     });
-    let sum = 0, whole = false;
-    kids(m, "note").forEach(n => { if (kid(n, "chord") || kid(n, "grace")) return; sum += parseFloat(txt(n, "duration")) || 0; const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true; });
+    let sum = barFill(m), whole = false;          // the longest voice (two voices: <backup>)
+    kids(m, "note").forEach(n => { const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true; });
     const full = div * beats * 4 / bt, pickup = (i === 0 || i === ms.length - 1) && sum < full;
     if (!whole && !m.getElementsByTagName("multiple-rest").length && sum > 0 && Math.abs(sum - full) > 0.01 && !pickup)
       out.push(`Takt ${i + 1}: ${sum > full ? "za dużo" : "za mało"} wartości rytmicznych`);
@@ -1021,7 +1043,7 @@ function attachTexts(xml, pages) {
       else if (c.kind === "rehearsal") d.innerHTML = `<direction-type><rehearsal>${xesc(c.text)}</rehearsal></direction-type>`;
       else if (c.kind === "tempo") d.innerHTML = `<direction-type><words font-weight="bold">${xesc(c.text)}</words></direction-type><sound tempo="${c.bpm}"/>`;
       else d.innerHTML = `<direction-type><words${/^(allegr|andant|moderat|adagi|largo|lento|presto|vivac|grave|tempo|wesoł|wolno|umiarkowan|szybk|spokojn|marsz)/i.test(c.text) ? ' font-weight="bold"' : ' font-style="italic"'}>${xesc(c.text)}</words></direction-type>`;
-      m.insertBefore(d, target); added++;
+      m.insertBefore(d, target || kids(m, "barline").find(b => (b.getAttribute("location") || "right") === "right") || null); added++;     // never after the closing barline
     }));
     return added ? new XMLSerializer().serializeToString(doc) : xml;
   } catch (e) { console.warn(e); return xml; }
