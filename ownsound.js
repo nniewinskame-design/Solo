@@ -95,7 +95,7 @@ async function startListening() {
 }
 function stopListening() {
   try { of.proc && of.proc.disconnect(); } catch {} try { of.stream && of.stream.getTracks().forEach(t => t.stop()); } catch {} try { of.ctx && of.ctx.close(); } catch {}
-  of.proc = of.stream = of.ctx = null;
+  of.proc = of.stream = of.ctx = null; micDone();
 }
 /* the last `sec` seconds from the rolling buffer */
 function lastAudio(sec) { const n = Math.min(of.ring.length, Math.floor(sec * of.sr)), out = new Float32Array(n); for (let i = 0; i < n; i++) out[i] = of.ring[(of.rp - n + i + of.ring.length) % of.ring.length]; return out; }

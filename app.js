@@ -1109,7 +1109,7 @@ function scoreBpm() {
 const player = new Audio(); player.preload = "auto"; player.setAttribute("playsinline", "");
 const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
 function unlockAudio() {
-  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
+  try { if (navigator.audioSession && !tuner.on && !(typeof of !== "undefined" && of.stream)) navigator.audioSession.type = "playback"; } catch {}
   if (!player.src || player.src === SILENCE || player.paused) {
     try { player.src = SILENCE; const pr = player.play(); if (pr) pr.catch(() => {}); } catch {}
   }
@@ -2469,7 +2469,7 @@ function metroClick(t, accent) {
 function metroStart() {
   const AC = window.AudioContext || window.webkitAudioContext; metro.ctx = metro.ctx || new AC();
   metro.ctx.resume?.(); metro.on = true; metro.n = 0; metro.next = metro.ctx.currentTime + .08; metro.queue = [];
-  try { navigator.audioSession && (navigator.audioSession.type = "playback"); } catch {}
+  try { navigator.audioSession && !tuner.on && (navigator.audioSession.type = "playback"); } catch {}
   /* look ahead 120 ms, so the clicks stay exact even when the page is busy */
   metro.timer = setInterval(() => {
     while (metro.next < metro.ctx.currentTime + .12) {
@@ -2565,6 +2565,10 @@ function detectPitch(buf, sr, minF = 40, maxF = 1500) {
    refuse to connect a mic running at another rate. Every failure is said on screen, not swallowed. */
 async function openMic() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("Ta przeglądarka nie daje dostępu do mikrofonu."), { name: "NoMic" });
+  /* iPhone: playback sets the audio session to "playback" (music with the silent switch on), and in that mode iOS
+     refuses the microphone ("audio session category is not compatible with audio capture"). Recording needs
+     "play-and-record"; micDone() gives the session back. */
+  try { if (navigator.audioSession) navigator.audioSession.type = "play-and-record"; } catch {}
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
   catch (e) { if (e && e.name === "OverconstrainedError") stream = await navigator.mediaDevices.getUserMedia({ audio: true }); else throw e; }
@@ -2575,6 +2579,7 @@ async function openMic() {
   catch { try { ctx.close(); } catch {} ctx = new AC(); try { await ctx.resume(); } catch {} src = ctx.createMediaStreamSource(stream); }
   return { stream, ctx, src };
 }
+function micDone() { try { if (navigator.audioSession && !tuner.on && !(typeof of !== "undefined" && of.stream)) navigator.audioSession.type = "auto"; } catch {} }
 function micError(e) {
   return e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Zezwól w ustawieniach strony (ikona obok adresu)." :
     e && e.name === "NotFoundError" ? "Nie znaleziono mikrofonu." : e && e.name === "NotReadableError" ? "Mikrofon jest zajęty przez inną aplikację." :
@@ -2645,7 +2650,7 @@ function drawTrace(t) {
 function tunerStop() {
   tuner.on = false; cancelAnimationFrame(tuner.raf);
   try { tuner.stream && tuner.stream.getTracks().forEach(t => t.stop()); } catch {} try { tuner.ctx && tuner.ctx.close(); } catch {}
-  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; $("#tuner2").dataset.st = "off";
+  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; $("#tuner2").dataset.st = "off"; micDone();
   $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = "";
   $("#t-dot").style.transform = ""; tuner.x = 0; drawTrace(performance.now()); syncTuner();
   if (!playState && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
@@ -2966,7 +2971,7 @@ function inCol(p, all) {
 }
 function renderCols(all) {
   const box = $("#cols"); if (!box) return;
-  const auto = [["all", "Wszystko", ""], ["fav", "Ulubione", "heart"], ["recent", "Ostatnie", ""]];
+  const auto = [["all", "Wszystko", ""], ["fav", "Ulubione", "heart"]];
   if (all.some(p => p.sourceType === "own")) auto.push(["own", "Moje", "pencil"]);
   if (all.some(p => p.sourceType === "device" || p.sourceType === "ai")) auto.push(["photo", "Ze zdjęć", "camera"]);
   const mine = cols();
