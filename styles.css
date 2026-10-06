@@ -195,6 +195,14 @@ body.immersive .dock{transform:translate(-50%,140%);opacity:0;pointer-events:non
 @media (min-width:500px){ .notice{margin:0 14px 12px} }
 @media (min-width:960px){ .notice{margin:0 auto 12px} }
 
+.ask{margin:4px 0 14px;border-radius:14px;background:var(--fill);padding:2px 14px}
+.ask summary{cursor:pointer;padding:12px 0;font-weight:600;list-style-position:inside}
+.ask summary small{font-weight:400;color:var(--ink-2)}
+.ask-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.ask-row span{font-size:15px}
+.ask-row select{font:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-height:44px;max-width:60%}
+#pages g.measure.doubt .note,#pages g.measure.doubt .rest,#pages g.measure.doubt .accid{fill:#C93A2E}
+
 /* ===== Lists / groups ===== */
 .lbl{font-size:13px;font-weight:600;color:var(--ink-2);margin:22px 4px 8px}
 .lbl.first{margin-top:6px}

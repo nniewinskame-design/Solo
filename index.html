@@ -252,6 +252,12 @@
   <div class="shead"><h2 class="h-m" id="sh-pages-t">Nowe nuty</h2><button class="done ghost" data-close>Anuluj</button></div>
   <div class="thumbs" id="pending"></div>
   <p class="note" id="first-model" hidden>Pierwszy odczyt pobierze ok. 150 MB. Najlepiej przez Wi-Fi.</p>
+  <details class="ask" id="ask">
+    <summary>Kilka pytań <small>(nieobowiązkowe, poprawiają odczyt)</small></summary>
+    <label class="ask-row" for="ask-clef"><span>Klucz w nutach</span><select id="ask-clef"><option value="">Nie wiem</option><option value="F">Basowy w całym utworze</option><option value="G">Wiolinowy w całym utworze</option><option value="C4">Tenorowy w całym utworze</option><option value="C3">Altowy w całym utworze</option></select></label>
+    <label class="ask-row" for="ask-time"><span>Metrum</span><select id="ask-time"><option value="">Nie wiem</option><option value="4/4">4/4 (także „C”)</option><option value="2/2">2/2 (także „¢”)</option><option value="3/4">3/4</option><option value="2/4">2/4</option><option value="6/8">6/8</option><option value="3/8">3/8</option></select></label>
+    <label class="ask-row" for="ask-key"><span>Znaki przy kluczu</span><select id="ask-key"><option value="">Nie wiem</option><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option></select></label>
+  </details>
   <p class="err" id="read-error" hidden></p>
   <button class="btn primary wide" id="btn-read"><svg class="i"><use href="#wand"/></svg><span>Odczytaj nuty</span></button>
 </div>

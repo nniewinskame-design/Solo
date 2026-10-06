@@ -327,6 +327,132 @@ function homrToSolo(xmlPages, title) {
   return new XMLSerializer().serializeToString(base.doc);
 }
 
+/* ---------------- Checking a reading (T15) ----------------
+   The reader is never perfect, so Solo corrects what it safely can and marks the rest:
+   - the user's answers before reading (clef, metre, key) override what was read;
+   - metre changes that keep the bar length (2/2 among 4/4, a misread "C") are dropped;
+   - bars that don't add up to the metre, and lone octave jumps, are listed as "Takt n: ...". */
+const CLEF_BOTTOM = { G: 30, F: 18, C3: 24, C4: 22 };          // diatonic index (octave*7+step) of the bottom staff line
+const STEP_I = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 }, STEP_N = "CDEFGAB";
+const SHARPS = "FCGDAEB", FLATS = "BEADGCF";
+function keyAlter(fifths, step) {
+  if (fifths > 0) return SHARPS.slice(0, fifths).includes(step) ? 1 : 0;
+  if (fifths < 0) return FLATS.slice(0, -fifths).includes(step) ? -1 : 0;
+  return 0;
+}
+function clefId(c) { const s = txt(c, "sign"), l = txt(c, "line"); return s === "C" ? "C" + (l || "3") : s; }
+function checkReading(xml, ans = {}) {
+  const doc = parseXml(xml), issues = [];
+  const parts = Array.from(doc.getElementsByTagName("part"));
+  parts.forEach((part, pi) => {
+    /* a multi-bar rest must be followed by its empty bars (MusicXML), or the bars after it disappear from view */
+    let dv = 1, bts = 4, btt = 4;
+    kids(part, "measure").forEach(m => {
+      kids(m, "attributes").forEach(a => {
+        const d = kid(a, "divisions"); if (d) dv = parseFloat(d.textContent) || dv;
+        const t = kid(a, "time"); if (t) { bts = parseInt(txt(t, "beats"), 10) || bts; btt = parseInt(txt(t, "beat-type"), 10) || btt; }
+      });
+      const mr = m.getElementsByTagName("multiple-rest")[0]; if (!mr) return;
+      const n = parseInt(mr.textContent, 10) || 1; let after = m;
+      for (let k = 1; k < n; k++) {
+        const e = doc.createElement("measure");
+        e.innerHTML = `<note><rest measure="yes"/><duration>${Math.round(dv * bts * 4 / btt)}</duration><voice>1</voice></note>`;
+        after.parentNode.insertBefore(e, after.nextSibling); after = e;
+      }
+    });
+    kids(part, "measure").forEach((m, k) => m.setAttribute("number", String(k + 1)));
+    const measures = kids(part, "measure");
+    /* metre */
+    const times = [];
+    measures.forEach(m => kids(m, "attributes").forEach(a => kids(a, "time").forEach(t => times.push(t))));
+    const len = t => (parseInt(txt(t, "beats"), 10) || 4) * 4 / (parseInt(txt(t, "beat-type"), 10) || 4);
+    let want = null;
+    if (ans.time) want = ans.time.split("/").map(Number);
+    else if (times.length > 1 && times.every(t => len(t) === len(times[0]))) {
+      const four = times.find(t => txt(t, "beats") === "4" && txt(t, "beat-type") === "4");
+      const t0 = four || times[0]; want = [parseInt(txt(t0, "beats"), 10), parseInt(txt(t0, "beat-type"), 10)];
+    }
+    if (want && measures.length) {
+      times.forEach(t => t.remove());
+      let a = kids(measures[0], "attributes").find(x => kid(x, "key") || kid(x, "clef")) || kids(measures[0], "attributes")[0];
+      if (!a) { a = doc.createElement("attributes"); measures[0].insertBefore(a, measures[0].firstChild); }
+      const t = doc.createElement("time"); t.innerHTML = `<beats>${want[0]}</beats><beat-type>${want[1]}</beat-type>`;
+      const after = kid(a, "key"); after ? a.insertBefore(t, after.nextSibling) : a.insertBefore(t, kid(a, "clef") || null);
+    }
+    /* key and clef from the answers: keep every note on its printed line, recompute what the key implies */
+    let readKey = 0, clef = "F";
+    const targetClef = pi === 0 && ans.clef ? ans.clef : null, targetKey = pi === 0 && ans.key != null && ans.key !== "" ? +ans.key : null;
+    measures.forEach(m => {
+      kids(m, "attributes").forEach(a => {
+        const k = kid(a, "key"); if (k) { readKey = parseInt(txt(k, "fifths"), 10) || 0; if (targetKey !== null) kid(k, "fifths").textContent = String(targetKey); }
+        kids(a, "clef").forEach(c => {
+          clef = clefId(c);
+          if (targetClef) { const [sg, ln] = targetClef === "G" ? ["G", 2] : targetClef === "F" ? ["F", 4] : ["C", targetClef.slice(1)]; c.innerHTML = `<sign>${sg}</sign><line>${ln}</line>`; }
+        });
+      });
+      if (targetKey !== null && !kids(part, "measure")[0].getElementsByTagName("key").length && m === measures[0]) {
+        let a = kids(m, "attributes")[0]; if (!a) { a = doc.createElement("attributes"); m.insertBefore(a, m.firstChild); }
+        const k = doc.createElement("key"); k.innerHTML = `<fifths>${targetKey}</fifths>`; a.insertBefore(k, a.firstChild);
+      }
+      const shift = targetClef && CLEF_BOTTOM[clef] != null ? CLEF_BOTTOM[targetClef] - CLEF_BOTTOM[clef] : 0;
+      const newKey = targetKey !== null ? targetKey : readKey;
+      if (!shift && newKey === readKey) return;
+      kids(m, "note").forEach(n => {
+        const p = kid(n, "pitch"); if (!p) return;
+        const step = txt(p, "step"), oct = parseInt(txt(p, "octave"), 10), alt = parseFloat(txt(p, "alter")) || 0;
+        const fromKey = alt === keyAlter(readKey, step);
+        const idx = oct * 7 + STEP_I[step] + shift, ns = STEP_N[((idx % 7) + 7) % 7], no = Math.floor(idx / 7);
+        kid(p, "step").textContent = ns; kid(p, "octave").textContent = String(no);
+        const na = fromKey ? keyAlter(newKey, ns) : alt;
+        let al = kid(p, "alter");
+        if (na) { if (!al) { al = doc.createElement("alter"); p.insertBefore(al, kid(p, "octave")); } al.textContent = String(na); }
+        else if (al) al.remove();
+      });
+    });
+    if (pi !== 0) return;
+    /* bars that don't add up */
+    let div = 1, beats = 4, bt = 4;
+    const midis = [];
+    measures.forEach((m, i) => {
+      kids(m, "attributes").forEach(a => {
+        const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+        const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      });
+      let sum = 0, whole = false;
+      kids(m, "note").forEach(n => {
+        if (kid(n, "chord") || kid(n, "grace")) return;
+        sum += parseFloat(txt(n, "duration")) || 0;
+        const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true;
+        const p = kid(n, "pitch");
+        if (p) midis.push({ i, m: 12 * (parseInt(txt(p, "octave"), 10) + 1) + [0, 2, 4, 5, 7, 9, 11][STEP_I[txt(p, "step")]] + (parseFloat(txt(p, "alter")) || 0) });
+      });
+      const full = div * beats * 4 / bt;
+      const pickup = (i === 0 || i === measures.length - 1) && sum < full;
+      if (!whole && !m.getElementsByTagName("multiple-rest").length && sum > 0 && Math.abs(sum - full) > 0.01 && !pickup)
+        issues.push(`Takt ${i + 1}: ${sum > full ? "za dużo" : "za mało"} wartości rytmicznych`);
+    });
+    /* a single note an octave away from both neighbours */
+    for (let k = 1; k < midis.length - 1; k++) {
+      const a = midis[k - 1].m, b = midis[k].m, c = midis[k + 1].m;
+      if (Math.abs(b - a) >= 12 && Math.abs(b - c) >= 12 && Math.abs(a - c) <= 7) issues.push(`Takt ${midis[k].i + 1}: nuta może być o oktawę ${b < a ? "za nisko" : "za wysoko"}`);
+    }
+  });
+  issues.sort((a, b) => parseInt(a.slice(5), 10) - parseInt(b.slice(5), 10));
+  return { xml: new XMLSerializer().serializeToString(doc), issues };
+}
+/* bar numbers in the order Verovio draws them: a multi-bar rest is drawn as one measure */
+function drawnBars(xml) {
+  const part = parseXml(xml).getElementsByTagName("part")[0]; if (!part) return [];
+  const out = []; let skip = 0;
+  kids(part, "measure").forEach((m, i) => {
+    if (skip > 0) { skip--; return; }
+    out.push(i + 1);
+    const mr = m.getElementsByTagName("multiple-rest")[0]; if (mr) skip = Math.max(0, (parseInt(mr.textContent, 10) || 1) - 1);
+  });
+  return out;
+}
+function doubtfulBars(issues) { return [...new Set((issues || []).map(t => parseInt((t.match(/Takt (\d+)/) || [])[1], 10)).filter(Boolean))]; }
+
 /* ---------------- AI JSON -> MusicXML ---------------- */
 const DIV = 24;
 const BASE = { "1": 96, "2": 48, "4": 24, "8": 12, "16": 6, "32": 3, "64": 1.5 };

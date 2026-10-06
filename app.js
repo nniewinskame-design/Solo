@@ -460,9 +460,9 @@ function openPiece(piece, settings) {
   S.piece.opened = Date.now();
   $("#notice").hidden = !(S.piece.issues && S.piece.issues.length);
   if (S.piece.issues && S.piece.issues.length) {
-    const nums = [...new Set(S.piece.issues.map(t => (t.match(/Takt (\d+)/) || [])[1]).filter(Boolean))].slice(0, 6);
-    $("#notice-title").textContent = "Sprawdź te miejsca ze zdjęciem";
-    $("#notice-text").textContent = nums.length ? `Takty: ${nums.join(", ")}. Mogą zawierać błąd odczytu.` : "Odczyt może zawierać błędy.";
+    const nums = doubtfulBars(S.piece.issues), n = nums.length;
+    $("#notice-title").textContent = n ? `${n} ${plural(n, "takt", "takty", "taktów")} do sprawdzenia` : "Sprawdź ze zdjęciem";
+    $("#notice-text").textContent = n ? `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
   }
   updateTitles();
   $("#pages").innerHTML = `<div class="loading-page"><span class="spinner"></span></div>`;
@@ -576,6 +576,8 @@ async function doRender() {
     box.innerHTML = html;
     box.classList.remove("fresh"); if (firstShow && canAnimate()) { void box.offsetWidth; box.classList.add("fresh"); }
     const first = box.querySelector(".page svg"); if (first) { if (mode === "pages") enlargeTitle(first, 1.9); else enlargeTitle(first, 1.3, 0.75); }
+    const doubt = new Set(doubtfulBars(S.piece.issues));
+    if (doubt.size) { const order = drawnBars(xml); $$("#pages g.measure").forEach((g, i) => g.classList.toggle("doubt", doubt.has(order[i]))); }
     S.mode = mode; S.loadedKey = "view";
     S.baseBpm = scoreBpm();
     if (openSheetId === "more") syncTempo();
@@ -1305,9 +1307,11 @@ async function startReading() {
     pending = []; drawPending();
     dismissCover($("#reading"));
     openPiece(piece);
-    $("#notice-title").textContent = "Porównaj ze zdjęciem";
-    $("#notice-text").textContent = "Dynamika (p, f…) i napisy, np. tempo, nie są odczytywane.";
-    $("#notice").hidden = false;
+    if (!piece.issues.length) {
+      $("#notice-title").textContent = "Porównaj ze zdjęciem";
+      $("#notice-text").textContent = "Dynamika (p, f…) i napisy, np. tempo, nie są odczytywane.";
+      $("#notice").hidden = false;
+    }
     hud("Gotowe");
   } catch (e) {
     dismissCover($("#reading"));
@@ -1325,7 +1329,11 @@ async function startReading() {
 
 function preparePages() {
   $("#first-model").hidden = !!store.get("modelReady");
+  ["clef", "time", "key"].forEach(k => { $("#ask-" + k).value = store.get("ask-" + k, ""); });
+  $("#ask").open = ["clef", "time", "key"].some(k => store.get("ask-" + k, ""));
 }
+["clef", "time", "key"].forEach(k => $("#ask-" + k).addEventListener("change", e => store.set("ask-" + k, e.target.value)));
+const readAnswers = () => ({ clef: $("#ask-clef").value, time: $("#ask-time").value, key: $("#ask-key").value });
 function dataUrlToBlob(u) {
   const [head, data] = u.split(","), type = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
   const bin = atob(data), arr = new Uint8Array(bin.length);
@@ -1387,8 +1395,8 @@ async function readOnDevice(pages, signal) {
   store.set("modelReady", "1");
   const names = new Set((await DB.all().catch(() => [])).map(p => p.title));
   let title = "Nowe nuty", n = 2; while (names.has(title)) title = "Nowe nuty " + n++;
-  const xml = homrToSolo(xmls, title);
-  return { title, composer: "", xml, sourceType: "device", images: pages.map(p => p.keep), aiJson: null, issues: [], instrument: "" };
+  const checked = checkReading(homrToSolo(xmls, title), readAnswers());
+  return { title, composer: "", xml: checked.xml, sourceType: "device", images: pages.map(p => p.keep), aiJson: null, issues: checked.issues, instrument: "" };
 }
 $("#btn-cancel-read").addEventListener("click", () => readCtl && readCtl.abort());
 
