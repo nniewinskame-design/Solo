@@ -5,6 +5,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const xesc = esc;
+/* the top number of a metre: 7, or an additive one as composers write it (3+2+2 → 7) */
+const beatsOf = s => String(s ?? "").split("+").reduce((a, b) => a + (parseInt(b, 10) || 0), 0) || NaN;
 /* small settings only (localStorage is ~5 MB and synchronous); set() says whether it was kept, so a full or
    blocked storage is never mistaken for a save */
 const store = {
@@ -189,7 +191,7 @@ function readingPartId() {
 /* the score as it is drawn; the same piece and settings give the same text, so taps and bar lookups do not parse,
    beam and serialise the whole score again */
 function processedXml() {
-  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody].join("\u0001");
+  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff()].join("\u0001");
   if (processedXml.key === key) return processedXml.out;
   const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
 }
@@ -284,8 +286,44 @@ function processedXmlNow() {
       }
     });
   }
+  if (castsOff()) castOff(root);
   if (S.under && typeof withChords === "function") { const first = S.parts.find(p => p.keep && p.id === melodyId()) || S.parts.find(p => p.keep); withChords(doc, first && first.id, S.under, intervalFifths(S.iv)); }
   return new XMLSerializer().serializeToString(doc);
+}
+
+/* Bars per line on an A4 page, as engravers cast off a part: four bars a line (the 4-bar phrase of most tunes and
+   method books), three or two when the bars are crowded (many short notes in the busiest part). A pickup bar joins the
+   first line; a lone last bar joins the line before it when that line is light. A scanned piece shown "as in the
+   original" keeps the lines of the paper. */
+const castsOff = () => !!S.piece && S.page !== "screen" && !(S.layout === "orig" && S.hasLines);
+function castOff(root) {
+  const parts = kids(root, "part"); if (!parts.length) return;
+  const bars = kids(parts[0], "measure").length; if (!bars) return;
+  const busy = Array.from({ length: bars }, (_, i) => Math.max(...parts.map(p => {
+    const m = kids(p, "measure")[i]; if (!m) return 0;
+    const ns = kids(m, "note").filter(n => !kid(n, "chord") && !kid(n, "grace"));
+    const staves = new Set(ns.map(n => txt(n, "staff") || "1")).size || 1;   // a piano bar: its notes per staff
+    return ns.length / staves;
+  })));
+  const pickup = kids(parts[0], "measure")[0].getAttribute("implicit") === "yes" ? 1 : 0;
+  const lines = []; let i = pickup;
+  while (i < bars) {
+    const look = busy.slice(i, i + 4), avg = look.reduce((a, b) => a + b, 0) / look.length;
+    const n = avg > 14 ? 2 : avg > 10 ? 3 : 4;
+    lines.push([i, Math.min(bars, i + n)]); i += n;
+  }
+  if (pickup && lines.length) lines[0][0] = 0;
+  if (lines.length > 1) {
+    const last = lines[lines.length - 1], prev = lines[lines.length - 2];
+    const light = busy.slice(prev[0], last[1]).reduce((a, b) => a + b, 0) / (last[1] - prev[0]) <= 8;
+    if (last[1] - last[0] === 1 && light) { prev[1] = last[1]; lines.pop(); }
+  }
+  const starts = new Set(lines.slice(1).map(l => l[0]));
+  parts.forEach(p => kids(p, "measure").forEach((m, k) => {
+    kids(m, "print").forEach(pr => { pr.removeAttribute("new-system"); pr.removeAttribute("new-page"); if (!pr.attributes.length && !pr.children.length) pr.remove(); });
+    if (!starts.has(k)) return;
+    const pr = root.ownerDocument.createElement("print"); pr.setAttribute("new-system", "yes"); m.insertBefore(pr, m.firstChild);
+  }));
 }
 
 /* Write the interval into the MusicXML itself (used for exporting the file to other programs). */
@@ -331,7 +369,7 @@ function splitHomrParts(doc) {
         }
         const d = m.getElementsByTagName("divisions")[0]; if (d) div = parseFloat(d.textContent) || div;
         const bt = m.getElementsByTagName("beats")[0], bty = m.getElementsByTagName("beat-type")[0];
-        if (bt) beats = parseInt(bt.textContent, 10) || beats; if (bty) beatType = parseInt(bty.textContent, 10) || beatType;
+        if (bt) beats = beatsOf(bt.textContent) || beats; if (bty) beatType = parseInt(bty.textContent, 10) || beatType;
         let voice = null, count = 0, last = null;
         [...m.children].forEach(ch => {
           /* a hidden gap (<forward>) in the kept voice becomes a rest, so its later notes keep their place */
@@ -367,7 +405,7 @@ function padParts(parts) {
     let div = 1, beats = 4, bt = 4;
     kids(p, "measure").forEach(m => kids(m, "attributes").forEach(a => {
       const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
     }));
     for (let k = kids(p, "measure").length; k < most; k++) {
       const m = p.ownerDocument.createElement("measure");
@@ -442,7 +480,7 @@ function barInfo(part) {
   return ms.map((m, i) => {
     kids(m, "attributes").forEach(a => {
       const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
     });
     const full = div * 4 * beats / bt, f = barFill(m), whole = [...m.getElementsByTagName("rest")].some(r => r.getAttribute("measure") === "yes");
     const len = !whole && f > 0 && f < full - 1e-6 && (i === 0 || i === ms.length - 1) ? f : full;
@@ -511,7 +549,7 @@ function checkReading(xml, ans = {}) {
     kids(part, "measure").forEach(m => {
       kids(m, "attributes").forEach(a => {
         const d = kid(a, "divisions"); if (d) dv = parseFloat(d.textContent) || dv;
-        const t = kid(a, "time"); if (t) { bts = parseInt(txt(t, "beats"), 10) || bts; btt = parseInt(txt(t, "beat-type"), 10) || btt; }
+        const t = kid(a, "time"); if (t) { bts = beatsOf(txt(t, "beats")) || bts; btt = parseInt(txt(t, "beat-type"), 10) || btt; }
       });
       const mr = m.getElementsByTagName("multiple-rest")[0]; if (!mr) return;
       const n = parseInt(mr.textContent, 10) || 1; let after = m;
@@ -529,13 +567,13 @@ function checkReading(xml, ans = {}) {
     /* metre */
     const times = [];
     measures.forEach(m => kids(m, "attributes").forEach(a => kids(a, "time").forEach(t => times.push(t))));
-    const len = t => (parseInt(txt(t, "beats"), 10) || 4) * 4 / (parseInt(txt(t, "beat-type"), 10) || 4);
+    const len = t => (beatsOf(txt(t, "beats")) || 4) * 4 / (parseInt(txt(t, "beat-type"), 10) || 4);
     let want = null;
     if (ans.time) want = ans.time.split("/").map(Number);
     /* a misread C / ¢ (4/4 among 2/2) is one metre; 3/4 against 6/8 is a real change (hemiola) and stays */
     else if (times.length > 1 && times.every(t => ["4/4", "2/2"].includes(txt(t, "beats") + "/" + txt(t, "beat-type")))) {
       const four = times.find(t => txt(t, "beats") === "4" && txt(t, "beat-type") === "4");
-      const t0 = four || times[0]; want = [parseInt(txt(t0, "beats"), 10), parseInt(txt(t0, "beat-type"), 10)];
+      const t0 = four || times[0]; want = [beatsOf(txt(t0, "beats")), parseInt(txt(t0, "beat-type"), 10)];
     }
     if (want && measures.length) {
       times.forEach(t => t.remove());
@@ -581,7 +619,7 @@ function checkReading(xml, ans = {}) {
     measures.forEach((m, i) => {
       kids(m, "attributes").forEach(a => {
         const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-        const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+        const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
       });
       let sum = barFill(m), whole = false;          // the longest voice (two voices: <backup>), not every note added up
       kids(m, "note").forEach(n => {
@@ -626,7 +664,7 @@ function barIssues(xml) {
   ms.forEach((m, i) => {
     kids(m, "attributes").forEach(a => {
       const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
     });
     let sum = barFill(m), whole = false;          // the longest voice (two voices: <backup>)
     kids(m, "note").forEach(n => { const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true; });
@@ -638,12 +676,21 @@ function barIssues(xml) {
 }
 /* T19: an empty piece to write your own tune, in the instrument's clef (treble, bass, alto or tenor); a keyboard or
    harp melody is one staff in the treble clef (the editor corrects single staves) */
+/* the rests of an empty bar: one whole-bar rest, or in an additive metre (3+2+2/8) one rest per group, as editions
+   print it (Verovio also gives an additive whole-bar rest no width, so the bar could not be tapped) */
+const REST_Q = { 0.5: ["eighth", 0], 0.75: ["eighth", 1], 1: ["quarter", 0], 1.5: ["quarter", 1], 2: ["half", 0], 3: ["half", 1], 4: ["whole", 0], 6: ["whole", 1] };
+function emptyBarXml(beats, bt, div, extra = "<voice>1</voice>") {
+  const whole = `<note><rest measure="yes"/><duration>${Math.round(div * 4 * beatsOf(beats) / bt)}</duration>${extra}</note>`;
+  if (!String(beats).includes("+")) return whole;
+  const gs = String(beats).split("+").map(g => { const q = (parseInt(g, 10) || 0) * 4 / bt, d = div * q, r = REST_Q[q]; return r && Number.isInteger(d) ? `<note><rest/><duration>${d}</duration>${extra}<type>${r[0]}</type>${r[1] ? "<dot/>" : ""}</note>` : null; });
+  return gs.every(Boolean) ? gs.join("") : whole;
+}
 function blankXml(bars = 8, o = {}) {
-  const beats = o.beats || 4, bt = o.beatType || 4, div = 4, cap = div * 4 * beats / bt, fifths = o.fifths || 0;
+  const beats = o.beats || 4, bt = +o.beatType || 4, div = Math.max(4, bt / 4), cap = div * 4 * beatsOf(beats) / bt, fifths = o.fifths || 0;
   const cx = { treble: ["G", 2], bass: ["F", 4], tenor: ["C", 4], alto: ["C", 3] }[o.clef] || ["G", 2], clef = `<sign>${cx[0]}</sign><line>${cx[1]}</line>`;
   const tempo = o.tempo ? `<direction placement="above"><direction-type><words></words></direction-type><sound tempo="${o.tempo}"/></direction>` : "";
   let m = "";
-  for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>${div}</divisions><key><fifths>${fifths}</fifths></key><time><beats>${beats}</beats><beat-type>${bt}</beat-type></time><clef>${clef}</clef></attributes>${tempo}` : ""}<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice></note></measure>`;
+  for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>${div}</divisions><key><fifths>${fifths}</fifths></key><time><beats>${beats}</beats><beat-type>${bt}</beat-type></time><clef>${clef}</clef></attributes>${tempo}` : ""}${emptyBarXml(beats, bt, div)}</measure>`;
   return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(o.title || "Moje nuty")}</work-title></work><part-list><score-part id="P1"><part-name>${xesc(o.part || "Głos solowy")}</part-name></score-part></part-list><part id="P1">${m}</part></score-partwise>`;
 }
 function doubtfulBars(issues) { return [...new Set((issues || []).map(t => parseInt((t.match(/Takt (\d+)/) || [])[1], 10)).filter(Boolean))]; }
@@ -886,7 +933,7 @@ function autoBeam(doc) {
     kids(part, "measure").forEach(m => {
       kids(m, "attributes").forEach(a => {
         const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-        const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+        const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
       });
       if (m.getElementsByTagName("beam").length) return;                  // the bar already says how it is beamed
       const plan = beamPlan(beats, bt), barQ = beats * 4 / bt;

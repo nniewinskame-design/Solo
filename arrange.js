@@ -395,7 +395,7 @@ function melodyEvents(part, chords) {
   kids(part, "measure").forEach((m, bi) => {
     kids(m, "attributes").forEach(a => {
       const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
       const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0;
     });
     /* a pickup bar counts from where it really starts (its first note is not beat 1); t: time from the start */
@@ -795,7 +795,7 @@ const twoStaff = part => { const s = part.getElementsByTagName("staves")[0]; ret
 /* an empty bar (a whole-bar rest); len: a shorter bar (a pickup, or the bar that completes it), in divisions */
 function restMeasure(doc, part, num, len = null) {
   let div = 1, beats = 4, bt = 4; const a = part.getElementsByTagName("attributes")[0];
-  if (a) { const dv = kid(a, "divisions"); if (dv) div = parseFloat(dv.textContent) || 1; const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || 4; bt = parseInt(txt(t, "beat-type"), 10) || 4; } }
+  if (a) { const dv = kid(a, "divisions"); if (dv) div = parseFloat(dv.textContent) || 1; const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || 4; bt = parseInt(txt(t, "beat-type"), 10) || 4; } }
   const cap = div * 4 * beats / bt, two = twoStaff(part);
   const m = doc.createElement("measure"); m.setAttribute("number", String(num));
   if (len !== null && len < cap - 1e-6) { m.setAttribute("implicit", "yes"); m.innerHTML = valuesXml(len / div, div, null, 1, two ? 1 : "") + (two ? `<backup><duration>${len}</duration></backup>` + valuesXml(len / div, div, null, 5, 2) : ""); return m; }

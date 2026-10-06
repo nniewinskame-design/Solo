@@ -1453,3 +1453,14 @@ body.editmode #btn-back{display:none}       /* while editing, "Gotowe" is the wa
 :root,:root[data-theme="dark"]{--prom:var(--brand);--prom-ink:var(--on-primary)}
 .dock .play{background:var(--brand)!important;color:var(--on-primary)!important}
 :root[data-theme="dark"] .pill.round:not(.big){background:var(--surface-2)}
+
+/* ---- metre picker: the usual metres as chips, "Inne" opens a written fraction ---- */
+.meter .mt-chips{display:flex;flex-wrap:wrap;gap:6px}
+.meter .mt-chips button{min-width:52px;font-variant-numeric:tabular-nums}
+.meter .mt-own{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:12px;padding:14px;border-radius:16px;background:var(--surface)}
+.meter .mt-top{width:7.5ch;text-align:center;font:600 26px/1.1 var(--font, inherit);letter-spacing:-.01em;border:0;border-radius:10px;background:var(--surface-2);padding:6px 4px;color:inherit}
+.meter .mt-top.bad{box-shadow:0 0 0 2px var(--brand)}
+.meter .mt-line{width:64px;height:2px;border-radius:1px;background:currentColor;opacity:.8}
+.meter .mt-bt{display:flex;gap:4px;background:var(--surface-2);border-radius:12px;padding:3px}
+.meter .mt-bt button{min-width:38px;padding:6px 0;border:0;border-radius:9px;background:none;font:inherit;font-weight:600;color:inherit}
+.meter .mt-bt button[aria-pressed=true]{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.12)}

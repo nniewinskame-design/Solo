@@ -580,12 +580,9 @@
   <div class="shead"><h2 class="h-m" id="sh-new-t">Nowa melodia</h2><button class="done ghost" data-close>Anuluj</button></div>
   <h3 class="lbl first">Instrument <small id="new-clef"></small></h3>
   <div class="chips" id="new-instr"></div>
-  <h3 class="lbl">Gotowe melodie</h3>
-  <div class="chips" id="new-ready"><button data-t="kotek">Wlazł kotek</button><button data-t="janie">Panie Janie</button><button data-t="oda">Oda do radości</button></div>
-  <h3 class="lbl">Własna</h3>
-  <div class="list fields"><label class="li"><span class="fk">Tytuł</span><input id="new-title" type="text" autocomplete="off" placeholder="Nowa melodia"></label></div>
+  <div class="list fields" style="margin-top:16px"><label class="li"><span class="fk">Tytuł</span><input id="new-title" type="text" autocomplete="off" placeholder="Nowa melodia"></label></div>
   <h3 class="lbl">Metrum</h3>
-  <div class="seg three" id="new-time"><button data-v="4/4">4/4</button><button data-v="3/4">3/4</button><button data-v="2/4">2/4</button><button data-v="6/8">6/8</button><button data-v="2/2">2/2</button><button data-v="3/8">3/8</button></div>
+  <div class="meter" id="new-time"></div>
   <h3 class="lbl">Tonacja</h3>
   <label class="ask-row" for="new-key"><span>Znaki przy kluczu</span><select id="new-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option></select></label>
   <h3 class="lbl">Tempo</h3>
@@ -598,7 +595,7 @@
   <div class="shead"><h2 class="h-m" id="sh-bar-t">Takt</h2><button class="done" data-close>Gotowe</button></div>
   <p class="note first" id="bar-note">Metrum, klucz i znaki zmieniają się od tego taktu do końca utworu.</p>
   <h3 class="lbl">Metrum</h3>
-  <div class="seg three" id="bar-time"><button data-v="4/4">4/4</button><button data-v="3/4">3/4</button><button data-v="2/4">2/4</button><button data-v="2/2">2/2</button><button data-v="6/8">6/8</button><button data-v="3/8">3/8</button></div>
+  <div class="meter" id="bar-time"></div>
   <h3 class="lbl">Klucz zapisany w nutach</h3>
   <div class="seg" id="bar-clef"><button data-v="F">Basowy</button><button data-v="G">Wiolinowy</button><button data-v="C4">Tenorowy</button><button data-v="C3">Altowy</button></div>
   <p class="note">Nuty zostają na swoich liniach.</p>

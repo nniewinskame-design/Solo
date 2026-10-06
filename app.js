@@ -622,9 +622,9 @@ function partInstr(pid) {
   r.tr = !r.piano && xt !== undefined ? xt : r.ins ? r.ins.tr || 0 : 0;
   c.m.set(pid, r); return r;
 }
-/* a phone shows big notes that fit the screen: an A4 page there is under half its paper size (7.2 mm staff ≈ 13 px);
-   A4 stays the view on a tablet and whenever the player picked it */
-function fitPageToDevice() { if (!S.pageMine && Math.min(innerWidth, screen.width || innerWidth) < 600) S.page = "screen"; }
+/* A4 is the view everywhere (Nat, 7 Oct): the page fills the screen's width, four bars a line; "Dopasuj do ekranu"
+   stays a choice the player makes */
+function fitPageToDevice() { if (!S.pageMine) S.page = "a4"; }
 function ensureOnStaff() {
   try {
     /* a clef the instrument is never written in (trombone in treble, left by an older version) becomes its own clef;
@@ -763,7 +763,7 @@ async function leaveScore() {
    virtual page: the notes keep their size in Verovio units and the page shrinks around them. */
 function a4Options(extra, zoom = S.zoom) {
   const z = zoom, r = v => Math.round(v / z);
-  return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
+  return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: castsOff() ? "line" : S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
     pageMarginTop: r(110), pageMarginBottom: r(110), pageMarginLeft: r(150), pageMarginRight: r(150), spacingSystem: 6, svgViewBox: true,
     transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true, ...extra };
 }
@@ -983,7 +983,7 @@ function barCap(part, m) {
   for (const mm of kids(part, "measure")) {
     kids(mm, "attributes").forEach(a => {
       const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
     });
     if (mm === m) break;
   }
@@ -1030,7 +1030,7 @@ function fitBar(doc, part, m, after) {
   let gap = cap - total, at = end;
   /* rests show the beat (Gould): each starts where its own length divides the bar; in 6/8, 9/8, 12/8 a whole beat is
      a dotted quarter rest; in 4/4 a half rest only on beat 1 or 3 (the alignment rule gives that) */
-  const t8 = (() => { let b = 4, t = 4; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const x = kid(a, "time"); if (x) { b = parseInt(txt(x, "beats"), 10) || b; t = parseInt(txt(x, "beat-type"), 10) || t; } }); if (mm === m) break; } return t === 8 && b % 3 === 0; })();
+  const t8 = (() => { let b = 4, t = 4; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const x = kid(a, "time"); if (x) { b = beatsOf(txt(x, "beats")) || b; t = parseInt(txt(x, "beat-type"), 10) || t; } }); if (mm === m) break; } return t === 8 && b % 3 === 0; })();
   const opts = [["whole", 4, false], ...(t8 ? [["half", 3, true], ["quarter", 1.5, true]] : []), ["half", 2, false], ["quarter", 1, false], ["eighth", 0.5, false], ["16th", 0.25, false]];
   while (gap > 1e-6) {
     /* in 6/8 a quarter rest also fills the rest of a beat after its first eighth (♪ 𝄽) */
@@ -1281,11 +1281,31 @@ function buildBarSheet() {
   $("#sh-bar-t").textContent = `Takt ${bar}`;
   $("#bar-note").textContent = bar === 1 ? "Metrum, klucz i znaki zmieniają się w całym utworze." : `Metrum, klucz i znaki zmieniają się od taktu ${bar} do końca.`;
   const t = timeAt(part, m), c = clefAt(part, m), k = keyAt(part, m);
-  $$("#bar-time button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === t)));
+  meterPicker($("#bar-time"), t, v => barOp("time", v));
   $$("#bar-clef button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c)));
   $("#bar-key").value = String(k);
   $("#bar-del").disabled = kids(part, "measure").length < 2;
   $("#bar-bpm").textContent = String(curBpm());
+}
+/* any metre (Nat, 7 Oct: "czasem metrum może być bardzo dziwne"): the usual ones one tap away, "Inne" for any top
+   number, an additive one (3+2+2) included, over 1, 2, 4, 8, 16 or 32 */
+const METERS = ["4/4", "3/4", "2/4", "2/2", "6/8", "3/8", "5/4", "6/4", "5/8", "7/8", "9/8", "12/8"], METER_BT = [1, 2, 4, 8, 16, 32];
+function meterPicker(box, cur, pick) {
+  const [top0, bt0] = String(cur || "4/4").split("/"), other = !METERS.includes(cur);
+  box.innerHTML = `<div class="chips mt-chips">${METERS.map(v => `<button type="button" data-v="${v}" aria-pressed="${v === cur}">${v}</button>`).join("")}<button type="button" class="mt-other" aria-pressed="${other}" aria-expanded="${other}">Inne</button></div>
+    <div class="mt-own" ${other ? "" : "hidden"}><input class="mt-top" inputmode="text" autocomplete="off" aria-label="Górna liczba (np. 7 albo 3+2+2)" value="${esc(top0)}"><span class="mt-line" aria-hidden="true"></span>
+    <div class="mt-bt" role="group" aria-label="Dolna liczba">${METER_BT.map(n => `<button type="button" data-b="${n}" aria-pressed="${String(n) === bt0}">${n}</button>`).join("")}</div></div>`;
+  const own = $(".mt-own", box), top = $(".mt-top", box);
+  const sel = v => $$(".mt-chips [data-v]", box).forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+  const ownVal = () => { const t = top.value.replace(/\s/g, ""), b = $(".mt-bt [aria-pressed=true]", box)?.dataset.b || "4"; return /^\d{1,2}(\+\d{1,2})*$/.test(t) && beatsOf(t) >= 1 && beatsOf(t) <= 32 ? `${t}/${b}` : null; };
+  const send = () => { const v = ownVal(); top.classList.toggle("bad", !v); if (v) { sel(v); pick(v); } };
+  box.onclick = e => {
+    const c = e.target.closest("[data-v]"), b = e.target.closest("[data-b]"), o = e.target.closest(".mt-other");
+    if (c) { own.hidden = true; $(".mt-other", box).setAttribute("aria-pressed", "false"); $(".mt-other", box).setAttribute("aria-expanded", "false"); sel(c.dataset.v); pick(c.dataset.v); }
+    else if (o) { own.hidden = false; sel(null); o.setAttribute("aria-pressed", "true"); o.setAttribute("aria-expanded", "true"); top.focus(); top.select(); }
+    else if (b) { $$(".mt-bt button", box).forEach(x => x.setAttribute("aria-pressed", String(x === b))); send(); }
+  };
+  top.onchange = send; top.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); top.blur(); } };
 }
 function barOp(op, val) {
   const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml), parts = [...doc.getElementsByTagName("part")];
@@ -1297,8 +1317,12 @@ function barOp(op, val) {
       later(part, bar).forEach(mm => kids(mm, "attributes").forEach(a => kids(a, "time").forEach(x => x.remove())));
       const t = doc.createElement("time"); t.innerHTML = `<beats>${b}</beats><beat-type>${bt}</beat-type>`; putAttr(attrsOf(doc, ms[bar - 1]), t);
       later(part, bar - 1).forEach(mm => {                       // empty bars take the new length
-        const ns = kids(mm, "note"); const r = ns.length === 1 && kid(ns[0], "rest");
-        if (r && r.getAttribute("measure") === "yes") kid(ns[0], "duration").textContent = String(barCap(part, mm).cap);
+        const ns = kids(mm, "note"), vs = new Set(ns.map(n => (txt(n, "voice") || "1") + "/" + (txt(n, "staff") || "1")));
+        if (!ns.length || vs.size > 1 || !ns.every(n => kid(n, "rest"))) return;     // one voice of rests only (not a piano bar)
+        const { div } = barCap(part, mm), keep = ["voice", "staff"].map(k => kid(ns[0], k)).filter(Boolean).map(e => e.outerHTML).join("") || "<voice>1</voice>";
+        const tmp = parseXml(`<m>${emptyBarXml(b, +bt, div, keep)}</m>`).documentElement;
+        ns.forEach(n => n.remove()); const after = kids(mm, "barline").find(x => x.getAttribute("location") === "right");
+        kids(tmp, "note").forEach(n => mm.insertBefore(doc.importNode(n, true), after || null));
       });
     });
   } else if (op === "clef" || op === "key") {
@@ -1363,7 +1387,6 @@ function barOp(op, val) {
   hud(red ? `Metrum ${val}. ${red} ${plural(red, "takt trzeba", "takty trzeba", "taktów trzeba")} poprawić (na czerwono)` : { time: `Metrum ${val}`, clef: "Zmieniono klucz", key: "Zmieniono znaki przy kluczu", add: "Dodano takt", addbefore: "Dodano takt", del: "Usunięto takt" }[op], red ? 4000 : 1600);
   if (op === "del" || op === "add" || op === "addbefore") closeSheet(); else buildBarSheet();
 }
-$$("#bar-time button").forEach(b => b.addEventListener("click", () => barOp("time", b.dataset.v)));
 $$("#bar-clef button").forEach(b => b.addEventListener("click", () => barOp("clef", b.dataset.v)));
 $("#bar-key").addEventListener("change", e => barOp("key", e.target.value));
 $("#bar-add").addEventListener("click", () => barOp("add"));
@@ -1699,7 +1722,7 @@ function barMeters() {
   if (barMeters.key === key) return barMeters.val;
   const xml = processedXml(), doc = parseXml(xml), part = doc.getElementsByTagName("part")[0]; if (!part) return [];
   let b = 4, bt = 4; const byBar = kids(part, "measure").map(m => {
-    kids(m, "attributes").forEach(a => { const t = kid(a, "time"); if (t) { b = parseInt(txt(t, "beats"), 10) || b; bt = parseInt(txt(t, "beat-type"), 10) || bt; } });
+    kids(m, "attributes").forEach(a => { const t = kid(a, "time"); if (t) { b = beatsOf(txt(t, "beats")) || b; bt = parseInt(txt(t, "beat-type"), 10) || bt; } });
     const comp = bt === 8 && b % 3 === 0;
     return { n: comp ? b / 3 : b, q: b * 4 / bt, comp };
   });
@@ -4122,7 +4145,7 @@ function buildNewSheet() {
   const ids = [...new Set([...p.instruments, nm.instr])];
   $("#new-instr").innerHTML = ids.map(id => `<button class="ichip" ${hueStyle(id)} data-i="${id}" aria-pressed="${id === nm.instr}">${esc(instrById(id).name)}</button>`).join("") +
     `<button data-more aria-label="Inny instrument">${icon("plus")}</button>`;
-  $$("#new-time button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === nm.time)));
+  meterPicker($("#new-time"), nm.time, v => { nm.time = v; });
   $("#new-key").value = String(nm.key); $("#new-bpm").textContent = String(nm.bpm);
   $("#new-title").value = nm.title;
   $("#new-clef").textContent = "klucz " + (CLEF_PL[instrById(nm.instr).clef] || "wiolinowy");
@@ -4133,12 +4156,11 @@ $("#new-instr").addEventListener("click", e => {
   if (e.target.closest("[data-more]")) pickInstrument("Instrument", id => { nm.instr = id; openSheet("new"); });
 });
 $("#new-instr").addEventListener("change", e => { if (e.target.id === "new-instr-more" && e.target.value) { nm.instr = e.target.value; buildNewSheet(); } });
-$$("#new-time button").forEach(b => b.addEventListener("click", () => { nm.time = b.dataset.v; buildNewSheet(); }));
 $("#new-key").addEventListener("change", e => { nm.key = +e.target.value; });
 $("#new-title").addEventListener("input", e => { nm.title = e.target.value; });
 [["#new-bpm-down", -5], ["#new-bpm-up", 5]].forEach(([s, d]) => $(s).addEventListener("click", () => { nm.bpm = Math.max(30, Math.min(240, nm.bpm + d)); $("#new-bpm").textContent = String(nm.bpm); }));
 /* a ready tune written for the chosen instrument (its octave, transposition, clef) with the piano under it */
-$("#new-ready").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) openReadyTune(b.dataset.t); });
+$("#new-ready")?.addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) openReadyTune(b.dataset.t); });
 /* straight from "+": for the player's main instrument */
 $("#add-ready").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) { nm.instr = nm.instr || profile().main; openReadyTune(b.dataset.t); } });
 function openReadyTune(tid) {
@@ -4155,7 +4177,7 @@ function openReadyTune(tid) {
   });
 }
 $("#new-go").addEventListener("click", () => {
-  const ins = instrById(nm.instr), [beats, bt] = nm.time.split("/").map(Number);
+  const ins = instrById(nm.instr), [beats, bt] = nm.time.split("/");
   /* the new part declares its instrument (and <transpose> for a transposing one), in its own clef */
   const d = parseXml(blankXml(4, { clef: ins.clef, beats, beatType: bt, fifths: nm.key, tempo: nm.bpm, title: nm.title || "Nowa melodia", part: ins.name }));
   setDeclared(d, d.getElementsByTagName("score-part")[0], ins); setTranspose(d, d.getElementsByTagName("part")[0], trIv(ins.tr));
