@@ -114,8 +114,8 @@ function tabShown(v, from) {
   document.body.classList.toggle("tabs", TABS.includes(v)); document.body.classList.toggle("onhome", v === "home");
   $$("#tabbar [data-tab]").forEach(b => b.toggleAttribute("aria-current", b.dataset.tab === v));
   placeSlide();
-  if (from === "tunerv" && v !== "tunerv" && tuner.on) tunerStop();
-  if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerStart(); }
+  if (from === "tunerv" && v !== "tunerv" && (tuner.on || tuner.starting)) tunerStop();
+  if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerAuto(); }
   if (v === "metrov") { $("#metro-tab-host").appendChild($("#metro-ui")); buildToolsSheet(); }
   if (v === "settings" && typeof renderProfile === "function") renderProfile();
   if (v === "settings" && NEWS[VERSION]) { store.set("newsSeen", VERSION); $('#tabbar [data-tab="settings"]')?.classList.remove("dot"); }
@@ -277,7 +277,7 @@ function setBehindInert(sheet, on) {
   });
 }
 function hideSheet(instant, keepScrim) {
-  if (openSheetId === "tuner" && tuner.on) tunerStop();
+  if (openSheetId === "tuner" && (tuner.on || tuner.starting)) tunerStop();
   if (openSheetId === "pdf" && pickPdfPages.cancel) { const c = pickPdfPages.cancel; setTimeout(c, 0); }
   if (!openSheetId) return;
   const name = openSheetId, el = $("#sh-" + name);
@@ -912,14 +912,27 @@ function selectNote(sel) {
     $("#ed-info").innerHTML = `<b>${plName(txt(p, "step"), Math.round(parseFloat(txt(p, "alter")) || 0))}</b> ${OCTAVE_NAMES[oct] || ""} · ${len}${kid(n, "dot") ? " z kropką" : ""} · takt ${sel.bar}`;
   } else $("#ed-info").innerHTML = `<b>Pauza</b> · ${len || "cały takt"} · takt ${sel.bar}`;
 }
-/* the sound of a note when it is placed or changed */
+/* the sound of a note when it is placed or changed: exactly as the player will play it (children hear what is
+   written). The pitch as written (its alter: the key and the accidentals in effect), in the key and reading octave
+   chosen for the view (correcting shows the notes as written, the chosen view waits in S.editView), as concert
+   pitch for its instrument (a B♭ trumpet sounds a tone lower), at the tuning A; its length at the playing tempo with
+   dots and ties; its dynamic, hairpin and articulation; its part's instrument or own sound. A new note cuts the one
+   before with a short fade (no click). */
+const pv = { g: null };
 function previewNote(n) {
   const p = n && kid(n, "pitch"); if (!p) return;
   try {
-    const ctx = fxCtx(), pid = S.editSel && S.editSel.pid;                // the shared context (suspended when quiet)
-    const g = ctx.createGain(); g.gain.value = 0.16; g.connect(ctx.destination);
-    const t = ctx.currentTime + 0.02; voiceForPart(pid)(ctx, g, (tuner.a4 || 440) * Math.pow(2, (midiOf(p) - partTr(pid) - 69) / 12), t, t + 0.4);
-    setTimeout(() => { try { g.disconnect(); } catch {} }, 1200);
+    let part = n.parentNode; while (part && part.tagName !== "part") part = part.parentNode;
+    const pid = part ? part.getAttribute("id") : S.editSel && S.editSel.pid, v = S.editView || S, info = S.parts.find(x => x.id === pid);
+    const oct = pid === readingPartId() && !(info && info.staves > 1) ? 12 * (v.readOct || 0) : 0;
+    const pitch = midiOf(p) + ((v.iv && v.iv.s) || 0) + oct - partTr(pid);
+    const sh = (part && partShapes(part).get(n)) || NOTE_PLAIN, sec = Math.max(0.12, Math.min(8, sh.q * 60 / playBpm()));
+    const ctx = fxCtx();                                              // the shared context (asleep when quiet)
+    if (pv.g) { const old = pv.g; try { old.gain.setTargetAtTime(0, ctx.currentTime, 0.008); } catch {} setTimeout(() => { try { old.disconnect(); } catch {} }, 120); }
+    const g = pv.g = ctx.createGain(); g.gain.value = 0.16; g.connect(ctx.destination);
+    playShaped(ctx, g, voiceForPart(pid), (tuner.a4 || 440) * Math.pow(2, (pitch - 69) / 12), ctx.currentTime + 0.01, sec, sh);
+    fxIdle(Math.max(8000, sec * 1000 + 3000));
+    setTimeout(() => { if (pv.g === g) pv.g = null; try { g.disconnect(); } catch {} }, sec * 1000 + 1500);
   } catch (e) { console.warn(e); }
 }
 /* which written note a height on the staff means: the five lines of the tapped staff give the steps */
@@ -1228,7 +1241,8 @@ function editNote(op) {
   }
   pushUndo();
   S.piece.xml = new XMLSerializer().serializeToString(doc);
-  if (["up", "down", "octup", "octdown", "flat", "sharp", "natural", "rest", "add"].includes(op)) previewNote(op === "add" ? kids(at.m, "note")[S.editSel ? S.editSel.i : 0] : n);
+  /* a change you can hear is heard: pitch, length, dot, dynamic, hairpin, articulation */
+  if (["up", "down", "octup", "octdown", "flat", "sharp", "natural", "rest", "add", "dot", "shorter", "longer"].includes(op) || /^(len|dyn|wedge|art):/.test(op)) previewNote(op === "add" ? kids(at.m, "note")[S.editSel ? S.editSel.i : 0] : n);
   afterEdit();
 }
 function keyAt(part, m) { let f = 0; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const k = kid(a, "key"); if (k) f = parseInt(txt(k, "fifths"), 10) || 0; }); if (mm === m) break; } return f; }
@@ -1462,9 +1476,13 @@ const player = new Audio(); player.preload = "auto"; player.setAttribute("playsi
 const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
 /* the microphone is in use (tuner or a recording): iOS must then stay in "play-and-record" */
 const micBusy = () => (typeof tuner !== "undefined" && tuner.on) || (typeof of !== "undefined" && !!of.stream);
+/* The audio session type is set only at the moment a sound starts (playback) or the microphone opens
+   (play-and-record), never when things go quiet: on iPhone every change of the session's category re-routes the
+   audio hardware, which can be heard as a soft tick or buzz, and a change made by a timer comes "for no reason".
+   The type alone does not hold the phone's audio: iOS gives it back to other apps once nothing plays. */
 function setSession(type) { try { if (navigator.audioSession && navigator.audioSession.type !== type) navigator.audioSession.type = type; } catch {} }
-/* nothing sounds and nothing listens: give the phone's audio back to other apps (iOS 17+) */
-function sessionIdle() { if (!playState && !pb.preparing && !micBusy() && !(typeof metro !== "undefined" && metro.on)) setSession("auto"); }
+/* nothing sounds and nothing listens: the session is left as it is (see above) */
+function sessionIdle() {}
 function unlockAudio() {
   if (!micBusy()) setSession("playback");
   if (!player.src || player.src === SILENCE || player.paused) {
@@ -1472,7 +1490,9 @@ function unlockAudio() {
   }
 }
 /* one audio context for the short sounds (note preview, metronome, listening to a recording): iOS allows only a
-   few, and a running one keeps the phone's audio busy, so it is suspended after 20 s of quiet */
+   few, and a running one keeps the phone's audio busy (a running, silent context can also be heard as a faint hum
+   on some iPhones), so it is suspended a few seconds after its last sound has ended, and at once when the app is
+   left */
 const fx = { ctx: null, idle: 0 };
 function fxCtx() {
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -1481,10 +1501,12 @@ function fxCtx() {
   if (fx.ctx.state !== "running") { const r = fx.ctx.resume?.(); if (r) r.catch(() => {}); }
   fxIdle(); return fx.ctx;
 }
-function fxIdle(ms = 20000) {
+function fxIdle(ms = 8000) {
   clearTimeout(fx.idle);
-  fx.idle = setTimeout(() => { if (metro.on || !fx.ctx || fx.ctx.state !== "running") return; const r = fx.ctx.suspend?.(); if (r) r.catch(() => {}); sessionIdle(); }, ms);
+  fx.idle = setTimeout(fxSleep, ms);
 }
+function fxSleep() { clearTimeout(fx.idle); if (metro.on || !fx.ctx || fx.ctx.state !== "running") return; const r = fx.ctx.suspend?.(); if (r) r.catch(() => {}); }
+document.addEventListener("visibilitychange", () => { if (document.hidden) fxSleep(); });
 const yieldNow = () => (globalThis.scheduler && typeof scheduler.yield === "function") ? scheduler.yield() : new Promise(r => setTimeout(r, 0));
 /* ---------------- 3.8 player (benchmark: Soundslice, MuseScore 4, Songsterr, Tomplay, Flat, SmartMusic) ----------------
    The cursor follows the sound itself (the audio clock, so it never drifts): a soft highlight on the bar and a thin
@@ -1546,6 +1568,100 @@ function clickNote(ctx, out, t, accent) {
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.frequency.value = accent ? 1760 : 1175; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(accent ? 2.2 : 1.4, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .05);
   o.connect(g); g.connect(out); o.start(t); o.stop(t + .07);
+}
+/* How a written note is played: one helper for the player and for the sound of a note while correcting, so both
+   always agree. The dynamic in effect (ppp…fff; mf when nothing is written), a hairpin as a gain curve towards the
+   next dynamic (or one step up/down when none follows), sf/sfz/fz/fp as a stronger start (fp, sfp then piano),
+   accents as a stronger start, staccato (½), staccatissimo (⅓), tenuto (full length), otherwise 95 %. q is the length
+   in quarter notes with dots and ties. Read from the MusicXML part, so a mark just added is heard at once. */
+const DYN_LV = { ppp: .22, pp: .3, p: .42, mp: .56, mf: .7, f: .85, ff: 1, fff: 1.12 };
+const DYN_SF = { sf: null, sfz: null, sffz: null, fz: null, rfz: null, rf: null, fp: "p", sfp: "p", sfzp: "p" };
+const NOTE_PLAIN = { g0: DYN_LV.mf, g1: DYN_LV.mf, acc: 0, len: .95, q: 1 };
+function partShapes(part) {
+  const dyn = [], wedges = [], notes = [], sfAt = []; let pos = 0, div = 1, open = null, last = 0;
+  kids(part, "measure").forEach(m => {
+    for (const c of m.children) {
+      const t = c.tagName;
+      if (t === "attributes") { const d = parseFloat(txt(c, "divisions")); if (d > 0) div = d; }
+      else if (t === "backup") pos -= (parseFloat(txt(c, "duration")) || 0) / div;
+      else if (t === "forward") pos += (parseFloat(txt(c, "duration")) || 0) / div;
+      else if (t === "direction") {
+        const at = pos + (parseFloat(txt(c, "offset")) || 0) / div;
+        for (const d of c.getElementsByTagName("dynamics")) for (const x of d.children) {
+          const k = x.tagName;
+          if (k in DYN_LV) dyn.push({ at, lv: DYN_LV[k] });
+          else if (k in DYN_SF) { sfAt.push(at); if (DYN_SF[k]) dyn.push({ at, lv: DYN_LV[DYN_SF[k]] }); }
+        }
+        for (const w of c.getElementsByTagName("wedge")) {
+          const ty = w.getAttribute("type");
+          if (ty === "crescendo" || ty === "diminuendo") open = { a: at, up: ty === "crescendo" };
+          else if (ty === "stop" && open) { wedges.push({ a: open.a, up: open.up, b: at }); open = null; }
+        }
+      } else if (t === "note" && !kid(c, "grace")) {
+        const q = (parseFloat(txt(c, "duration")) || 0) / div, chord = !!kid(c, "chord");
+        const st = chord ? last : pos; if (!chord) { last = pos; pos += q; }
+        notes.push({ n: c, at: st, q });
+      }
+    }
+  });
+  const byTime = () => dyn.sort((x, y) => x.at - y.at);
+  const lvAt = t => { let v = NOTE_PLAIN.g0; for (const d of dyn) { if (d.at > t + 1e-6) break; v = d.lv; } return v; };
+  const steps = Object.values(DYN_LV), step = (v, up) => { let i = steps.findIndex(x => x >= v - 1e-6); if (i < 0) i = steps.length - 1; return steps[Math.max(0, Math.min(steps.length - 1, i + (up ? 1 : -1)))]; };
+  byTime();
+  wedges.sort((x, y) => x.a - y.a).forEach(w => {
+    w.from = lvAt(w.a);
+    const nx = dyn.find(d => d.at >= w.b - 1e-3 && d.at <= w.b + 4);
+    if (nx && (w.up ? nx.lv > w.from : nx.lv < w.from)) w.to = nx.lv;
+    else { w.to = step(w.from, w.up); dyn.push({ at: w.b, lv: w.to }); byTime(); }        // the level reached stays
+  });
+  const gAt = t => { for (const w of wedges) if (w.b > w.a && t >= w.a - 1e-6 && t <= w.b + 1e-6) return w.from + (w.to - w.from) * Math.min(1, (t - w.a) / (w.b - w.a)); return lvAt(t); };
+  const tied = (n, ty) => [...n.getElementsByTagName("tie")].some(e => e.getAttribute("type") === ty);
+  const map = new Map();
+  notes.forEach((x, i) => {
+    const arts = x.n.getElementsByTagName("articulations")[0], has = k => !!(arts && arts.getElementsByTagName(k).length);
+    const len = has("staccatissimo") ? .33 : has("staccato") || has("spiccato") ? .5 : has("detached-legato") ? .75 : has("tenuto") ? 1 : .95;
+    const acc = sfAt.some(a => Math.abs(a - x.at) < 2e-3) ? 2 : has("accent") || has("strong-accent") ? 1 : 0;      // 2: sf, sfz, fp (at least forte-fortissimo at the start)
+    /* a tie carries the sound on into the next note of the same pitch */
+    let q = x.q, cur = x;
+    for (let guard = 0; guard < 16 && tied(cur.n, "start") && kid(cur.n, "pitch"); guard++) {
+      const mi = midiOf(kid(cur.n, "pitch")), end = cur.at + cur.q;
+      const nx = notes.slice(i + 1, i + 40).find(y => Math.abs(y.at - end) < 1e-3 && kid(y.n, "pitch") && tied(y.n, "stop") && midiOf(kid(y.n, "pitch")) === mi);
+      if (!nx) break; q += nx.q; cur = nx;
+    }
+    map.set(x.n, { g0: gAt(x.at), g1: gAt(x.at + x.q), acc, len, q });
+  });
+  return map;
+}
+/* one note through its shape: the voice (instrument, own sound) inside a gain that carries the dynamic; mf is the
+   level the sounds always had, so a piece without marks sounds as before */
+function playShaped(ctx, out, voice, f, st, dur, sh) {
+  sh = sh || NOTE_PLAIN;
+  const en = st + Math.max(0.05, dur * sh.len), g = ctx.createGain(), a = sh.g0 / NOTE_PLAIN.g0, b = sh.g1 / NOTE_PLAIN.g0;
+  const settle = Math.min(st + 0.15, (st + en) / 2);
+  g.gain.setValueAtTime(sh.acc ? Math.max(a * 1.5, sh.acc > 1 ? DYN_LV.ff / NOTE_PLAIN.g0 : 0) : a, st);
+  if (sh.acc) g.gain.linearRampToValueAtTime(a, settle);
+  if (Math.abs(b - a) > 1e-3) { if (!sh.acc) g.gain.setValueAtTime(a, settle); g.gain.linearRampToValueAtTime(b, en); }
+  g.connect(out); voice(ctx, g, f, st, en);
+}
+/* the drawn note (from the player's timemap) → its shape: same bar, staff and place as a tap in correcting mode
+   (locateNote), but with the bar list and each staff's notes read once for the whole piece */
+function playShapes(slots) {
+  try {
+    const doc = parseXml(S.piece.xml), bars = drawnBars(processedXml()), mIdx = new Map(), stNotes = new Map(), byPart = new Map(), meas = new Map();
+    measureEls().forEach((m, i) => mIdx.set(m, i));
+    const parts = new Map([...doc.getElementsByTagName("part")].map(p => [p.getAttribute("id"), p]));
+    return el => {
+      try {
+        const m = el && el.closest("g.measure"), st = el && el.closest("g.staff"); if (!m || !st) return null;
+        const slot = slots[staffsOf(m).indexOf(st)]; if (!slot || slot.multi) return null;
+        const part = parts.get(slot.pid), bar = bars[mIdx.get(m)]; if (!part || !bar) return null;
+        let list = stNotes.get(st); if (!list) { list = [...st.querySelectorAll(NOTE_SEL)]; stNotes.set(st, list); }
+        let sh = byPart.get(part); if (!sh) { sh = partShapes(part); byPart.set(part, sh); meas.set(part, kids(part, "measure")); }
+        const xm = meas.get(part)[bar - 1], n = xm && kids(xm, "note")[list.indexOf(el)];
+        return (n && sh.get(n)) || null;
+      } catch { return null; }
+    };
+  } catch (e) { console.warn(e); return () => null; }
 }
 /* 16-bit WAV, written in slices with a breath between them (no long task). Int16Array is little-endian on every
    phone and computer Solo runs on, as WAV wants. */
@@ -1609,7 +1725,7 @@ const wavCache = { key: "", url: null };
 function wavKey(ev, clicks, len, a4) {
   let h = 2166136261 >>> 0; const mix = v => { h = Math.imul(h ^ (Math.round(v * 1000) | 0), 16777619) >>> 0; };
   const mixS = s => { for (let i = 0; i < s.length; i++) mix(s.charCodeAt(i) / 1000); };
-  ev.forEach(e => { mix(e.t); mix(e.dur); mix(e.pitch); mix(e.silent ? 1 : 0); mixS(e.vk); });
+  ev.forEach(e => { mix(e.t); mix(e.dur); mix(e.pitch); mix(e.silent ? 1 : 0); mixS(e.vk); const s = e.shape; if (s) { mix(s.g0); mix(s.g1); mix(s.len); mix(s.acc); } });
   clicks.forEach(c => { mix(c.t); mix(c.acc ? 1 : 0); });
   mix(len); mix(a4); mixS(store.get("ownUse") || "");
   if (typeof own !== "undefined") mixS(Object.entries(own.byInstr).map(([id, l]) => id + l.map(x => x.midi.toFixed(3)).join()).join());
@@ -1621,7 +1737,7 @@ async function renderWav(ev, clicks, fileLen, freq, token) {
   try { off = new Off(1, Math.ceil((fileLen + LEAD) * sr), sr); } catch { sr = 44100; off = new Off(1, Math.ceil((fileLen + LEAD) * sr), sr); }
   const bus = off.createGain(); bus.gain.value = 0.18; bus.connect(off.destination);
   for (let i = 0; i < ev.length; i++) {
-    const e = ev[i]; if (!e.silent) e.voice(off, bus, freq(e.pitch), LEAD + e.t, LEAD + e.t + e.dur * 0.95);
+    const e = ev[i]; if (!e.silent) playShaped(off, bus, e.voice, freq(e.pitch), LEAD + e.t, e.dur, e.shape);
     if (i % 300 === 299) { await yieldNow(); if (token !== playToken) return null; }
   }
   clicks.forEach(c => clickNote(off, bus, LEAD + c.t, c.acc));
@@ -1665,7 +1781,7 @@ async function play(fromMs, opt = {}) {
   fromMs = pb.loop ? A : Math.max(0, fromMs || 0);
   const k = (S.baseBpm || 120) / playBpm(), sec = ms => ms / 1000 * k, ev = [];
   /* one look-up per part: concert pitch (partTr), its sound, muted or not */
-  const slots = staffSlots(), parts = new Map();
+  const slots = staffSlots(), parts = new Map(), shapeOf = playShapes(slots);
   const partOf = pid => { let p = parts.get(pid); if (!p) { const vk = instrOfPart(pid); p = { tr: partTr(pid), voice: voiceFor(vk), vk, mute: pb.mute.has(pid) }; parts.set(pid, p); } return p; };
   tm.forEach(e => (e.on || []).forEach(id => {
     if (e.tstamp >= B) return;
@@ -1674,7 +1790,7 @@ async function play(fromMs, opt = {}) {
     const end = Math.min(e.tstamp + v.duration, B); if (end <= fromMs + 20) return;
     const start = Math.max(e.tstamp, fromMs);      // resuming mid-note: the note keeps sounding
     const el = document.getElementById(baseId(id)), pid = partOfEl(el, slots), p = partOf(pid);
-    ev.push({ id, el, pid, q0: e.tstamp, t: sec(start - fromMs), dur: Math.max(0.08, sec(end - start)), pitch: v.pitch - p.tr, voice: p.voice, vk: p.vk, silent: p.mute });
+    ev.push({ id, el, pid, q0: e.tstamp, t: sec(start - fromMs), dur: Math.max(0.08, sec(end - start)), pitch: v.pitch - p.tr, voice: p.voice, vk: p.vk, silent: p.mute, shape: p.mute ? null : shapeOf(el) });
   }));
   if (!ev.length) { fail("Brak nut do odtworzenia"); return; }
   ev.sort((a, b) => a.q0 - b.q0);
@@ -1743,11 +1859,11 @@ async function playLive(ev, clicks, total, token, k, fromMs, countLen, freq) {
   const pump = () => {
     if (ctx.state === "closed") return;
     const until = ctx.currentTime - t0 + 8;
-    for (; i < ev.length && ev[i].t < until; i++) { const e = ev[i]; if (!e.silent) e.voice(ctx, bus, freq(e.pitch), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95); }
+    for (; i < ev.length && ev[i].t < until; i++) { const e = ev[i]; if (!e.silent) playShaped(ctx, bus, e.voice, freq(e.pitch), t0 + LEAD + e.t, e.dur, e.shape); }
     for (; c < cl.length && cl[c].t < until; c++) clickNote(ctx, bus, t0 + LEAD + cl[c].t, cl[c].acc);
   };
   pump(); const timer = setInterval(pump, 1000);
-  const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > total + LEAD + 0.3; }, get paused() { return ctx.state !== "running"; }, pause() { clearInterval(timer); try { ctx.close(); } catch {} } };
+  const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > total + LEAD + 0.3; }, get paused() { return ctx.state !== "running"; }, pause() { clearInterval(timer); try { bus.gain.setTargetAtTime(0, ctx.currentTime, 0.008); } catch {} setTimeout(() => { try { ctx.close(); } catch {} }, 80); } };
   if (token !== playToken) { src.pause(); return; }
   playState = { raf: 0, k, fromMs, url: null, src, ev, countLen, total, loopLen: 0, live: true, clock: { a: -1, at: 0 }, di: -1 };
   setPlayUi(true); keepAwake(); mediaState("playing"); follow(token);
@@ -1928,7 +2044,7 @@ function loopMemory(set) {
     if (!drag || !pb.loop) return; const v = valAt(e.clientX), L = pb.loop, a = L.a, b = L.b;
     if (drag === "lb-a") L.a = Math.min(v, L.b); else L.b = Math.max(v, L.a);
     if (L.a === a && L.b === b) return;                        // same bar: nothing to redraw
-    drawLoop(); syncLoopUi(); navigator.vibrate?.(4);
+    drawLoop(); syncLoopUi();
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", () => { if (!drag) return; drag = null; const m = measureEls()[pb.loop.a]; if (m && !playState) scrollToBar(m); if (playState) play(); });
@@ -3464,7 +3580,7 @@ $("#m-beats").addEventListener("click", e => {
 function metroClick(t, accent) {
   const c = metro.ctx, o = c.createOscillator(), g = c.createGain();
   o.frequency.value = accent ? 1500 : 1000; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(accent ? .9 : .55, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .06);
-  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + .08);
+  o.connect(g); g.connect(metro.out || c.destination); o.start(t); o.stop(t + .08);
 }
 const metroBeatLen = () => (metro.beats === 6 ? 30 : 60) / metro.bpm;
 /* look ahead 120 ms, so the clicks stay exact even when the page is busy. When the page was held up (a phone call,
@@ -3488,6 +3604,7 @@ function metroStart() {
   if (playState || pb.preparing) stopPlayback(true);                 // never two clicks at two tempi
   unlockAudio();
   metro.ctx = fxCtx(); clearTimeout(fx.idle);
+  metro.out = metro.ctx.createGain(); metro.out.connect(metro.ctx.destination);      // clicks already queued are faded at stop
   metro.on = true; metro.n = 0; metro.next = metro.ctx.currentTime + .08; metro.queue = [];
   metro.timer = setInterval(metroTick, 25);
   const draw = () => {
@@ -3501,7 +3618,11 @@ function metroStart() {
 }
 function metroStop() {
   metro.on = false; clearInterval(metro.timer); cancelAnimationFrame(metro.raf); metro.queue = [];
-  metro.dots.forEach(d => d.classList.remove("on")); syncMetro(); fxIdle();
+  metro.dots.forEach(d => d.classList.remove("on")); syncMetro();
+  /* the clicks handed ahead to the audio clock (up to 120 ms) are not heard after Stop */
+  const out = metro.out; metro.out = null;
+  if (out) { try { out.gain.setTargetAtTime(0, metro.ctx.currentTime, 0.005); } catch {} setTimeout(() => { try { out.disconnect(); } catch {} }, 300); }
+  if (document.hidden) fxSleep(); else fxIdle();
   if (!playState && !tuner.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
 }
 $("#m-go").addEventListener("click", () => metro.on ? metroStop() : metroStart());
@@ -3517,7 +3638,7 @@ function tapTempo(now = performance.now()) {
   const bpm = 60000 / ((t[t.length - 1] - t[0]) / (t.length - 1));
   setMetroBpm(metro.beats === 6 ? bpm / 2 : bpm); return metro.bpm;
 }
-{ const tap = $("#m-tap"); if (tap) tap.addEventListener("pointerdown", e => { e.preventDefault(); tapTempo(); navigator.vibrate?.(6); }); }
+{ const tap = $("#m-tap"); if (tap) tap.addEventListener("pointerdown", e => { e.preventDefault(); tapTempo(); }); }
 /* the metronome speeds up by itself (Pro Metronome's "Automator"): metroRamp({ to: 120, step: 4, bars: 4 }) adds
    4 BPM every 4 bars up to 120; metroRamp(null) stops it. Logic only, for the lead's controls. */
 function metroRamp(o) { metro.ramp = o ? { to: Math.min(240, o.to || 120), step: o.step || 4, bars: o.bars || 4, bar: 0 } : null; return metro.ramp; }
@@ -3604,41 +3725,66 @@ function detectPitch(buf, sr, minF = 40, maxF = 1500) {
 /* The microphone first, then an audio context at the microphone's own rate. The other order fails on phones:
    iPhone switches its audio mode when the mic starts and an earlier context hears silence; Chrome and Firefox
    refuse to connect a mic running at another rate. Every failure is said on screen, not swallowed. */
-const micKeep = { stream: null, timer: 0 };
-/* the tuner or a recording is done: the microphone stays ready for 3 minutes (no new permission prompt when the
-   player comes back), then it is really turned off; leaving the app turns it off at once */
-function releaseMic() {
-  clearTimeout(micKeep.timer);
-  micKeep.timer = setTimeout(() => { if (tuner.on || (typeof of !== "undefined" && of.stream)) return; try { micKeep.stream && micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; micDone(); }, 180000);
+/* Microphone permission (iOS research, see fixlog-audio2): Safari and a home-screen app remember an "Allow" only for
+   the open page; reopening the app asks again unless Safari's microphone setting is "Zezwalaj". So the microphone is
+   never opened just because a screen was shown: the first time it needs a tap ("Włącz stroik", "Zaczynamy"); later it
+   starts by itself only when the browser says permission is already "granted" (no prompt possible). One stream serves
+   the whole visit while the tuner or a recording uses it; leaving the tuner, closing a recording or leaving the app
+   stops it at once (the orange dot goes off), with no timers. */
+const micKeep = { stream: null, pending: null, hinted: false };
+/* "granted" | "prompt" | "denied" | "" (the browser does not say) */
+async function micPermission() {
+  try { const s = await navigator.permissions.query({ name: "microphone" }); return (s && s.state) || ""; } catch { return ""; }
 }
-/* leaving the app turns the microphone off at once (no red indicator, no battery): the tuner stops ("Włącz stroik"
-   brings it back), a guided recording pauses and listens again on return; the audio session is given back */
+/* opened by itself only when no prompt can come up: once allowed here, and the browser reports "granted" */
+async function micAutoOk() { return store.get("micOk") === "1" && (await micPermission()) === "granted"; }
+/* the tuner or a recording is done: the microphone is turned off now (keep: it is handed straight to the next user,
+   e.g. the tuner passing it to "Nagraj swój dźwięk") */
+function releaseMic(keep) {
+  if (keep || tuner.on || tuner.starting || (typeof of !== "undefined" && (of.stream || of.starting))) return;
+  if (micKeep.stream) { try { micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; }
+}
+/* leaving the app turns the microphone off at once (no orange dot, no battery): the tuner stops ("Włącz stroik"
+   brings it back), a guided recording pauses and listens again on return (by itself only when no prompt can come) */
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     if (tuner.on || tuner.starting) tunerStop();
-    if (typeof of !== "undefined" && of.stream) { of.resumeOnShow = of.state === "listen"; stopListening(); }
-    clearTimeout(micKeep.timer);
+    if (typeof of !== "undefined" && (of.stream || of.starting)) { of.resumeOnShow = of.state === "listen"; stopListening(); }
     if (micKeep.stream) { try { micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; }
-    micDone();
   } else if (typeof of !== "undefined" && of.resumeOnShow) {
     of.resumeOnShow = false;
-    if (of.state === "listen" && !$("#ownf").hidden) startListening().then(ok => { if (ok && of.state === "listen") { cancelAnimationFrame(of.raf); of.raf = requestAnimationFrame(listenLoop); } });
+    if (of.state === "listen" && !$("#ownf").hidden) micAutoOk().then(ok => {
+      if (!ok) { of.tapToListen = true; drawRing(0, null, "Dotknij, żeby słuchać"); return; }
+      startListening().then(ok2 => { if (ok2 && of.state === "listen") { cancelAnimationFrame(of.raf); of.raf = requestAnimationFrame(listenLoop); } });
+    });
   }
 });
+/* one short line, only after the phone has asked a second time: how to make iOS remember */
+function micRememberHint() {
+  if (micKeep.hinted) return; micKeep.hinted = true;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  hud(ios ? "Żeby iPhone nie pytał o mikrofon: Ustawienia → Aplikacje → Safari → Mikrofon → Zezwalaj" : "Żeby nie pytać o mikrofon: zezwól na niego tej stronie w ustawieniach przeglądarki", 7000);
+}
 async function openMic() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("Ta przeglądarka nie daje dostępu do mikrofonu."), { name: "NoMic" });
   /* iPhone: playback sets the audio session to "playback" (music with the silent switch on), and in that mode iOS
      refuses the microphone ("audio session category is not compatible with audio capture"). Recording needs
-     "play-and-record"; micDone() gives the session back. */
-  try { if (navigator.audioSession) navigator.audioSession.type = "play-and-record"; } catch {}
-  /* one microphone for the whole visit: asking again would make the phone ask for permission again */
-  clearTimeout(micKeep.timer);
+     "play-and-record"; the next sound sets "playback" again just as it starts. */
+  setSession("play-and-record");
+  /* one microphone for the whole visit while it is in use: asking again could make the phone ask for permission again */
   let stream = micKeep.stream && micKeep.stream.getAudioTracks().some(t => t.readyState === "live") ? micKeep.stream : null;
   if (!stream) {
     /* two quick taps during the permission prompt share one request (no second, never-closed microphone) */
     micKeep.pending = micKeep.pending || (async () => {
-      try { return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
-      catch (e) { if (e && e.name === "OverconstrainedError") return await navigator.mediaDevices.getUserMedia({ audio: true }); throw e; }
+      const before = await micPermission(), t0 = performance.now();
+      let s;
+      try { s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
+      catch (e) { if (e && e.name === "OverconstrainedError") s = await navigator.mediaDevices.getUserMedia({ audio: true }); else throw e; }
+      /* was the person asked? The browser says so (not "granted" before), or, when it does not say, a slow answer */
+      const asked = before ? before !== "granted" : performance.now() - t0 > 900;
+      if (asked) { const n = (+store.get("micAsks", 0) || 0) + 1; store.set("micAsks", String(n)); if (n >= 2) setTimeout(micRememberHint, 600); }
+      store.set("micOk", "1");
+      return s;
     })();
     try { stream = await micKeep.pending; } finally { micKeep.pending = null; }
     micKeep.stream = stream;
@@ -3650,7 +3796,6 @@ async function openMic() {
   catch { try { ctx.close(); } catch {} ctx = new AC(); try { await ctx.resume(); } catch {} src = ctx.createMediaStreamSource(stream); }
   return { stream, ctx, src };
 }
-function micDone() { try { if (navigator.audioSession && !tuner.on && !(typeof of !== "undefined" && of.stream) && !micKeep.stream) navigator.audioSession.type = "auto"; } catch {} }
 function micError(e) {
   return e && e.name === "NotAllowedError" ? (standalone() ? "Brak zgody na mikrofon. Włącz go w Ustawieniach telefonu." : "Brak zgody na mikrofon. Zezwól w ustawieniach przeglądarki.") :
     e && e.name === "NotFoundError" ? "Nie znaleziono mikrofonu." : e && e.name === "NotReadableError" ? "Mikrofon jest zajęty przez inną aplikację." :
@@ -3663,7 +3808,7 @@ async function tunerStart() {
   let m; try { m = await openMic(); }
   catch (e) { tuner.starting = false; if (gen === tuner.gen) $("#t-hz").textContent = micError(e); return; }      // said once, under the needle
   tuner.starting = false;
-  if (gen !== tuner.gen) { try { m.ctx.close(); } catch {} releaseMic(); micDone(); return; }      // stopped while starting
+  if (gen !== tuner.gen) { try { m.ctx.close(); } catch {} releaseMic(); return; }      // stopped while starting
   tuner.stream = m.stream; tuner.ctx = m.ctx;
   tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 4096; tuner.buf = new Float32Array(tuner.an.fftSize);
   m.src.connect(tuner.an);
@@ -3750,11 +3895,11 @@ function drawTrace(t) {
   for (const p of tuner.trace) { const x = w - (t - p.t) / 6000 * w; if (p.c === null) { pen = false; continue; } if (pen) g.lineTo(x, y(p.c)); else g.moveTo(x, y(p.c)); pen = true; }
   g.stroke();
 }
-function tunerStop() {
+function tunerStop(keepMic) {
   tuner.gen = (tuner.gen || 0) + 1; tuner.starting = false;
   tuner.on = false; cancelAnimationFrame(tuner.raf);
-  try { tuner.ctx && tuner.ctx.close(); } catch {} releaseMic();
-  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; tuner.paused = false; tn.txt.clear(); $("#tuner2").dataset.st = "off"; micDone();
+  try { tuner.ctx && tuner.ctx.close(); } catch {} releaseMic(keepMic);
+  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; tuner.paused = false; tn.txt.clear(); $("#tuner2").dataset.st = "off";
   $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = "";
   $("#t-dot").style.transform = ""; tuner.x = 0; drawTrace(performance.now()); syncTuner();
   if (!playState && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
@@ -3765,7 +3910,14 @@ $$("#t-tol button").forEach(b => b.addEventListener("click", () => { tuner.tol =
 const setA4 = v => { tuner.a4 = Math.max(430, Math.min(450, v)); store.set("tunerA4", tuner.a4); syncTuner(); };
 $("#t-a-down").addEventListener("click", () => setA4(tuner.a4 - 1));
 $("#t-a-up").addEventListener("click", () => setA4(tuner.a4 + 1));
-function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerStart(); }
+function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerAuto(); }
+/* the tuner shown: it listens by itself only when that cannot bring up a permission prompt; otherwise one tap on
+   "Włącz stroik" (the person decides when the phone asks) */
+async function tunerAuto() {
+  if (tuner.on || tuner.starting) return;
+  if (await micAutoOk()) { if (!tuner.on && (S.view === "tunerv" || openSheetId === "tuner")) tunerStart(); }
+  else if (!tuner.on && !tuner.starting) $("#t-hz").textContent = "Dotknij „Włącz stroik”";
+}
 /* which instrument a part is: its name (Puzon II → Puzon), a piano by its two staves, the melody by the piece's instrument */
 /* the instrument for sound and new parts: as namedInstr; a piano part is a piano; unknown: the player's own */
 function instrOfPart(pid) {
@@ -4264,7 +4416,7 @@ $("#col-del").addEventListener("click", () => {
 function syncFavTile() { const on = cardPiece && favs().includes(cardPiece.id); $("#cd-fav").innerHTML = icon(on ? "heart-fill" : "heart") + `<span>Ulubione</span>`; $("#cd-fav").setAttribute("aria-pressed", String(!!on)); }
 $("#cd-fav").addEventListener("click", () => {
   const f = favs(), id = cardPiece.id, on = f.includes(id);
-  saveFavs(on ? f.filter(x => x !== id) : [...f, id]); syncFavTile(); navigator.vibrate?.(8); refreshLibrary();
+  saveFavs(on ? f.filter(x => x !== id) : [...f, id]); syncFavTile(); refreshLibrary();
 });
 $("#cd-col").addEventListener("click", () => closeSheetThen(() => openSheet("addto")));
 function buildAddtoSheet() {
@@ -4275,7 +4427,7 @@ $("#addto-list").addEventListener("change", e => {
   const cid = e.target.dataset.c, id = cardPiece && cardPiece.id; if (!cid || !id) return;
   const all = cols(), c = all.find(x => x.id === cid); if (!c) return;
   c.items = e.target.checked ? [...new Set([...c.items, id])] : c.items.filter(x => x !== id);
-  saveCols(all); navigator.vibrate?.(8); refreshLibrary();
+  saveCols(all); refreshLibrary();
 });
 $("#addto-new").addEventListener("click", () => { colTarget = null; colPiece = cardPiece && cardPiece.id; closeSheetThen(() => openSheet("col")); });
 
