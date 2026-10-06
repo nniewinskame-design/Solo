@@ -150,7 +150,7 @@ function analyseXml(xml) {
   return { parts, key: { fifths, mode }, title, composer };
 }
 function processedXml() {
-  const doc = parseXml(S.piece.xml);
+  const doc = addAccidentals(parseXml(S.piece.xml));
   const root = doc.documentElement;
   const keep = new Set(S.parts.filter(p => p.keep).map(p => p.id));
   const removed = S.parts.some(p => !p.keep);
@@ -341,6 +341,30 @@ function keyAlter(fifths, step) {
   return 0;
 }
 function clefId(c) { const s = txt(c, "sign"), l = txt(c, "line"); return s === "C" ? "C" + (l || "3") : s; }
+/* T33: the reader knows a note is E-flat but writes no accidental sign, so Verovio drew a plain E
+   (this is what looked like "flats are not read"). Add the signs as they are printed: against the key,
+   once per bar and line position. Safe to run on any score: notes that already have a sign are kept. */
+const ACC_BY_ALTER = { "-2": "flat-flat", "-1": "flat", "0": "natural", "1": "sharp", "2": "double-sharp" };
+function addAccidentals(doc) {
+  Array.from(doc.getElementsByTagName("part")).forEach(part => {
+    let fifths = 0;
+    kids(part, "measure").forEach(m => {
+      kids(m, "attributes").forEach(a => { const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0; });
+      const state = new Map();
+      kids(m, "note").forEach(n => {
+        const p = kid(n, "pitch"); if (!p) return;
+        const step = txt(p, "step"), key = step + txt(p, "octave"), alt = Math.round(parseFloat(txt(p, "alter")) || 0);
+        const cur = state.has(key) ? state.get(key) : keyAlter(fifths, step);
+        state.set(key, alt);
+        if (kid(n, "accidental") || alt === cur || !ACC_BY_ALTER[String(alt)]) return;
+        const acc = doc.createElement("accidental"); acc.textContent = ACC_BY_ALTER[String(alt)];
+        const after = kids(n, "dot").pop() || kid(n, "type");
+        if (after) n.insertBefore(acc, after.nextSibling); else n.insertBefore(acc, kid(n, "notations") || kid(n, "stem") || null);
+      });
+    });
+  });
+  return doc;
+}
 function checkReading(xml, ans = {}) {
   const doc = parseXml(xml), issues = [];
   const parts = Array.from(doc.getElementsByTagName("part"));
@@ -437,6 +461,7 @@ function checkReading(xml, ans = {}) {
       if (Math.abs(b - a) >= 12 && Math.abs(b - c) >= 12 && Math.abs(a - c) <= 7) issues.push(`Takt ${midis[k].i + 1}: nuta może być o oktawę ${b < a ? "za nisko" : "za wysoko"}`);
     }
   });
+  addAccidentals(doc);
   issues.sort((a, b) => parseInt(a.slice(5), 10) - parseInt(b.slice(5), 10));
   return { xml: new XMLSerializer().serializeToString(doc), issues };
 }

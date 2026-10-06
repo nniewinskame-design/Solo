@@ -445,6 +445,9 @@ function loadState(piece, settings) {
   const first = S.parts.find(p => p.keep) || S.parts[0];
   S.srcClef = first ? first.clef : "treble";
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null;
+  /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
+  S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
+  S.layout = S.hasLines ? "orig" : "fit";
   if (settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
@@ -453,6 +456,7 @@ function loadState(piece, settings) {
     if (Number.isInteger(settings.preset)) S.preset = settings.preset;
     if (settings.bpm >= 20 && settings.bpm <= 300) S.bpm = Math.round(settings.bpm);
     if (settings.zoom >= .5 && settings.zoom <= 2) S.zoom = settings.zoom;
+    if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
   }
   if (S.piece.instrument == null) S.piece.instrument = first && !PIANO_RE.test(first.name) ? first.name : "";
 }
@@ -503,7 +507,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, zoom: S.zoom },
+    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, zoom: S.zoom, layout: S.layout },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -536,7 +540,7 @@ async function leaveScore() {
    virtual page: the notes keep their size in Verovio units and the page shrinks around them. */
 function a4Options(extra, zoom = S.zoom) {
   const z = zoom, r = v => Math.round(v / z);
-  return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: "auto", header: "auto", footer: "none",
+  return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
     pageMarginTop: r(110), pageMarginBottom: r(110), pageMarginLeft: r(150), pageMarginRight: r(150), spacingSystem: 6, svgViewBox: true,
     transpose: intervalString(S.iv), justifyVertically: false, ...extra };
 }
@@ -568,7 +572,7 @@ async function doRender() {
     if (mode === "pages") opts = a4Options();
     else {
       const px = 38 * S.zoom;
-      opts = { pageWidth: Math.round(width * 100 / px), pageHeight: 60000, adjustPageHeight: true, scale: Math.round(px), breaks: "auto", header: "auto", footer: "none",
+      opts = { pageWidth: Math.round(width * 100 / px), pageHeight: 60000, adjustPageHeight: true, scale: Math.round(px), breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
         pageMarginLeft: 50, pageMarginRight: 50, pageMarginTop: 60, pageMarginBottom: 60, spacingSystem: 8, svgViewBox: false, transpose: intervalString(S.iv), justifyVertically: false };
     }
     tk.setOptions(opts);
@@ -1107,7 +1111,10 @@ $("#oct-down").addEventListener("click", () => { const { k, oct } = kOct(); setK
 $("#oct-up").addEventListener("click", () => { const { k, oct } = kOct(); setKOct(k, oct + 1); });
 
 /* ---------------- More sheet ---------------- */
+$$("#layoutseg button").forEach(b => b.addEventListener("click", () => { S.layout = b.dataset.layout; syncLayout(); S.loadedKey = null; changed(); }));
+function syncLayout() { $("#layout-box").hidden = !S.hasLines; $$("#layoutseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.layout === S.layout))); }
 function buildMoreSheet() {
+  syncLayout();
   const P = $("#parts"); P.innerHTML = "";
   const isPiano = p => p.staves > 1 || PIANO_RE.test(p.name);
   const solo = S.parts.find(p => !isPiano(p));
@@ -1638,7 +1645,9 @@ const NEWS = { "3.7": ["Kilka pytań przed czytaniem: klucz, metrum i znaki przy
   "Szybkie interwały w Tonacji: sekunda, tercja, kwarta, kwinta w górę i w dół.",
   "Z PDF-u wybierasz strony; do 12 stron naraz.",
   "Przypomnienie o kopii zapasowej i bezpieczne wczytywanie kopii.",
-  "Odtwarzanie działa też w oknie prywatnym (incognito)."] };
+  "Odtwarzanie działa też w oknie prywatnym (incognito).",
+  "Nuty ze zdjęcia mają tyle taktów w linii, ile na kartce („Jak w oryginale”, zmiana w Więcej).",
+  "Bemole i krzyżyki odczytane ze zdjęcia są teraz widoczne w nutach."] };
 /* ---------------- Install (T9) ---------------- */
 let installEvt = null;
 const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;

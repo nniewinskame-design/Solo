@@ -320,6 +320,11 @@
   <div class="shead"><h2 class="h-m" id="sh-more-t">Więcej</h2><button class="done" data-close>Gotowe</button></div>
   <h3 class="lbl first">Partie</h3>
   <div class="list" id="parts"></div>
+  <div id="layout-box" hidden>
+    <h3 class="lbl">Układ</h3>
+    <div class="seg" id="layoutseg"><button data-layout="orig">Jak w oryginale</button><button data-layout="fit">Dopasuj do ekranu</button></div>
+    <p class="note">„Jak w oryginale”: tyle taktów w linii, ile na kartce. Jeśli nuty są za ciasno, zmniejsz je niżej.</p>
+  </div>
   <h3 class="lbl">Odsłuch i wygląd</h3>
   <div class="list">
     <div class="li"><span class="ic"><svg class="i"><use href="#metronome"/></svg></span><span class="grow"><b>Tempo</b><button class="reset" id="tempo-reset" hidden></button></span><button class="pill round sm" id="tempo-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><label class="bpm"><span aria-hidden="true"><svg class="q"><use href="#quarter"/></svg>=</span><input id="tempo" type="number" inputmode="numeric" min="20" max="300" step="1" enterkeyhint="done" aria-label="Tempo odsłuchu, ćwierćnuty na minutę"></label><button class="pill round sm" id="tempo-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div>

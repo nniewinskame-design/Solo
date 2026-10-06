@@ -126,7 +126,7 @@ document.getElementById("run").addEventListener("click", async () => {
       const t0 = performance.now(), r0 = await recognizer();
       const res = await r0.recognizePage(await toBlob(files[c.id]), { ocr: false, onProgress: p => { status.textContent = `${c.name}: ${p.stage}${p.total ? " " + Math.min(p.done + 1, p.total) + "/" + p.total : ""}`; } });
       if (!res.ok) { out.innerHTML = `<p class="bad">Odczyt nieudany: ${res.error}</p>`; continue; }
-      const xml = homrToSolo([res.musicXml], c.name), r = analyse(xml), checks = judge(c, r);
+      const xml = checkReading(homrToSolo([res.musicXml], c.name), {}).xml, r = analyse(xml), checks = judge(c, r);   // what the app shows (no answers given)
       const passed = checks.filter(x => x.ok).length, key = "sprawdzian:" + c.id;
       const prev = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
       const verdict = !prev ? "Pierwszy pomiar" : passed > prev.passed ? "Lepiej niż poprzednio" : passed < prev.passed ? "Gorzej niż poprzednio" : "Tak samo jak poprzednio";
