@@ -493,7 +493,7 @@ async function refreshLibrary(animate) {
   nudgeBackup(all);
   /* news: a quiet dot on the "Ja" tab instead of a card between the search and the music */
   const nn = $("#news-nudge"); if (nn) nn.hidden = true;
-  document.querySelector('#tabbar [data-tab="settings"]')?.classList.toggle("dot", !!(all.length && NEWS[VERSION] && store.get("newsSeen") !== VERSION));
+  document.querySelector('#tabbar [data-tab="settings"]')?.classList.remove("dot");     // no "Co nowego" (Nat, 7 Oct)
   $("#lib").hidden = !has; $("#lib-empty").hidden = has;
   $("#lib-count").textContent = has ? String(list.length) : "";      // what is shown (filter, search), not everything
   $("#lib-none").hidden = !(has && q && !list.length);

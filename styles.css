@@ -2017,3 +2017,5 @@ details.ask .ask-body .lbl{margin:10px 0 6px}
 .ask-key-c{display:flex;align-items:center;gap:10px}
 .ask-key-c .ak-val{min-width:9ch;text-align:center;font:600 15px var(--font)}
 .ask-key-c .ak-x{margin-left:auto;font:500 13px var(--font);color:var(--brand-ink);background:none;border:0}
+/* no "Co nowego" anywhere (Nat, 7 Oct) */
+#news-nudge,#news-det{display:none!important}
