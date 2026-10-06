@@ -1,8 +1,8 @@
 /* Applies the saved look before the page paints (kept separate: the CSP forbids inline scripts).
-   Light unless the person chose dark; the system setting is not followed. */
+   Light unless the person chose dark, or "Auto" (then the system setting). */
 (function () {
   var t = "light";
-  try { if (localStorage.getItem("solo:theme") === "dark") t = "dark"; } catch (e) {}
+  try { var v = localStorage.getItem("solo:theme"); if (v === "dark" || (v === "auto" && matchMedia("(prefers-color-scheme: dark)").matches)) t = "dark"; } catch (e) {}
   var root = document.documentElement;
   root.setAttribute("data-theme", t);
   var metas = document.querySelectorAll('meta[name="theme-color"]');

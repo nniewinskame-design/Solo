@@ -1237,3 +1237,24 @@ body.tabs main.view,body.tabs .tabview{padding-bottom:calc(96px + var(--safe-b))
 .toast .toast-act{min-height:40px;padding:0 10px;border-radius:99px;color:var(--brass);text-decoration:underline;text-underline-offset:3px}
 body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 110px + var(--safe-b))}
 .sheet:focus,.sheet h2:focus,.sheet h1:focus{outline:none}
+
+/* ===== Editor tabs with words under the icons (K6) ===== */
+.ed-tabs button{flex-direction:column;gap:2px;height:56px;color:var(--ink-2);font:700 12px var(--sans);letter-spacing:.01em}
+.ed-tabs button span{line-height:1}
+.ed-tabs button[aria-selected="true"]{color:var(--on-brass);background:var(--brass)}
+
+/* ===== Score colours with one meaning each (K11, K12): playing = vermilion, loop = cobalt, check = plum, selection = cherry ===== */
+#pages g.playing,#pages g.playing *{fill:var(--cursor)!important;stroke:var(--cursor)}
+.playline{width:4px!important;background:var(--cursor)!important;opacity:1!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--cursor) 18%,transparent)}
+#pages g.measure.doubt .note,#pages g.measure.doubt .rest,#pages g.measure.doubt .accid{fill:var(--pos-5)}
+
+/* ===== Onboarding: centred, like every title (V39) ===== */
+.onb-body{align-items:center;text-align:center}
+.onb-body .ichips,.onb-body .tiles,.onb-body .seg{align-self:stretch}
+.onb-brand{justify-content:center;font-family:var(--display);color:var(--cherry)}
+.onb-body .h-xl{font-size:clamp(36px,9vw,56px);text-wrap:balance}
+.onb-lead{text-wrap:balance;max-width:30ch}
+
+/* ===== Score header: the title in the display face, up to two lines; the details may wrap (V28) ===== */
+.stitle .a{font-family:var(--display);font-size:18px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-wrap:balance;line-height:1.15}
+.stitle .b{font-size:14px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

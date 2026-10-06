@@ -575,7 +575,7 @@ function openPiece(piece, settings) {
   if (S.piece.issues && S.piece.issues.length) {
     const nums = doubtfulBars(S.piece.issues), n = nums.length;
     $("#notice-title").textContent = n ? `${n} ${plural(n, "takt", "takty", "taktów")} do sprawdzenia` : "Sprawdź ze zdjęciem";
-    $("#notice-text").textContent = n ? `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
+    $("#notice-text").textContent = n ? `Zaznaczone na fioletowo: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
   }
   updateTitles();
   $("#peek").hidden = true; pb.loop = null; pb.pick = false; pb.mute.clear(); pb.resumeMs = 0; $("#loopbar").hidden = true; $("#btn-loop").setAttribute("aria-pressed", "false"); S.undo = []; S.editSel = null; S.keepSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
@@ -1124,7 +1124,7 @@ function afterEdit() {
   $("#ed-undo").disabled = !(S.undo && S.undo.length);
   $("#btn-restore").hidden = !S.piece.origXml;
   const nums = doubtfulBars(S.piece.issues);
-  if (!$("#notice").hidden || nums.length) { $("#notice").hidden = !nums.length; if (nums.length) { $("#notice-title").textContent = `${nums.length} ${plural(nums.length, "takt", "takty", "taktów")} do sprawdzenia`; $("#notice-text").textContent = `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${nums.length > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.`; } }
+  if (!$("#notice").hidden || nums.length) { $("#notice").hidden = !nums.length; if (nums.length) { $("#notice-title").textContent = `${nums.length} ${plural(nums.length, "takt", "takty", "taktów")} do sprawdzenia`; $("#notice-text").textContent = `Zaznaczone na fioletowo: ${nums.slice(0, 8).join(", ")}${nums.length > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.`; } }
 }
 $$("#editbar [data-ed]").forEach(b => b.addEventListener("click", () => editNote(b.dataset.ed)));
 $("#btn-restore").addEventListener("click", () => {
@@ -1694,7 +1694,7 @@ async function savePdf(send) {
     if (!shared) {
       files.forEach(f => download(f.name, f, "application/pdf"));
       if (send) { location.href = `mailto:?subject=${encodeURIComponent(title)}`; hud("Pobrano. Dołącz plik do wiadomości.", 4000); }
-      else hud(files.length > 1 ? `Pobrano ${files.length} pliki PDF` : "Pobrano " + files[0].name, 3000);
+      else hud(files.length > 1 ? `Pobrano ${files.length} ${plural(files.length, "plik", "pliki", "plików")} PDF` : "Pobrano " + files[0].name, 3000);
     }
     else hud("Gotowe", 1200);
   } catch (e) { console.error(e); hud("Nie udało się zapisać PDF. Spróbuj jeszcze raz.", 4000); }
@@ -2125,7 +2125,7 @@ async function openXmlFile(f) {
 async function addPages(files) {
   $("#read-error").hidden = true;
   for (const f of files) {
-    if (pending.length >= MAX_PAGES) { hud(`Najwyżej ${MAX_PAGES} strony naraz`); break; }
+    if (pending.length >= MAX_PAGES) { hud(`Najwyżej ${MAX_PAGES} stron naraz`); break; }
     try {
       if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
@@ -2460,7 +2460,7 @@ function syncSettings() {
   syncInstall();
   const items = NEWS[VERSION] || [];
   $("#news").innerHTML = `<p class="txt"><b>Wersja ${esc(VERSION)}</b></p><ul class="news">${items.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
-  const th = store.get("theme") === "dark" ? "dark" : "light";
+  const th = ["dark", "auto"].includes(store.get("theme")) ? store.get("theme") : "light";
   $$("#themeseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.theme === th)));
   $("#ver").textContent = BUILD ? `${VERSION} · test ${BUILD}` : VERSION;
   DB.all().then(all => {
@@ -2469,12 +2469,19 @@ function syncSettings() {
   navigator.storage?.estimate?.().then(e => { $("#store-size").textContent = `Zajęte: ${(e.usage / 1048576).toFixed(1).replace(".", ",")} MB${store.get("modelReady") ? ", w tym ok. 150 MB to program do czytania nut" : ""}`; }).catch(() => {});
 }
 $$("#themeseg button").forEach(b => b.addEventListener("click", () => {
-  const t = b.dataset.theme; store.set("theme", t);
+  store.set("theme", b.dataset.theme);
   const root = document.documentElement; root.classList.add("theming"); setTimeout(() => root.classList.remove("theming"), 400);
+  applyTheme(); syncSettings();
+}));
+/* "Auto" follows the system (and changes with it, e.g. at night) */
+const darkMq = matchMedia("(prefers-color-scheme: dark)");
+function applyTheme() {
+  const v = store.get("theme"), t = v === "dark" || (v === "auto" && darkMq.matches) ? "dark" : "light";
   document.documentElement.setAttribute("data-theme", t);
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#16131C" : "#FBF6EC");
-  syncSettings();
-}));
+  const cs = document.querySelector('meta[name="color-scheme"]'); if (cs) cs.setAttribute("content", t);
+}
+darkMq.addEventListener?.("change", () => { if (store.get("theme") === "auto") applyTheme(); });
 async function saveBackup() {
   const all = await DB.all();
   if (!all.length) return 0;
@@ -2527,45 +2534,10 @@ $("#in-backup").addEventListener("change", async e => {
   } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
 });
 
-const NEWS = { "3.9": ["Nuty według zasad zapisu: ósemki i szesnastki łączone belkami według metrum, pauzy pokazują miary, znaki przypominające w następnym takcie.",
-  "Drugi i trzeci głos według zasad prowadzenia głosów: bez kwint i oktaw równoległych, bez krzyżowania, konsonanse na mocnych częściach taktu, zakończenie na tonice.",
-  "Akordy z kadencją (D → T), fortepian gra według metrum (walc w 3/4), bas idzie najbliższą drogą.",
-  "Klucz i oktawa dobierane tak, żeby nuty mieściły się na pięciolinii; nuty poza skalą instrumentu są zaznaczone.",
-  "Partie mieszczą się w wygodnej skali ucznia i w kluczach danego instrumentu.",
-  "Przykład „Wlazł kotek” poprawiony: 3/4, klucz basowy dla puzonu, tekst pod nutami."],
-  "3.8": ["Twój dźwięk: 5 dźwięków nagrywanych ze stroikiem, każdy zapisuje się sam, gdy jest czysty.",
-  "Kolekcje w bibliotece: Ulubione, Ostatnie, Moje i własne. Utwór może być w kilku.",
-  "Dotknij partii: tylko ta, wycisz, zmień, drukuj, wyślij, usuń.","Zakładki: Nuty, Stroik, Metronom, Ja. Nuty dodajesz jednym „+”: zdjęcie, galeria, plik, mail, nowa melodia.",
-  "Przytrzymaj utwór: otwórz, wyślij, zmień nazwę, usuń.",
-  "Ponad 50 instrumentów w rodzinach, z wyszukiwarką. Każda partia osobno do PDF.",
-  "Na start kilka pytań: instrument (kilka), strój, rola. Zmienisz je w zakładce „Ty”.",
-  "Stroik słucha na żywo: nuta, centy, wykres dźwięku, strój A, instrumenty w B, Es, F.",
-  "Strona A4 jak na papierze, powiększanie dwoma palcami jak w PDF.",
-  "Nowy odtwarzacz: takt odliczania, płynny kursor, przewijanie linia po linii, pauza, pętla zmieniana w trakcie grania, metronom w odsłuchu, wyciszanie partii.",
-  "Poprawianie nut: wybierz długość i dotknij pięciolinii; zakładki z ikonami; przesuwanie nut w bok; kropka; dźwięk przy każdej zmianie.",
-  "Nowa melodia zaczyna się od instrumentu, metrum, tonacji i tempa.",
-  "Partie pod tytułem: „+” dopisuje drugi głos, unisono, akordy albo bas dla wybranego instrumentu, z transpozycją. Duet i trio jednym dotknięciem. Puzon I / Puzon II."],
-  "3.7": ["Przycisk „Popraw”: dotknij w pobliżu nuty, żeby ją zmienić. „Takt”: metrum, klucz, znaki, dodawanie i usuwanie taktów, tempo.",
-  "Kilka pytań przed czytaniem: klucz, metrum i znaki przy kluczu poprawiają odczyt.",
-  "Takty, które się nie zgadzają, są zaznaczone na czerwono, z licznikiem do sprawdzenia.",
-  "Pauzy wielotaktowe nie zasłaniają już kolejnych taktów.",
-  "Nuty od 50 do 200%, rozciąganie dwoma palcami, wielkość zapamiętana dla utworu.",
-  "Grana nuta jest wyraźna, a linia idzie za muzyką. Dotknij taktu, żeby grać od niego.",
-  "Szybkie interwały w Tonacji: sekunda, tercja, kwarta, kwinta w górę i w dół.",
-  "Z PDF-u wybierasz strony; do 12 stron naraz.",
-  "Przypomnienie o kopii zapasowej i bezpieczne wczytywanie kopii.",
-  "Odtwarzanie działa też w oknie prywatnym (incognito).",
-  "Nuty ze zdjęcia mają tyle taktów w linii, ile na kartce („Jak w oryginale”, zmiana w Więcej).",
-  "Bemole i krzyżyki odczytane ze zdjęcia są teraz widoczne w nutach.",
-  "Dotknij taktu, a nad nutami pokaże się ta linia ze zdjęcia oryginału.",
-  "Poprawianie nut: dotknij nuty i przesuń ją, zmień długość, dodaj znak, zamień na pauzę. Cofnij i Przywróć odczyt.",
-  "Pusta pięciolinia: napisz własną melodię.",
-  "Wyślij PDF lub obraz przez WhatsApp, e-mail i inne.",
-  "PDF z Gmaila: Udostępnij → Solo (gdy Solo jest zainstalowane).",
-  "Metronom i stroik.",
-  "Aranżacja w Więcej: drugi głos (tercje, seksty, trzy poziomy), akordy lub funkcje pod nutami, partia dla trąbki, saksofonu, waltorni, skrzypiec, swing.",
-  "Mój dźwięk: nagraj jeden długi dźwięk swojego instrumentu, a Solo zagra nuty Twoim brzmieniem.",
-  "Samouczek: 5 krótkich kroków (Ustawienia → Pomoc)."] };
+const NEWS = { "3.9": ["Nuty według zasad zapisu: ósemki łączone belkami według metrum, pauzy pokazują miary, znaki przypominające w następnym takcie.",
+  "Drugi i trzeci głos według zasad prowadzenia głosów i akordów fortepianu.",
+  "Klucz i oktawa dobrane tak, żeby nuty mieściły się na pięciolinii.",
+  "Gotowe melodie, kanon, trio z trzech instrumentów, zmiana instrumentu partii i oktawy."] };
 /* ---------------- T22 metronome, T23 tuner ---------------- */
 const metro = { on: false, bpm: 100, beats: 4, ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [] };
 function buildToolsSheet() {
@@ -2815,10 +2787,10 @@ $$("#t-instr button").forEach(b => b.addEventListener("click", () => { tuner.tr 
 const TOUR = [
   ["#pages", "Nuty", "Dotknij taktu, żeby grać od niego. Dwa palce powiększają stronę."],
   ["#btn-play", "Posłuchaj", "Takt odliczania, potem kursor idzie za muzyką, a strona przewija się sama."],
-  ["#btn-loop", "Pętla", "Dotknij pierwszego i ostatniego taktu. Zmienisz ją w każdej chwili, także w trakcie grania."],
-  ["#btn-tempo", "Tempo", "Wolniej, szybciej, 50%, 75%, metronom w odsłuchu, co słychać."],
+  ["#btn-loop", "Pętla", "Przesuń suwaki na pierwszy i ostatni takt. Działa też w trakcie grania."],
+  ["#btn-tempo", "Tempo", "Zwolnij, przyspiesz i włącz metronom."],
   ["#btn-edit", "Popraw", "Wybierz długość i dotknij pięciolinii, albo dotknij nuty, żeby ją zmienić."],
-  ["#btn-tools", "Narzędzia", "Tonacja, klucz, drugi głos, partie, oryginał, wysyłanie, stroik, metronom."]
+  ["#btn-tools", "Narzędzia", "Tonacja, klucz, oryginał i wysyłanie."]
 ];
 let tourI = -1;
 function tourShow() {
@@ -2844,7 +2816,7 @@ $("#btn-tour").addEventListener("click", () => {
 let installEvt = null;
 const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 function syncInstall() {
-  $("#installed").hidden = !standalone();
+  $("#installed").hidden = !standalone(); $("#install-steps").hidden = standalone();   // the steps only while it is not installed
   $("#btn-install").hidden = standalone() || !installEvt;
   $("#install-steps").hidden = standalone();
 }

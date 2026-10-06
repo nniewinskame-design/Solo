@@ -15,7 +15,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SITE_URL = "https://github.com/solo-note-test/solo-note-test.github.io.git"
 SITE_DIR = Path(os.environ.get("SOLO_SITE_DIR", Path.home() / ".solo-deploy" / "solo-note-test.github.io"))
-SKIP = {".git", "tools", "testkit", "tests", ".github", "node_modules", ".gitignore"}
+SKIP = {".git", ".claude", "tools", "testkit", "tests", ".github", "node_modules", ".gitignore"}
 SITE_KEEP = {".git", "README.md", "BUILD"}   # files that belong to the test-site repo itself
 YELLOW, INK = "#FFC93C", "#1E1B2E"
 ZIP = "zrodla/solo-kod-zrodlowy.zip"

@@ -116,7 +116,7 @@
         <h2 class="h-l">Twoje nuty <span class="count" id="lib-count"></span></h2>
         <div class="libtools">
           <label class="search"><svg class="i"><use href="#search"/></svg><input id="lib-search" type="search" placeholder="Szukaj" autocomplete="off" aria-label="Szukaj w nutach"></label>
-          <label class="sort"><select id="lib-sort" aria-label="Kolejność"><option value="opened">Ostatnio grane</option><option value="title">Tytuł</option><option value="composer">Kompozytor</option><option value="created">Ostatnio dodane</option></select><svg class="i"><use href="#down"/></svg></label>
+          <label class="sort"><select id="lib-sort" aria-label="Kolejność"><option value="opened">Ostatnio otwierane</option><option value="title">Tytuł</option><option value="composer">Kompozytor</option><option value="created">Ostatnio dodane</option></select><svg class="i"><use href="#down"/></svg></label>
         </div>
       </div>
       <div class="notice" id="news-nudge" hidden>
@@ -217,14 +217,14 @@
       <button data-ed="slur" aria-label="Łuk do następnej nuty"><svg class="i"><use href="#slur"/></svg></button>
     </div>
     <div class="ed-tabs" role="tablist">
-      <button role="tab" data-tab-ed="pitch" aria-selected="true" aria-label="Wysokość"><svg class="i"><use href="#drag"/></svg></button>
-      <button role="tab" data-tab-ed="len" aria-selected="false" aria-label="Długość"><svg class="i"><use href="#n-quarter"/></svg></button>
-      <button role="tab" data-tab-ed="acc" aria-selected="false" aria-label="Znaki"><svg class="i"><use href="#sharp"/></svg></button>
-      <button role="tab" data-tab-ed="note" aria-selected="false" aria-label="Nuta: przesuń, powiel, usuń"><svg class="i"><use href="#music"/></svg></button>
-      <button role="tab" data-tab-ed="marks" aria-selected="false" aria-label="Oznaczenia: dynamika, artykulacja, łuki"><svg class="i"><use href="#marks"/></svg></button>
-      <button data-ed="bar" aria-label="Takt: metrum, klucz, znaki"><svg class="i"><use href="#bar"/></svg></button>
+      <button role="tab" data-tab-ed="pitch" aria-selected="true" aria-label="Wysokość"><svg class="i"><use href="#drag"/></svg><span>Wysokość</span></button>
+      <button role="tab" data-tab-ed="len" aria-selected="false" aria-label="Długość"><svg class="i"><use href="#n-quarter"/></svg><span>Długość</span></button>
+      <button role="tab" data-tab-ed="acc" aria-selected="false" aria-label="Znaki chromatyczne"><svg class="i"><use href="#sharp"/></svg><span>♯ ♭</span></button>
+      <button role="tab" data-tab-ed="note" aria-selected="false" aria-label="Nuta: przesuń, powiel, usuń"><svg class="i"><use href="#music"/></svg><span>Nuta</span></button>
+      <button role="tab" data-tab-ed="marks" aria-selected="false" aria-label="Oznaczenia: dynamika, artykulacja, łuki"><svg class="i"><use href="#marks"/></svg><span>Dynamika</span></button>
+      <button data-ed="bar" aria-label="Takt: metrum, klucz, znaki"><svg class="i"><use href="#bar"/></svg><span>Takt</span></button>
       <i class="ed-sep"></i>
-      <button data-ed="undo" id="ed-undo" aria-label="Cofnij"><svg class="i"><use href="#undo"/></svg></button>
+      <button data-ed="undo" id="ed-undo" aria-label="Cofnij"><svg class="i"><use href="#undo"/></svg><span>Cofnij</span></button>
     </div>
   </div>
   <div class="loopbar" id="loopbar" hidden>
@@ -256,9 +256,10 @@
     <h3 class="lbl">Wygląd</h3>
     <div class="group">
       <div class="li col">
-        <div class="seg" id="themeseg">
+        <div class="seg three" id="themeseg">
           <button data-theme="light">Jasny</button>
           <button data-theme="dark">Ciemny</button>
+          <button data-theme="auto">Auto</button>
         </div>
       </div>
     </div>
@@ -283,7 +284,7 @@
     </div>
 
     <h3 class="lbl">Pomoc</h3>
-    <div class="group"><button class="li tap" id="btn-tour"><span class="ic"><svg class="i"><use href="#info"/></svg></span><span class="grow"><b>Samouczek</b><small>5 krótkich kroków na ekranie nut</small></span><svg class="i chev"><use href="#right"/></svg></button></div>
+    <div class="group"><button class="li tap" id="btn-tour"><span class="ic"><svg class="i"><use href="#info"/></svg></span><span class="grow"><b>Samouczek</b><small>Krótko po ekranie nut</small></span><svg class="i chev"><use href="#right"/></svg></button></div>
 
     <h3 class="lbl">Co nowego</h3>
     <div class="group"><div class="li col" id="news"></div></div>
@@ -356,10 +357,10 @@
     <div class="w-brand" aria-label="Solo"><svg class="mark"><use href="#note"/></svg><span>Solo</span></div>
     <div class="w-copy">
       <h1 class="h-xl">Wszystkie nuty w&nbsp;<em>Twoim kluczu</em> i&nbsp;tonacji</h1>
-      <p class="w-lead">Sfotografuj nuty lub wgraj plik, a&nbsp;Solo zapisze melodię w&nbsp;dowolnym kluczu i&nbsp;tonacji.</p>
+      <p class="w-lead">Zrób zdjęcie nut albo otwórz plik, a&nbsp;Solo zapisze melodię w&nbsp;dowolnym kluczu i&nbsp;tonacji.</p>
       <div class="w-acts">
-        <button class="btn ink wide" data-act="camera" id="w-camera"><svg class="i"><use href="#camera"/></svg><span>Sfotografuj nuty</span></button>
-        <label class="btn line" for="in-files"><svg class="i"><use href="#file"/></svg><span>Wgraj plik</span></label>
+        <button class="btn ink wide" data-act="camera" id="w-camera"><svg class="i"><use href="#camera"/></svg><span>Zrób zdjęcie nut</span></button>
+        <label class="btn line" for="in-files"><svg class="i"><use href="#file"/></svg><span>Z pliku</span></label>
         <button class="btn ghost" data-act="example" id="w-example">Pokaż przykład</button>
       </div>
     </div>
@@ -547,7 +548,7 @@
   <div class="shead"><h2 class="h-m" id="sh-new-t">Nowa melodia</h2><button class="done ghost" data-close>Anuluj</button></div>
   <h3 class="lbl first">Instrument <small id="new-clef"></small></h3>
   <div class="chips" id="new-instr"></div>
-  <h3 class="lbl">Gotowe</h3>
+  <h3 class="lbl">Gotowe melodie</h3>
   <div class="chips" id="new-ready"><button data-t="kotek">Wlazł kotek</button><button data-t="janie">Panie Janie</button><button data-t="oda">Oda do radości</button></div>
   <h3 class="lbl">Własna</h3>
   <div class="list fields"><label class="li"><span class="fk">Tytuł</span><input id="new-title" type="text" autocomplete="off" placeholder="Nowa melodia"></label></div>
@@ -636,18 +637,18 @@
   </div>
   <div id="ap-step2" hidden>
     <h3 class="lbl first" id="ap-for"></h3>
-    <div id="ap-srcbox"><h3 class="lbl">Względem</h3><div class="ichips" id="ap-src"></div></div>
+    <div id="ap-srcbox"><h3 class="lbl">Do której partii</h3><div class="ichips" id="ap-src"></div></div>
     <h3 class="lbl">Gra</h3>
     <div class="cards" id="ap-role">
       <button class="card2" data-role="voice2"><svg class="i"><use href="#n-eighth"/></svg><span><b>Drugi głos</b></span></button>
       <button class="card2" data-role="voice3"><svg class="i"><use href="#n-16th"/></svg><span><b>Trzeci głos</b></span></button>
-      <button class="card2" data-role="melody"><svg class="i"><use href="#music"/></svg><span><b>Unisono</b></span></button>
+      <button class="card2" data-role="melody"><svg class="i"><use href="#music"/></svg><span><b>Ta sama melodia</b></span></button>
       <button class="card2" data-role="chords"><svg class="i"><use href="#piano"/></svg><span><b>Akordy</b></span></button>
       <button class="card2" data-role="bass"><svg class="i"><use href="#n-half"/></svg><span><b>Bas</b></span></button>
     </div>
     <div id="ap-v2opts">
       <h3 class="lbl">Zasada</h3>
-      <div class="seg three" id="ap-int"><button data-int="0">Sam dobierze</button><button data-int="9">Akordowo</button><button data-int="3">Tercje</button><button data-int="6">Seksty</button><button data-int="5">Kwinty</button></div>
+      <div class="seg three" id="ap-int"><button data-int="0">Solo dobierze</button><button data-int="9">Z akordu</button><button data-int="3">Tercje</button><button data-int="6">Seksty</button><button data-int="5">Kwinty</button></div>
       <div id="ap-showbox"><h3 class="lbl">Jak pokazać</h3>
       <div class="seg" id="ap-show"><button data-show="staff">Osobna pięciolinia</button><button data-show="same">Na tej samej pięciolinii</button></div></div>
     </div>
