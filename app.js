@@ -114,8 +114,8 @@ function tabShown(v, from) {
   document.body.classList.toggle("tabs", TABS.includes(v)); document.body.classList.toggle("onhome", v === "home");
   $$("#tabbar [data-tab]").forEach(b => b.toggleAttribute("aria-current", b.dataset.tab === v));
   placeSlide();
-  if (from === "tunerv" && v !== "tunerv" && tuner.on) tunerStop();
-  if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerStart(); }
+  if (from === "tunerv" && v !== "tunerv" && (tuner.on || tuner.starting)) tunerStop();
+  if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerAuto(); }
   if (v === "metrov") { $("#metro-tab-host").appendChild($("#metro-ui")); buildToolsSheet(); }
   if (v === "settings" && typeof renderProfile === "function") renderProfile();
   if (v === "settings" && NEWS[VERSION]) { store.set("newsSeen", VERSION); $('#tabbar [data-tab="settings"]')?.classList.remove("dot"); }
@@ -275,7 +275,7 @@ function setBehindInert(sheet, on) {
   });
 }
 function hideSheet(instant, keepScrim) {
-  if (openSheetId === "tuner" && tuner.on) tunerStop();
+  if (openSheetId === "tuner" && (tuner.on || tuner.starting)) tunerStop();
   if (openSheetId === "pdf" && pickPdfPages.cancel) { const c = pickPdfPages.cancel; setTimeout(c, 0); }
   if (!openSheetId) return;
   const name = openSheetId, el = $("#sh-" + name);
@@ -3603,41 +3603,66 @@ function detectPitch(buf, sr, minF = 40, maxF = 1500) {
 /* The microphone first, then an audio context at the microphone's own rate. The other order fails on phones:
    iPhone switches its audio mode when the mic starts and an earlier context hears silence; Chrome and Firefox
    refuse to connect a mic running at another rate. Every failure is said on screen, not swallowed. */
-const micKeep = { stream: null, timer: 0 };
-/* the tuner or a recording is done: the microphone stays ready for 3 minutes (no new permission prompt when the
-   player comes back), then it is really turned off; leaving the app turns it off at once */
-function releaseMic() {
-  clearTimeout(micKeep.timer);
-  micKeep.timer = setTimeout(() => { if (tuner.on || (typeof of !== "undefined" && of.stream)) return; try { micKeep.stream && micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; micDone(); }, 180000);
+/* Microphone permission (iOS research, see fixlog-audio2): Safari and a home-screen app remember an "Allow" only for
+   the open page; reopening the app asks again unless Safari's microphone setting is "Zezwalaj". So the microphone is
+   never opened just because a screen was shown: the first time it needs a tap ("Włącz stroik", "Zaczynamy"); later it
+   starts by itself only when the browser says permission is already "granted" (no prompt possible). One stream serves
+   the whole visit while the tuner or a recording uses it; leaving the tuner, closing a recording or leaving the app
+   stops it at once (the orange dot goes off), with no timers. */
+const micKeep = { stream: null, pending: null, hinted: false };
+/* "granted" | "prompt" | "denied" | "" (the browser does not say) */
+async function micPermission() {
+  try { const s = await navigator.permissions.query({ name: "microphone" }); return (s && s.state) || ""; } catch { return ""; }
 }
-/* leaving the app turns the microphone off at once (no red indicator, no battery): the tuner stops ("Włącz stroik"
-   brings it back), a guided recording pauses and listens again on return; the audio session is given back */
+/* opened by itself only when no prompt can come up: once allowed here, and the browser reports "granted" */
+async function micAutoOk() { return store.get("micOk") === "1" && (await micPermission()) === "granted"; }
+/* the tuner or a recording is done: the microphone is turned off now (keep: it is handed straight to the next user,
+   e.g. the tuner passing it to "Nagraj swój dźwięk") */
+function releaseMic(keep) {
+  if (keep || tuner.on || tuner.starting || (typeof of !== "undefined" && (of.stream || of.starting))) return;
+  if (micKeep.stream) { try { micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; }
+}
+/* leaving the app turns the microphone off at once (no orange dot, no battery): the tuner stops ("Włącz stroik"
+   brings it back), a guided recording pauses and listens again on return (by itself only when no prompt can come) */
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     if (tuner.on || tuner.starting) tunerStop();
-    if (typeof of !== "undefined" && of.stream) { of.resumeOnShow = of.state === "listen"; stopListening(); }
-    clearTimeout(micKeep.timer);
+    if (typeof of !== "undefined" && (of.stream || of.starting)) { of.resumeOnShow = of.state === "listen"; stopListening(); }
     if (micKeep.stream) { try { micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; }
-    micDone();
   } else if (typeof of !== "undefined" && of.resumeOnShow) {
     of.resumeOnShow = false;
-    if (of.state === "listen" && !$("#ownf").hidden) startListening().then(ok => { if (ok && of.state === "listen") { cancelAnimationFrame(of.raf); of.raf = requestAnimationFrame(listenLoop); } });
+    if (of.state === "listen" && !$("#ownf").hidden) micAutoOk().then(ok => {
+      if (!ok) { of.tapToListen = true; drawRing(0, null, "Dotknij, żeby słuchać"); return; }
+      startListening().then(ok2 => { if (ok2 && of.state === "listen") { cancelAnimationFrame(of.raf); of.raf = requestAnimationFrame(listenLoop); } });
+    });
   }
 });
+/* one short line, only after the phone has asked a second time: how to make iOS remember */
+function micRememberHint() {
+  if (micKeep.hinted) return; micKeep.hinted = true;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  hud(ios ? "Żeby iPhone nie pytał o mikrofon: Ustawienia → Aplikacje → Safari → Mikrofon → Zezwalaj" : "Żeby nie pytać o mikrofon: zezwól na niego tej stronie w ustawieniach przeglądarki", 7000);
+}
 async function openMic() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("Ta przeglądarka nie daje dostępu do mikrofonu."), { name: "NoMic" });
   /* iPhone: playback sets the audio session to "playback" (music with the silent switch on), and in that mode iOS
      refuses the microphone ("audio session category is not compatible with audio capture"). Recording needs
-     "play-and-record"; micDone() gives the session back. */
-  try { if (navigator.audioSession) navigator.audioSession.type = "play-and-record"; } catch {}
-  /* one microphone for the whole visit: asking again would make the phone ask for permission again */
-  clearTimeout(micKeep.timer);
+     "play-and-record"; the next sound sets "playback" again just as it starts. */
+  setSession("play-and-record");
+  /* one microphone for the whole visit while it is in use: asking again could make the phone ask for permission again */
   let stream = micKeep.stream && micKeep.stream.getAudioTracks().some(t => t.readyState === "live") ? micKeep.stream : null;
   if (!stream) {
     /* two quick taps during the permission prompt share one request (no second, never-closed microphone) */
     micKeep.pending = micKeep.pending || (async () => {
-      try { return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
-      catch (e) { if (e && e.name === "OverconstrainedError") return await navigator.mediaDevices.getUserMedia({ audio: true }); throw e; }
+      const before = await micPermission(), t0 = performance.now();
+      let s;
+      try { s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
+      catch (e) { if (e && e.name === "OverconstrainedError") s = await navigator.mediaDevices.getUserMedia({ audio: true }); else throw e; }
+      /* was the person asked? The browser says so (not "granted" before), or, when it does not say, a slow answer */
+      const asked = before ? before !== "granted" : performance.now() - t0 > 900;
+      if (asked) { const n = (+store.get("micAsks", 0) || 0) + 1; store.set("micAsks", String(n)); if (n >= 2) setTimeout(micRememberHint, 600); }
+      store.set("micOk", "1");
+      return s;
     })();
     try { stream = await micKeep.pending; } finally { micKeep.pending = null; }
     micKeep.stream = stream;
@@ -3649,7 +3674,6 @@ async function openMic() {
   catch { try { ctx.close(); } catch {} ctx = new AC(); try { await ctx.resume(); } catch {} src = ctx.createMediaStreamSource(stream); }
   return { stream, ctx, src };
 }
-function micDone() { try { if (navigator.audioSession && !tuner.on && !(typeof of !== "undefined" && of.stream) && !micKeep.stream) navigator.audioSession.type = "auto"; } catch {} }
 function micError(e) {
   return e && e.name === "NotAllowedError" ? (standalone() ? "Brak zgody na mikrofon. Włącz go w Ustawieniach telefonu." : "Brak zgody na mikrofon. Zezwól w ustawieniach przeglądarki.") :
     e && e.name === "NotFoundError" ? "Nie znaleziono mikrofonu." : e && e.name === "NotReadableError" ? "Mikrofon jest zajęty przez inną aplikację." :
@@ -3662,7 +3686,7 @@ async function tunerStart() {
   let m; try { m = await openMic(); }
   catch (e) { tuner.starting = false; if (gen === tuner.gen) $("#t-hz").textContent = micError(e); return; }      // said once, under the needle
   tuner.starting = false;
-  if (gen !== tuner.gen) { try { m.ctx.close(); } catch {} releaseMic(); micDone(); return; }      // stopped while starting
+  if (gen !== tuner.gen) { try { m.ctx.close(); } catch {} releaseMic(); return; }      // stopped while starting
   tuner.stream = m.stream; tuner.ctx = m.ctx;
   tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 4096; tuner.buf = new Float32Array(tuner.an.fftSize);
   m.src.connect(tuner.an);
@@ -3749,11 +3773,11 @@ function drawTrace(t) {
   for (const p of tuner.trace) { const x = w - (t - p.t) / 6000 * w; if (p.c === null) { pen = false; continue; } if (pen) g.lineTo(x, y(p.c)); else g.moveTo(x, y(p.c)); pen = true; }
   g.stroke();
 }
-function tunerStop() {
+function tunerStop(keepMic) {
   tuner.gen = (tuner.gen || 0) + 1; tuner.starting = false;
   tuner.on = false; cancelAnimationFrame(tuner.raf);
-  try { tuner.ctx && tuner.ctx.close(); } catch {} releaseMic();
-  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; tuner.paused = false; tn.txt.clear(); $("#tuner2").dataset.st = "off"; micDone();
+  try { tuner.ctx && tuner.ctx.close(); } catch {} releaseMic(keepMic);
+  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; tuner.paused = false; tn.txt.clear(); $("#tuner2").dataset.st = "off";
   $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = "";
   $("#t-dot").style.transform = ""; tuner.x = 0; drawTrace(performance.now()); syncTuner();
   if (!playState && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
@@ -3764,7 +3788,14 @@ $$("#t-tol button").forEach(b => b.addEventListener("click", () => { tuner.tol =
 const setA4 = v => { tuner.a4 = Math.max(430, Math.min(450, v)); store.set("tunerA4", tuner.a4); syncTuner(); };
 $("#t-a-down").addEventListener("click", () => setA4(tuner.a4 - 1));
 $("#t-a-up").addEventListener("click", () => setA4(tuner.a4 + 1));
-function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerStart(); }
+function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerAuto(); }
+/* the tuner shown: it listens by itself only when that cannot bring up a permission prompt; otherwise one tap on
+   "Włącz stroik" (the person decides when the phone asks) */
+async function tunerAuto() {
+  if (tuner.on || tuner.starting) return;
+  if (await micAutoOk()) { if (!tuner.on && (S.view === "tunerv" || openSheetId === "tuner")) tunerStart(); }
+  else if (!tuner.on && !tuner.starting) $("#t-hz").textContent = "Dotknij „Włącz stroik”";
+}
 /* which instrument a part is: its name (Puzon II → Puzon), a piano by its two staves, the melody by the piece's instrument */
 /* the instrument for sound and new parts: as namedInstr; a piano part is a piano; unknown: the player's own */
 function instrOfPart(pid) {

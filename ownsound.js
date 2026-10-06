@@ -158,7 +158,7 @@ let pickCb = null;
 function pickInstrument(title, cb) { pickCb = cb; $("#sh-pick-t").textContent = title; openSheet("pick"); }
 function buildPickSheet() { instrPicker($("#pick-box"), { onPick: id => { const f = pickCb; pickCb = null; closeSheetThen(() => f && f(id)); } }); }
 $("#own-use").addEventListener("change", e => store.set("ownUse", e.target.checked ? "1" : "0"));
-$("#own-rec").addEventListener("click", () => { if (tuner.on) tunerStop(); openOwnFlow(); });
+$("#own-rec").addEventListener("click", () => { if (tuner.on) tunerStop(true); openOwnFlow(); });      // the tuner's microphone is handed over
 function openOwnFlow() {
   of.instr = of.instr && profile().instruments.includes(of.instr) ? of.instr : mainInstr().id;
   of.targets = ownTargets(); of.done = of.targets.map(() => null); of.step = 0; of.state = "intro";
@@ -166,7 +166,11 @@ function openOwnFlow() {
 }
 async function closeOwnFlow() { stopListening(); cancelAnimationFrame(of.raf); fadeOut($("#ownf"), 220); syncOwn(); }
 $("#ownf-x").addEventListener("click", closeOwnFlow);
-$("#ownf-body").addEventListener("click", () => { if (of.ctx && of.ctx.state !== "running") of.ctx.resume(); });
+$("#ownf-body").addEventListener("click", () => {
+  if (of.ctx && of.ctx.state !== "running") of.ctx.resume();
+  /* back in the app while recording: a tap listens again (never a permission prompt by itself) */
+  if (of.tapToListen && of.state === "listen") { of.tapToListen = false; startListening().then(ok => { if (ok && of.state === "listen") { cancelAnimationFrame(of.raf); of.raf = requestAnimationFrame(listenLoop); } }); }
+});
 /* a second tap while the phone asks for the microphone waits for the same answer (no second context left open) */
 function startListening() {
   if (of.stream) return Promise.resolve(true);
@@ -174,7 +178,7 @@ function startListening() {
 }
 async function openListening() {
   let m; try { m = await openMic(); } catch (e) { hud(micError(e), 4500); return false; }
-  if ($("#ownf").hidden) { try { m.ctx.close(); } catch {} releaseMic(); micDone(); return false; }      // closed meanwhile
+  if ($("#ownf").hidden) { try { m.ctx.close(); } catch {} of.starting = null; releaseMic(); return false; }      // closed meanwhile
   of.stream = m.stream; of.ctx = m.ctx; const src0 = m.src;
   of.sr = of.ctx.sampleRate; of.ring = new Float32Array(Math.ceil(of.sr * 4)); of.rp = 0;
   const src = src0, proc = of.ctx.createScriptProcessor(2048, 1, 1), mute = of.ctx.createGain(); mute.gain.value = 0;
@@ -192,6 +196,7 @@ function listenLoop(t) {
   if (of.state !== "listen") return;
   of.raf = requestAnimationFrame(listenLoop);
   if (t - (of.lastT || 0) < 33) return; of.lastT = t;
+  if (!of.stream) { drawRing(0, null, of.tapToListen ? "Dotknij, żeby słuchać" : "Włączam mikrofon…"); return; }      // the microphone is off (the app was left)
   if (of.ctx && of.ctx.state !== "running") { of.ctx.resume().catch(() => {}); drawRing(0, null, "Dotknij, żeby włączyć"); return; }
   const target = of.targets[of.step], buf = (of.lbuf = lastAudio(0.09, of.lbuf));      // one buffer reused 30 times a second
   let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v));
