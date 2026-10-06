@@ -97,13 +97,18 @@ function profile() {
   let p = null; try { p = JSON.parse(store.get("profile", "null")); } catch {}
   return { ...PROFILE_DEFAULT, ...(p || {}) };
 }
-function saveProfile(p) { store.set("profile", JSON.stringify(p)); applyProfile(); }
+function saveProfile(p) { const prev = profile(); store.set("profile", JSON.stringify(p)); applyProfile(prev); }
 const mainInstr = () => instrById(profile().main);
-/* what the tuner shows: the written note for a transposing instrument (as the player reads it) */
-function applyProfile() {
-  const p = profile(), m = instrById(p.main);
-  if (store.get("tunerTr") == null || p.done) { tuner.tr = p.reading === "written" ? ((m.tr % 12) + 12) % 12 : 0; }
-  tuner.a4 = p.a4 || 440;
+/* what the tuner shows: the written note for a transposing instrument (as the player reads it), with its octave
+   (tenor sax: tr 14, so a sounding B♭2 is "C razkreślna"). The profile sets the tuner when the profile changes
+   (and until the tuner is set by hand); a tuner set by hand (A = 441, another instrument) stays after a restart. */
+function applyProfile(prev) {
+  const p = profile(), m = instrById(p.main), trNow = p.reading === "written" ? m.tr || 0 : 0, st = store.get("tunerTr");
+  const mod = v => ((v % 12) + 12) % 12;
+  if (prev ? prev.main !== p.main || prev.reading !== p.reading : st == null) { tuner.tr = trNow; if (prev) store.set("tunerTr", tuner.tr); }
+  else if (!prev && st != null && +st !== trNow && mod(+st) === mod(trNow)) { tuner.tr = trNow; store.set("tunerTr", tuner.tr); }      // saved before octaves counted
+  if (prev ? prev.a4 !== p.a4 : store.get("tunerA4") == null) { tuner.a4 = p.a4 || 440; if (prev) store.set("tunerA4", tuner.a4); }
+  try { if (typeof syncTuner === "function") syncTuner(); } catch {}
   const s = $("#prof-sum"); if (s) s.textContent = profileSummary();
 }
 function profileSummary(p = profile()) {
@@ -154,7 +159,7 @@ function renderOnb() {
     h = `<h2 class="h-l">Główny instrument</h2><div class="onb-grid one">` +
       p.instruments.map(id => tile(p.main === id, instrById(id).name, `data-main="${id}"`)).join("") + `</div>`;
   } else if (name === "reading") {
-    const m = instrById(p.main), w = NOTE_PL[(0 + m.tr) % 12];
+    const m = instrById(p.main), w = NOTE_PL[((m.tr % 12) + 12) % 12];
     h = `<h2 class="h-l">Stroik pokazuje</h2><div class="onb-grid one">` +
       tile(p.reading === "written", `Zapis dla instrumentu`, `data-read="written"`, `<b class="onb-ex">C → ${w}</b>`) +
       tile(p.reading === "concert", `Dźwięki rzeczywiste`, `data-read="concert"`, `<b class="onb-ex">C → C</b>`) + `</div>`;

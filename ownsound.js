@@ -10,13 +10,20 @@ const own = { byInstr: {} };
 const OWN_HOLD = 1500, OWN_TOL = 15, OWN_RATE = 24000;
 /* the anchor notes (sounding MIDI): trombones on open first-position notes, others spread over their range */
 function ownTargets(m = instrById(of.instr || mainInstr().id)) {
-  if (["puzon", "puzon-alt", "eufonium", "baryton"].includes(m.id)) return [41, 46, 53, 58, 65];       // F, B, f, b, f1
+  if (["puzon", "eufonium", "baryton"].includes(m.id)) return [41, 46, 53, 58, 65];       // F, B, f, b, f1
   if (m.id === "puzon-b" || m.id === "tuba" || m.id === "suzafon") return [m.lo + 3, m.lo + 8, m.lo + 15, m.lo + 20, m.lo + 27];
   const lo = m.lo + 3, hi = m.hi - 8, step = (hi - lo) / 4;
   return [0, 1, 2, 3, 4].map(i => Math.round(lo + i * step));
 }
 const POS_PUZON = { 41: "6. pozycja", 46: "1. pozycja", 53: "1. pozycja", 58: "1. pozycja", 65: "1. pozycja" };
-function noteLabel(midi) { const w = midi + (tuner.tr || 0), oct = Math.floor(w / 12) - 1; return { name: NOTE_PL[((w % 12) + 12) % 12], oct: OCTAVE_NAMES[oct] || "" }; }
+/* a note named as the recorded instrument's player reads it (its own transposition with the octave, when the
+   profile shows written notes), not as the tuner happens to be set */
+function ownTr() {
+  const id = of.instr || mainInstr().id;
+  if (ownTr.k !== id) { ownTr.k = id; ownTr.v = profile().reading === "written" ? instrById(id).tr || 0 : 0; }
+  return ownTr.v;
+}
+function noteLabel(midi) { return writtenName(midi, ownTr()); }
 
 /* ---------------- storage: 16-bit, 24 kHz, in IndexedDB-free localStorage (five short notes ≈ 0.5 MB) ---------------- */
 function packF32(f) { const i16 = Int16Array.from(f, v => Math.max(-32767, Math.min(32767, Math.round(v * 32767)))); let s = ""; const u8 = new Uint8Array(i16.buffer); for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return btoa(s); }
@@ -128,13 +135,13 @@ function stopListening() {
   of.proc = of.stream = of.ctx = null; releaseMic();
 }
 /* the last `sec` seconds from the rolling buffer */
-function lastAudio(sec) { const n = Math.min(of.ring.length, Math.floor(sec * of.sr)), out = new Float32Array(n); for (let i = 0; i < n; i++) out[i] = of.ring[(of.rp - n + i + of.ring.length) % of.ring.length]; return out; }
+function lastAudio(sec, reuse) { const n = Math.min(of.ring.length, Math.floor(sec * of.sr)), out = reuse && reuse.length === n ? reuse : new Float32Array(n); for (let i = 0; i < n; i++) out[i] = of.ring[(of.rp - n + i + of.ring.length) % of.ring.length]; return out; }
 function listenLoop(t) {
   if (of.state !== "listen") return;
   of.raf = requestAnimationFrame(listenLoop);
   if (t - (of.lastT || 0) < 33) return; of.lastT = t;
   if (of.ctx && of.ctx.state !== "running") { of.ctx.resume().catch(() => {}); drawRing(0, null, "Dotknij, żeby włączyć"); return; }
-  const target = of.targets[of.step], buf = lastAudio(0.09);
+  const target = of.targets[of.step], buf = (of.lbuf = lastAudio(0.09, of.lbuf));      // one buffer reused 30 times a second
   let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v));
   const f = detectPitch(buf.length >= 4096 ? buf.subarray(buf.length - 4096) : buf, of.sr, 30, 1500), ok = f > 0 && detectPitch.clarity > 0.88;
   let cents = null, hint = "Zagraj i trzymaj", played = null;
@@ -195,7 +202,7 @@ function renderOwn() {
     acts.innerHTML = `<button class="btn primary wide" id="of-go"><span>Zaczynamy</span></button>`;
     $("#of-go").addEventListener("click", async () => { if (!(await startListening())) return; of.state = "listen"; renderOwn(); });
   } else if (of.state === "listen" || of.state === "got") {
-    const tg = of.targets[of.step], l = noteLabel(tg), pos = m.id.startsWith("puzon") && POS_PUZON[tg] ? POS_PUZON[tg] : "";
+    const tg = of.targets[of.step], l = noteLabel(tg), pos = m.id === "puzon" && POS_PUZON[tg] ? POS_PUZON[tg] : "";
     body.innerHTML = `<p class="of-step">${of.step + 1} z ${n}</p>
       <p class="of-target">Zagraj <b>${l.name}</b> ${esc(l.oct)}${pos ? ` · ${pos}` : ""}</p>
       <div class="of-ringbox"><svg viewBox="0 0 240 240" class="of-svg"><circle cx="120" cy="120" r="110" class="of-track"/><circle cx="120" cy="120" r="110" class="of-fill" id="of-ring" style="stroke-dasharray:691;stroke-dashoffset:${of.state === "got" ? 0 : 691}"/></svg>

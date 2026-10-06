@@ -2894,7 +2894,7 @@ const NOTE_PL = ["C", "Cis", "D", "Es", "E", "F", "Fis", "G", "As", "A", "B", "H
 /* Polish octave names: C2–H2 wielka, C3 mała, C4 razkreślna … */
 const OCTAVE_NAMES = ["subkontra", "kontra", "wielka", "mała", "razkreślna", "dwukreślna", "trzykreślna", "czterokreślna"];
 function syncTuner() {
-  $$("#t-instr button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tr === tuner.tr)));
+  $$("#t-instr button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tr === ((tuner.tr % 12) + 12) % 12)));
   $$("#t-tol button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tol === tuner.tol)));
   $("#t-a").textContent = String(tuner.a4);
   const z = tuner.tol, pc = v => 50 + v;            // the meter spans −50…+50 cents
@@ -2907,22 +2907,25 @@ function syncTuner() {
    and it takes the first strong peak, so it does not jump an octave down. The signal is thinned to
    ~12 kHz first so it is quick on older phones, then the result is fine-tuned on the full signal.
    Returns Hz or -1; detectPitch.clarity is 0..1, detectPitch.rms the loudness. */
+const scratch = {};
+function scratchF32(k, n) { let a = scratch[k]; if (!a || a.length < n) a = scratch[k] = new Float32Array(Math.max(n, 4096)); return a.subarray(0, n); }
 function detectPitch(buf, sr, minF = 40, maxF = 1500) {
   detectPitch.clarity = 0;
-  const D = sr > 30000 ? 4 : 2, half = Math.floor(buf.length / D), x = new Float32Array(half);
+  /* working arrays are kept between calls (30 calls a second: no garbage for the collector) */
+  const D = sr > 30000 ? 4 : 2, half = Math.floor(buf.length / D), x = scratchF32("x", half);
   let mean = 0; for (let i = 0; i < half; i++) { let v = 0; for (let k = 0; k < D; k++) v += buf[D * i + k]; x[i] = v / D; mean += x[i]; }
   mean /= half; let rms = 0; for (let i = 0; i < half; i++) { x[i] -= mean; rms += x[i] * x[i]; }
   rms = Math.sqrt(rms / half); detectPitch.rms = rms; if (rms < 0.0008) return -1;          // silence
   const srD = sr / D;
   const maxLag = Math.min(half >> 1, Math.ceil(srD / minF)), minLag = Math.max(2, Math.floor(srD / maxF)), W = half - maxLag;
-  const nsdf = new Float32Array(maxLag + 2);
+  const nsdf = scratchF32("n", maxLag + 2);
   for (let tau = 0; tau <= maxLag + 1; tau++) {
     let acf = 0, m = 0;
     for (let i = 0; i < W; i++) { const a = x[i], b = x[i + tau]; acf += a * b; m += a * a + b * b; }
     nsdf[tau] = m > 0 ? 2 * acf / m : 0;
   }
   /* key maxima: the highest point of each positive region after the first zero crossing */
-  const peaks = []; let tau = 1;
+  const peaks = detectPitch.peaks || (detectPitch.peaks = []); peaks.length = 0; let tau = 1;
   while (tau < maxLag && nsdf[tau] > 0) tau++;
   while (tau < maxLag) {
     while (tau < maxLag && nsdf[tau] <= 0) tau++;
@@ -2931,7 +2934,8 @@ function detectPitch(buf, sr, minF = 40, maxF = 1500) {
     if (best > 0) peaks.push(best);
   }
   if (!peaks.length) return -1;
-  const top = Math.max(...peaks.map(p => nsdf[p])), pick = peaks.find(p => nsdf[p] >= 0.9 * top);
+  let top = -Infinity; for (const p of peaks) if (nsdf[p] > top) top = nsdf[p];
+  const pick = peaks.find(p => nsdf[p] >= 0.9 * top);
   const y1 = nsdf[pick - 1], y2 = nsdf[pick], y3 = nsdf[pick + 1], den = y1 - 2 * y2 + y3;
   const shift = den ? (y1 - y3) / (2 * den) : 0;
   detectPitch.clarity = Math.min(1, y2 - 0.25 * (y1 - y3) * shift);
@@ -3019,19 +3023,24 @@ async function tunerStart() {
   tuner.stream = m.stream; tuner.ctx = m.ctx;
   tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 4096; tuner.buf = new Float32Array(tuner.an.fftSize);
   m.src.connect(tuner.an);
-  Object.assign(tuner, { on: true, hist: [], shown: null, cand: null, candN: 0, lastOn: 0, trace: [] }); syncTuner();
+  Object.assign(tuner, { on: true, hist: [], shown: null, cand: null, candN: 0, lastOn: 0, trace: [], paused: false }); tn.txt.clear(); tn.sized = false; syncTuner();
   $("#t-hz").textContent = "Zagraj długi dźwięk";
   try { wakeLock = wakeLock || await navigator.wakeLock?.request("screen"); } catch {}
   tuner.raf = requestAnimationFrame(tunerLoop);
 }
 function tunerAnalyse(t) {
   /* the phone paused the sound (a call, the screen, another app): one tap brings it back */
-  if (tuner.ctx.state !== "running") { tuner.ctx.resume?.().catch(() => {}); $("#t-hz").textContent = "Dotknij, żeby włączyć"; return; }
+  if (tuner.ctx.state !== "running") {
+    if (t - (tuner.retry || 0) > 500) { tuner.retry = t; const r = tuner.ctx.resume?.(); if (r) r.catch(() => {}); }
+    tuner.paused = true; tnText(tnEls().hz, "Dotknij, żeby włączyć"); return;
+  }
+  tuner.paused = false;
   tuner.an.getFloatTimeDomainData(tuner.buf);
   const f = detectPitch(tuner.buf, tuner.ctx.sampleRate, 27, 1400);
   if (!(f > 0) || detectPitch.clarity < (tuner.shown === null ? 0.9 : 0.85)) { tuner.trace.push({ t, c: null }); return; }
   tuner.hist.push(f); if (tuner.hist.length > 5) tuner.hist.shift();
-  const fm = [...tuner.hist].sort((a, b) => a - b)[tuner.hist.length >> 1];
+  const srt = tuner.srt || (tuner.srt = []); srt.length = 0; for (const v of tuner.hist) srt.push(v); srt.sort((a, b) => a - b);
+  const fm = srt[srt.length >> 1];
   const midi = 69 + 12 * Math.log2(fm / tuner.a4), n = Math.round(midi), c = 100 * (midi - n);
   if (n !== tuner.shown) {
     if (n === tuner.cand) tuner.candN++; else { tuner.cand = n; tuner.candN = 1; }
@@ -3040,45 +3049,68 @@ function tunerAnalyse(t) {
   } else { tuner.ema += 0.3 * (c - tuner.ema); tuner.hz = fm; }
   tuner.lastOn = t; tuner.trace.push({ t, c: tuner.ema });
 }
+/* the tuner's screen parts, looked up once; sizes and colours are re-read only when they can have changed
+   (an observer, every 2 s for the theme), never by a layout read in every frame */
+const tn = { els: null, W: 0, sized: false, cs: null, csAt: 0, txt: new Map() };
+function tnEls() {
+  if (tn.els) return tn.els;
+  tn.els = { box: $("#tuner2"), note: $("#t-note"), oct: $("#t-oct"), cents: $("#t-cents"), hz: $("#t-hz"), dot: $("#t-dot"), meter: $(".tn-meter"), cv: $("#t-trace") };
+  if (window.ResizeObserver) new ResizeObserver(() => { tn.sized = false; }).observe(tn.els.box);
+  return tn.els;
+}
+const tnText = (el, v) => { if (tn.txt.get(el) !== v) { tn.txt.set(el, v); el.textContent = v; } };
+/* the note a player of this transposition reads, with its Polish octave name (the full transposition counts:
+   tenor sax and bass clarinet +14, guitar and double bass +12, piccolo −12, glockenspiel −24) */
+function writtenName(midi, tr = tuner.tr) {
+  const w = midi + tr, oct = Math.floor(w / 12) - 1;
+  return { name: NOTE_PL[((w % 12) + 12) % 12], oct: OCTAVE_NAMES[oct] || "" };
+}
 function tunerLoop(t) {
   if (!tuner.on) return;
   tuner.raf = requestAnimationFrame(tunerLoop);
   if (t - tuner.lastAn > 30) { tuner.lastAn = t; tunerAnalyse(t); }
   while (tuner.trace.length && t - tuner.trace[0].t > 6000) tuner.trace.shift();
-  const box = $("#tuner2"), live = tuner.shown !== null && t - tuner.lastOn < 250, held = tuner.shown !== null && t - tuner.lastOn < 1500;
+  const E = tnEls(), live = tuner.shown !== null && t - tuner.lastOn < 250, held = tuner.shown !== null && t - tuner.lastOn < 1500;
   if (!held && tuner.shown !== null) { tuner.shown = null; tuner.hist = []; }
   const c = tuner.ema, st = !held ? "off" : !live ? "hold" : Math.abs(c) <= tuner.tol ? "ok" : Math.abs(c) <= 15 ? "near" : "far";
-  if (box.dataset.st !== st) box.dataset.st = st;
+  if (E.box.dataset.st !== st) E.box.dataset.st = st;
   if (tuner.shown !== null) {
-    const w = tuner.shown + tuner.tr, name = NOTE_PL[((w % 12) + 12) % 12], oct = Math.floor(w / 12) - 1;
-    $("#t-note").textContent = name; $("#t-oct").textContent = OCTAVE_NAMES[oct] ? `oktawa ${OCTAVE_NAMES[oct]}` : "";
-    const r = Math.round(c);
-    $("#t-cents").textContent = Math.abs(r) <= tuner.tol ? "✓" : r < 0 ? `−${-r} ¢` : `+${r} ¢`;
-    $("#t-cents").setAttribute("aria-label", Math.abs(r) <= tuner.tol ? "Czysto" : r < 0 ? `Za nisko o ${-r} centów` : `Za wysoko o ${r} centów`);
-    $("#t-hz").textContent = `${tuner.hz.toFixed(1)} Hz${tuner.tr ? " · dźwięk zapisany dla instrumentu" : ""}`;
-  } else { $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = tuner.on ? "Zagraj długi dźwięk" : ""; }
+    const wn = writtenName(tuner.shown);
+    tnText(E.note, wn.name); tnText(E.oct, wn.oct ? `oktawa ${wn.oct}` : "");
+    const r = Math.round(c), ok = Math.abs(r) <= tuner.tol;
+    tnText(E.cents, ok ? "✓" : r < 0 ? `−${-r} ¢` : `+${r} ¢`);
+    const al = ok ? "Czysto" : r < 0 ? `Za nisko o ${-r} centów` : `Za wysoko o ${r} centów`; if (E.cents.getAttribute("aria-label") !== al) E.cents.setAttribute("aria-label", al);
+    tnText(E.hz, `${tuner.hz.toFixed(1)} Hz${tuner.tr ? " · dźwięk zapisany dla instrumentu" : ""}`);
+  } else if (!tuner.paused) { tnText(E.note, "–"); tnText(E.oct, ""); tnText(E.cents, ""); tnText(E.hz, tuner.on ? "Zagraj długi dźwięk" : ""); }
   /* the dot glides towards its place (no jumps between readings) */
-  const W = $(".tn-meter").clientWidth, target = held ? Math.max(-50, Math.min(50, c)) / 50 * (W / 2 - 23) : 0;
-  tuner.x += (target - tuner.x) * 0.22; $("#t-dot").style.transform = `translateX(${tuner.x.toFixed(1)}px)`;
+  if (!tn.sized) { tn.sized = true; tn.W = E.meter ? E.meter.clientWidth : 0; }
+  const target = held ? Math.max(-50, Math.min(50, c)) / 50 * (tn.W / 2 - 23) : 0, nx = tuner.x + (target - tuner.x) * 0.22;
+  if (Math.abs(nx - tuner.x) > 0.05 || !held) { tuner.x = nx; E.dot.style.transform = `translateX(${tuner.x.toFixed(1)}px)`; }
   drawTrace(t);
 }
 function drawTrace(t) {
-  const cv = $("#t-trace"), dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+  const E = tnEls(), cv = E.cv, dpr = window.devicePixelRatio || 1;
+  if (!tn.cvW || !tn.sized) { tn.cvW = cv.clientWidth; tn.cvH = cv.clientHeight; }
+  const w = tn.cvW, h = tn.cvH; if (!w) return;
   if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  if (!tn.cs || t - tn.csAt > 2000 || t < tn.csAt) {
+    const cs = getComputedStyle(document.documentElement); tn.csAt = t;
+    tn.cs = { ok: cs.getPropertyValue("--tn-ok").trim(), ink3: cs.getPropertyValue("--ink-3").trim() || "#999", ink: cs.getPropertyValue("--ink").trim() || "#222" };
+  }
   const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const cs = getComputedStyle(document.documentElement), y = c => h / 2 - Math.max(-50, Math.min(50, c)) / 50 * (h / 2 - 6);
-  g.fillStyle = cs.getPropertyValue("--tn-ok").trim(); g.globalAlpha = .14; g.fillRect(0, y(tuner.tol), w, y(-tuner.tol) - y(tuner.tol)); g.globalAlpha = 1;
-  g.strokeStyle = cs.getPropertyValue("--ink-3").trim() || "#999"; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke(); g.setLineDash([]);
-  g.strokeStyle = cs.getPropertyValue("--ink").trim() || "#222"; g.lineWidth = 2.5; g.lineJoin = "round"; g.beginPath();
+  const y = c => h / 2 - Math.max(-50, Math.min(50, c)) / 50 * (h / 2 - 6);
+  g.fillStyle = tn.cs.ok; g.globalAlpha = .14; g.fillRect(0, y(tuner.tol), w, y(-tuner.tol) - y(tuner.tol)); g.globalAlpha = 1;
+  g.strokeStyle = tn.cs.ink3; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = tn.cs.ink; g.lineWidth = 2.5; g.lineJoin = "round"; g.beginPath();
   let pen = false;
-  tuner.trace.forEach(p => { const x = w - (t - p.t) / 6000 * w; if (p.c === null) { pen = false; return; } pen ? g.lineTo(x, y(p.c)) : g.moveTo(x, y(p.c)); pen = true; });
+  for (const p of tuner.trace) { const x = w - (t - p.t) / 6000 * w; if (p.c === null) { pen = false; continue; } if (pen) g.lineTo(x, y(p.c)); else g.moveTo(x, y(p.c)); pen = true; }
   g.stroke();
 }
 function tunerStop() {
   tuner.gen = (tuner.gen || 0) + 1; tuner.starting = false;
   tuner.on = false; cancelAnimationFrame(tuner.raf);
   try { tuner.ctx && tuner.ctx.close(); } catch {} releaseMic();
-  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; $("#tuner2").dataset.st = "off"; micDone();
+  tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; tuner.paused = false; tn.txt.clear(); $("#tuner2").dataset.st = "off"; micDone();
   $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = "";
   $("#t-dot").style.transform = ""; tuner.x = 0; drawTrace(performance.now()); syncTuner();
   if (!playState && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
@@ -3102,7 +3134,14 @@ function voiceFor(instrId) {
 }
 const voiceForPart = pid => voiceFor(instrOfPart(pid));
 const noteVoice = () => voiceFor(mainInstr().id);
-$$("#t-instr button").forEach(b => b.addEventListener("click", () => { tuner.tr = +b.dataset.tr; store.set("tunerTr", tuner.tr); syncTuner(); }));
+/* the tuner's instrument letter (C, B, Es, F): the player's own instrument when it is in that letter, with its octave
+   (B for a tenor sax is +14, not +2) */
+$$("#t-instr button").forEach(b => b.addEventListener("click", () => {
+  const v = +b.dataset.tr, m = mainInstr(), own = m.tr || 0;
+  setTunerTr(((own % 12) + 12) % 12 === v ? own : v);
+}));
+/* any instrument's transposition for the tuner (for a picker in the redesigned tuner): setTunerTr(instrById(id).tr) */
+function setTunerTr(tr) { tuner.tr = tr | 0; store.set("tunerTr", tuner.tr); tn.txt.clear(); syncTuner(); }
 
 /* ---------------- T24 tutorial: five steps over the real screen, skippable ---------------- */
 const TOUR = [
