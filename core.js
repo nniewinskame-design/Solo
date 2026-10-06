@@ -120,6 +120,8 @@ function clefNameOf(clefEl) {
   if (sign === "C") return line === "4" ? "tenor" : line === "3" ? "alto" : "c" + line;
   return null;
 }
+/* a numbered part (Puzon II, Trombone 2): one rule everywhere */
+const ROMAN_RE = / (I|II|III|IV|V|VI|\d+)$/;
 const PIANO_RE = /piano|fortepian|klavier|pianoforte|^pf\.?$|^pno\.?$|klaw|keyboard|organ|organy|akompan|accomp|harf|harp|cembal/i;
 /* pref: the part whose key is the piece's key (the melody); otherwise the first part that is not a piano */
 function analyseXml(xml, pref = null) {
@@ -166,8 +168,8 @@ function melodyId() {
 function guessMelody(xml, parts, instrument) {
   const solo = parts.filter(p => !(p.staves > 1 || PIANO_RE.test(p.name))); if (!solo.length) return parts[0] ? parts[0].id : null;
   if (instrument && typeof declaredInstr === "function") {
-    const want = String(instrument).replace(/ (I|II|III|IV|V|VI)$/, "").trim().toLowerCase(), sps = [...parseXml(xml).getElementsByTagName("score-part")];
-    const hit = solo.find(p => { const sp = sps.find(x => x.getAttribute("id") === p.id), d = sp && declaredInstr(sp); return (d && d.name.toLowerCase() === want) || p.name.replace(/ (I|II|III|IV|V|VI)$/, "").trim().toLowerCase() === want; });
+    const want = String(instrument).replace(ROMAN_RE, "").trim().toLowerCase(), sps = [...parseXml(xml).getElementsByTagName("score-part")];
+    const hit = solo.find(p => { const sp = sps.find(x => x.getAttribute("id") === p.id), d = sp && declaredInstr(sp); return (d && d.name.toLowerCase() === want) || p.name.replace(ROMAN_RE, "").trim().toLowerCase() === want; });
     if (hit) return hit.id;
   }
   return solo[0].id;
@@ -224,7 +226,7 @@ function processedXmlNow() {
   /* the instrument in the corner only when one part is shown (in a score each staff carries its own name) */
   const shown = S.parts.filter(p => p.keep), single = shown.length === 1;
   let corner = "";
-  if (single && pl) { const sp = kids(pl, "score-part").find(x => x.getAttribute("id") === shown[0].id), nm = sp ? txt(sp, "part-name").trim() : ""; corner = / (I|II|III|IV)$/.test(nm) ? nm : (S.piece.instrument || nm); }
+  if (single && pl) { const sp = kids(pl, "score-part").find(x => x.getAttribute("id") === shown[0].id), nm = sp ? txt(sp, "part-name").trim() : ""; corner = ROMAN_RE.test(nm) ? nm : (S.piece.instrument || nm); }
   [[150, "left", corner], [1950, "right", S.piece.composer]].forEach(([x, j, t]) => {
     credit("\u00a0", x, 2800, j); credit("\u00a0", x, 2760, j); credit(t || "\u00a0", x, 2700, j);
   });
@@ -236,7 +238,7 @@ function processedXmlNow() {
       let pn = kid(sp, "part-name");
       if (!pn) { pn = doc.createElement("part-name"); sp.insertBefore(pn, sp.firstChild); }
       /* a numbered part (Puzon I, Puzon II) keeps its own name */
-      if (!/ (I|II|III|IV)$/.test(pn.textContent.trim())) pn.textContent = S.piece.instrument;
+      if (!ROMAN_RE.test(pn.textContent.trim())) pn.textContent = S.piece.instrument;
       ["part-abbreviation", "part-name-display", "part-abbreviation-display"].forEach(t => { const e = kid(sp, t); if (e) e.remove(); });
     }
   }
@@ -618,197 +620,6 @@ function blankXml(bars = 8, o = {}) {
   return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(o.title || "Moje nuty")}</work-title></work><part-list><score-part id="P1"><part-name>${xesc(o.part || "Głos solowy")}</part-name></score-part></part-list><part id="P1">${m}</part></score-partwise>`;
 }
 function doubtfulBars(issues) { return [...new Set((issues || []).map(t => parseInt((t.match(/Takt (\d+)/) || [])[1], 10)).filter(Boolean))]; }
-
-/* ---------------- AI JSON -> MusicXML ---------------- */
-const DIV = 24;
-const BASE = { "1": 96, "2": 48, "4": 24, "8": 12, "16": 6, "32": 3, "64": 1.5 };
-const TYPE = { "1": "whole", "2": "half", "4": "quarter", "8": "eighth", "16": "16th", "32": "32nd", "64": "64th" };
-const ACC_ALTER = { "#": 1, "b": -1, "n": 0, "x": 2, "##": 2, "bb": -2 };
-const ACC_NAME = { "#": "sharp", "b": "flat", "n": "natural", "x": "double-sharp", "##": "double-sharp", "bb": "flat-flat" };
-const CLEF_XML = { treble: ["G", 2], bass: ["F", 4], tenor: ["C", 4], alto: ["C", 3] };
-const DYNS = ["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "sf", "sfz", "sffz", "fp", "fz", "rf", "rfz", "sfp", "sfpp"];
-function keyAlter(fifths, step) {
-  if (fifths > 0) return "FCGDAEB".slice(0, fifths).includes(step) ? 1 : 0;
-  if (fifths < 0) return "BEADGCF".slice(0, -fifths).includes(step) ? -1 : 0;
-  return 0;
-}
-function parseTime(t) {
-  if (!t) return null;
-  t = String(t).trim();
-  if (t === "C" || t === "c") return { beats: 4, type: 4, symbol: "common" };
-  if (t === "C|" || t === "¢") return { beats: 2, type: 2, symbol: "cut" };
-  const m = t.match(/^(\d+)\s*\/\s*(\d+)$/); if (!m) return null;
-  return { beats: +m[1], type: +m[2] };
-}
-function noteDur(n) {
-  let b = BASE[String(n.d)] ?? 24;
-  let dur = b, add = b;
-  for (let i = 0; i < (n.dots || 0); i++) { add /= 2; dur += add; }
-  if (n.tup) dur = dur * 2 / 3;
-  return dur;
-}
-function aiToMusicXml(j) {
-  const issues = [];
-  let fifths = Number.isFinite(+j.key) ? +j.key : 0;
-  let time = parseTime(j.time) || { beats: 4, type: 4 };
-  let clef = CLEF_XML[j.clef] ? j.clef : "treble";
-  const measuresIn = Array.isArray(j.measures) ? j.measures : [];
-  // expand multirests
-  const ms = [];
-  measuresIn.forEach((m, i) => {
-    const r = parseInt(m.rest, 10);
-    if (r > 0 && (!m.notes || !m.notes.length)) {
-      for (let k = 0; k < r; k++) ms.push({ ...m, notes: [{ p: "R", d: "m" }], _multi: k === 0 ? r : 0, _multiEnd: k === r - 1 });
-    } else ms.push({ ...m });
-  });
-  let out = "";
-  let num = (ms[0] && ms[0].pickup) ? 0 : 1;
-  let prevTie = null; // {step, oct, alter}
-  // volta grouping
-  ms.forEach((m, i) => { m._voltaStart = m.volta && (!ms[i - 1] || ms[i - 1].volta !== m.volta); m._voltaEnd = m.volta && (!ms[i + 1] || ms[i + 1].volta !== m.volta); });
-  ms.forEach((m, mi) => {
-    let attrs = "";
-    if (mi === 0 || m.key !== undefined || m.time || m.clef || m._multi) {
-      let a = "";
-      if (mi === 0) a += `<divisions>${DIV}</divisions>`;
-      if (m.key !== undefined && Number.isFinite(+m.key)) fifths = +m.key;
-      if (mi === 0 || m.key !== undefined) a += `<key><fifths>${fifths}</fifths></key>`;
-      const nt = parseTime(m.time); if (nt) time = nt;
-      if (mi === 0 || nt) a += `<time${time.symbol ? ` symbol="${time.symbol}"` : ""}><beats>${time.beats}</beats><beat-type>${time.type}</beat-type></time>`;
-      if (m.clef && CLEF_XML[m.clef]) clef = m.clef;
-      if (mi === 0 || (m.clef && CLEF_XML[m.clef])) a += `<clef><sign>${CLEF_XML[clef][0]}</sign><line>${CLEF_XML[clef][1]}</line></clef>`;
-      if (m._multi > 1) a += `<measure-style><multiple-rest>${m._multi}</multiple-rest></measure-style>`;
-      if (a) attrs = `<attributes>${a}</attributes>`;
-    }
-    const mLen = time.beats * (96 / time.type);
-    let body = "";
-    // left barline
-    let left = "";
-    if (m.barline === "repeat-start" || m.barline === "repeat-both") left += `<bar-style>heavy-light</bar-style><repeat direction="forward"/>`;
-    if (m._voltaStart) left += `<ending number="${xesc(m.volta)}" type="start"/>`;
-    if (left) body += `<barline location="left">${left}</barline>`;
-    if (mi === 0 && (j.tempo || j.bpm)) {
-      const bpm = parseInt(j.bpm, 10);
-      body += `<direction placement="above"><direction-type><words font-weight="bold">${xesc(j.tempo || "")}</words></direction-type>${bpm > 0 ? `<sound tempo="${bpm}"/>` : ""}</direction>`;
-    }
-    const notes = Array.isArray(m.notes) ? m.notes : [];
-    // positions for beaming
-    const beatLen = (time.type === 8 && time.beats % 3 === 0) ? 36 : (time.type === 2 ? 24 : (time.type === 8 ? 12 : 96 / time.type * (time.type === 4 ? 1 : 1)));
-    let pos = 0, total = 0;
-    const meta = notes.map(n => { const isGrace = !!n.grace; const isRest = String(n.p || "").toUpperCase().startsWith("R"); const dur = n.d === "m" ? mLen : (isGrace ? 0 : noteDur(n)); const o = { n, isGrace, isRest, dur, pos }; pos += dur; return o; });
-    total = pos;
-    const offset = (m.pickup && mi === 0) ? Math.max(0, mLen - total) : 0;
-    // beams
-    let grp = [];
-    const flush = () => { if (grp.length > 1) { grp.forEach((o, i) => (o.beam = i === 0 ? "begin" : i === grp.length - 1 ? "end" : "continue")); } grp = []; };
-    meta.forEach(o => {
-      const bv = String(o.n.d);
-      const beamable = !o.isRest && !o.isGrace && ["8", "16", "32", "64"].includes(bv);
-      if (!beamable) { if (!o.isGrace) flush(); return; }
-      const beat = Math.floor((o.pos + offset) / beatLen + 1e-6);
-      if (grp.length && grp._beat !== beat) flush();
-      grp._beat = beat; grp.push(o);
-    });
-    flush();
-    // tuplet bracketing
-    let tupAcc = 0, tupMin = 0, inTup = false;
-    const accState = {};
-    meta.forEach((o, ni) => {
-      const n = o.n;
-      // directions
-      if (n.dyn) {
-        const dl = String(n.dyn).toLowerCase().trim();
-        if (DYNS.includes(dl)) body += `<direction placement="below"><direction-type><dynamics><${dl}/></dynamics></direction-type></direction>`;
-        else body += `<direction placement="below"><direction-type><words font-style="italic">${xesc(n.dyn)}</words></direction-type></direction>`;
-      }
-      if (n.wedge) {
-        const w = String(n.wedge).toLowerCase();
-        const t = w.startsWith("cr") ? "crescendo" : w.startsWith("d") ? "diminuendo" : "stop";
-        body += `<direction placement="below"><direction-type><wedge type="${t}"/></direction-type></direction>`;
-      }
-      if (n.txt) body += `<direction placement="above"><direction-type><words font-style="italic">${xesc(n.txt)}</words></direction-type></direction>`;
-      let x = "<note>";
-      if (o.isGrace) x += `<grace slash="yes"/>`;
-      let tieStop = false, step = "C", oct = 4, alter = 0, accName = "";
-      if (o.isRest) {
-        x += n.d === "m" ? `<rest measure="yes"/>` : `<rest/>`;
-      } else {
-        const mm = String(n.p || "").trim().match(/^([A-Ga-g])\s*([#bnx]{0,2})?\s*(-?\d)$/);
-        if (!mm) { issues.push(`Takt ${num}: nieczytelna nuta „${n.p}”`); x += `<rest/>`; o.isRest = true; }
-        else {
-          step = mm[1].toUpperCase(); oct = +mm[3];
-          let a = n.a !== undefined && n.a !== null && n.a !== "" ? String(n.a) : (mm[2] || "");
-          if (a === "♯") a = "#"; if (a === "♭") a = "b"; if (a === "♮") a = "n";
-          const k = step + oct;
-          if (prevTie && prevTie.step === step && prevTie.oct === oct) { alter = prevTie.alter; tieStop = true; if (a in ACC_ALTER) { alter = ACC_ALTER[a]; accName = ACC_NAME[a]; } }
-          else if (a in ACC_ALTER) { alter = ACC_ALTER[a]; accName = ACC_NAME[a]; }
-          else if (k in accState) alter = accState[k];
-          else alter = keyAlter(fifths, step);
-          if (a in ACC_ALTER) accState[k] = alter;
-          x += `<pitch><step>${step}</step>${alter ? `<alter>${alter}</alter>` : ""}<octave>${oct}</octave></pitch>`;
-        }
-      }
-      if (!o.isGrace) x += `<duration>${Math.round(o.dur * 1000) / 1000}</duration>`;
-      if (tieStop) x += `<tie type="stop"/>`;
-      if (n.tie && !o.isRest) x += `<tie type="start"/>`;
-      x += `<voice>1</voice>`;
-      if (n.d !== "m") x += `<type>${TYPE[String(n.d)] || "quarter"}</type>`;
-      for (let i = 0; i < (n.dots || 0); i++) x += `<dot/>`;
-      if (accName && !o.isRest) x += `<accidental>${accName}</accidental>`;
-      let tupNot = "";
-      if (n.tup && !o.isGrace) {
-        x += `<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>`;
-        const b = BASE[String(n.d)] ?? 24;
-        if (!inTup) { inTup = true; tupAcc = 0; tupMin = b; tupNot = `<tuplet type="start" bracket="${o.beam ? "no" : "yes"}"/>`; }
-        tupMin = Math.min(tupMin, b); tupAcc += o.dur;
-        const unit = 2 * tupMin;
-        const nextTup = meta[ni + 1] && meta[ni + 1].n.tup;
-        if (Math.abs(tupAcc / unit - Math.round(tupAcc / unit)) < 1e-6 && tupAcc > 0 || !nextTup) { tupNot += `<tuplet type="stop"/>`; inTup = false; }
-      } else if (inTup && !o.isGrace) { inTup = false; }
-      if (o.beam) x += `<beam number="1">${o.beam}</beam>`;
-      let nots = "";
-      if (tieStop) nots += `<tied type="stop"/>`;
-      if (n.tie && !o.isRest) nots += `<tied type="start"/>`;
-      const sl = String(n.slur || "");
-      if (sl.includes("stop") || sl === "end") nots += `<slur type="stop" number="1"/>`;
-      if (sl.includes("start")) nots += `<slur type="start" number="1"/>`;
-      nots += tupNot;
-      const art = Array.isArray(n.art) ? n.art.map(a => String(a).toLowerCase()) : [];
-      const artMap = { staccato: "staccato", accent: "accent", tenuto: "tenuto", marcato: "strong-accent", staccatissimo: "staccatissimo" };
-      const arts = art.filter(a => artMap[a]).map(a => `<${artMap[a]}${a === "marcato" ? ' type="up"' : ""}/>`).join("");
-      if (arts) nots += `<articulations>${arts}</articulations>`;
-      if (art.includes("fermata") || n.fermata) nots += `<fermata type="upright"/>`;
-      if (art.includes("trill")) nots += `<ornaments><trill-mark/></ornaments>`;
-      if (nots) x += `<notations>${nots}</notations>`;
-      x += "</note>";
-      body += x;
-      if (!o.isGrace) prevTie = (n.tie && !o.isRest) ? { step, oct, alter } : null;
-    });
-    // right barline
-    let right = "", style = "";
-    if (m.barline === "repeat-end" || m.barline === "repeat-both") style = "light-heavy";
-    else if (m.barline === "final" || (mi === ms.length - 1 && !m.barline)) style = "light-heavy";
-    else if (m.barline === "double") style = "light-light";
-    if (style) right += `<bar-style>${style}</bar-style>`;
-    if (m._voltaEnd) right += `<ending number="${xesc(m.volta)}" type="${(m.barline === "repeat-end" || m.barline === "repeat-both") ? "stop" : (String(m.volta) === "1" ? "stop" : "discontinue")}"/>`;
-    if (m.barline === "repeat-end" || m.barline === "repeat-both") right += `<repeat direction="backward"/>`;
-    if (right) body += `<barline location="right">${right}</barline>`;
-    // duration check
-    if (!(m.pickup && mi === 0) && !m._multi && !(m.rest > 0)) {
-      if (Math.abs(total - mLen) > 0.01 && notes.length) {
-        const isLast = mi === ms.length - 1;
-        if (!(isLast && total < mLen)) issues.push(`Takt ${num}: ${total > mLen ? "za dużo" : "za mało"} wartości rytmicznych`);
-      }
-    }
-    out += `<measure number="${num}"${(m.pickup && mi === 0) ? ' implicit="yes"' : ""}>${attrs}${body}</measure>`;
-    num++;
-  });
-  if (!ms.length) throw new Error("Nie znalazłem żadnych taktów na obrazku.");
-  const partName = j.instrument || "Głos solowy";
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(j.title || "")}</work-title></work><identification>${j.composer ? `<creator type="composer">${xesc(j.composer)}</creator>` : ""}</identification><part-list><score-part id="P1"><part-name>${xesc(partName)}</part-name></score-part></part-list><part id="P1">${out}</part></score-partwise>`;
-  (Array.isArray(j.unsure) ? j.unsure : []).forEach(u => issues.push(`Takt ${u}: odczyt niepewny`));
-  return { xml, issues };
-}
 
 /* ---------------- Example piece (public domain melody) ---------------- */
 /* "Wlazł kotek na płotek" (by meow, says the running joke): a folk tune with piano, so the piano can be hidden */

@@ -245,7 +245,7 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet, share: buildShareSheet, instr: () => buildInstrSheet(), col: buildColSheet, addto: buildAddtoSheet, card: syncFavTile, pick: () => buildPickSheet() })[name]?.();
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, tuner: buildTunerSheet, bar: buildBarSheet, practice: buildPracticeSheet, new: buildNewSheet, addpart: buildAddPartSheet, part: buildPartSheet, share: buildShareSheet, instr: () => buildInstrSheet(), col: buildColSheet, addto: buildAddtoSheet, card: syncFavTile, pick: () => buildPickSheet() })[name]?.();
   openSheetId = name; document.body.classList.toggle("sheet-add", name === "add");
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
@@ -2077,38 +2077,6 @@ $$("#pageseg button").forEach(b => b.addEventListener("click", () => { S.page = 
 $$("#underseg button").forEach(b => b.addEventListener("click", () => { S.under = b.dataset.u; syncArrange(); changed(); }));
 $("#swing").addEventListener("change", e => { S.swing = e.target.checked; S.dirty = true; autosave(); if (playState) play(playPos()); });
 function syncArrange() { $$("#underseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.u === (S.under || "")))); $("#swing").checked = !!S.swing; }
-/* T25 sheet */
-const voice = { i: 3, l: 1 };
-const VOICE_DESC = { 1: "Łatwy: drugi głos idzie równolegle, zawsze ten sam odstęp. Dobry dla dzieci.", 2: "Średni: gdy melodia skacze, drugi głos często zostaje na miejscu. Mniej ruchu, łatwiej grać.", 3: "Zaawansowany: drugi głos wybiera tercję albo sekstę tak, żeby poruszać się jak najmniej. Płynna, samodzielna linia." };
-function buildVoiceSheet() {
-  $$("#v-int button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.i === voice.i)));
-  $$("#v-lev button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.l === voice.l)));
-  $("#v-int").hidden = voice.l === 3; $("#v-desc").textContent = VOICE_DESC[voice.l];
-}
-$$("#v-int button").forEach(b => b.addEventListener("click", () => { voice.i = +b.dataset.i; buildVoiceSheet(); }));
-$$("#v-lev button").forEach(b => b.addEventListener("click", () => { voice.l = +b.dataset.l; buildVoiceSheet(); }));
-$("#v-go").addEventListener("click", () => {
-  const first = S.parts.find(p => p.keep); if (!first) return;
-  const xml = secondVoiceXml(S.piece.xml, first.id, { interval: voice.i, level: voice.l });
-  const settings = recordFromState().settings; S.piece.xml = xml; S.piece.origXml = S.piece.origXml || null;
-  loadState(S.piece, { ...settings, keep: [...settings.keep, ...analyseXml(xml).parts.map(p => p.id).filter(id => !settings.keep.includes(id)).slice(-1)] });
-  closeSheetThen(() => { changed(); hud("Dodano drugi głos. Odtwarzanie gra oba.", 3000); });
-});
-/* T27 sheet */
-function buildPartForSheet() {
-  const L = $("#partfor-list"); L.innerHTML = "";
-  [0, 1, 2, 3].forEach(idx => {
-    const p = PRESETS[idx], b = document.createElement("button"); b.className = "li tap";
-    b.innerHTML = `<span class="grow"><b>${esc(p.t)}</b><small>${esc(p.s)}</small></span><svg class="i chev"><use href="#right"/></svg>`;
-    b.addEventListener("click", async () => {
-      const name = p.t.split(",")[0];
-      const xml = partForInstrument(processedXml(), p.iv, S.srcKey.fifths);
-      const piece = { xml, sourceType: "file", title: `${S.piece.title || "Nuty"} (${name})`, composer: S.piece.composer || "", instrument: name };
-      closeSheetThen(() => { openPiece(piece); S.dirty = true; savePiece(); hud(`Gotowe: partia dla ${name.toLowerCase()}`, 3000); });
-    });
-    L.appendChild(b);
-  });
-}
 function buildMoreSheet() {
   syncLayout(); syncArrange();
   $("#btn-restore").hidden = !(S.piece && S.piece.origXml);
@@ -3194,22 +3162,13 @@ function orchestrateXml(xml, newId = null) {
     const dec = declaredInstr(sp); if (dec) return dec;
     /* a name is trusted when the part's own <transpose> agrees with it (no <transpose> = not transposed: a "Trumpet"
        in a concert-pitch score is not a B♭ part), or when it is one of Solo's own Polish names */
-    const nm = txt(sp, "part-name"), hit = instrFromName(nm), own = INSTRUMENTS.some(i => i.name.toLowerCase() === nm.replace(/ (I|II|III|IV|V|VI|\d)$/, "").trim().toLowerCase());
+    const nm = txt(sp, "part-name"), hit = instrFromName(nm), own = INSTRUMENTS.some(i => i.name.toLowerCase() === nm.replace(ROMAN_RE, "").trim().toLowerCase());
     if (hit && (own || (p ? trOfTranspose(p) ?? 0 : 0) === (hit.tr || 0))) return hit;
     if (sp.getAttribute("id") === mel && S.piece.instrument) return instrFromName(S.piece.instrument);
     return null;
   }, newId);
 }
-/* parts are numbered when an instrument appears twice: Puzon → Puzon I, the new one Puzon II */
-function numberParts(xml, base) {
-  const doc = parseXml(xml), sps = [...doc.getElementsByTagName("score-part")];
-  const same = sps.filter(sp => { const n = txt(sp, "part-name").trim(); return n === base || new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} (I|II|III|IV|V)$`).test(n); });
-  if (same.length > 1) same.forEach((sp, i) => { kid(sp, "part-name").textContent = `${base} ${["I", "II", "III", "IV", "V"][i] || i + 1}`; });
-  if (same.length > 1 && S.piece.instrument === base) {
-    const first = same[0].getAttribute("id"); kids(doc.documentElement, "part"); // the melody keeps "I"
-  }
-  return new XMLSerializer().serializeToString(doc);
-}
+
 function buildAddPartSheet() {
   instrPicker($("#ap-instr"), { onPick: id => { rememberInstr(id); apStep2(id); } });
   $("#ap-step1").hidden = false; $("#ap-step2").hidden = true; $("#ap-back").hidden = true; $("#sh-addpart-t").textContent = ap.replace ? "Zmień partię" : "Dodaj partię";
@@ -3243,7 +3202,7 @@ $$("#ap-show button").forEach(b => b.addEventListener("click", () => { ap.show =
 /* the melody part (core.js melodyId: kept with the piece, not "whichever part is first") */
 const melodyPart = () => melodyId();
 const isMelodic = pid => { const p = S.parts.find(x => x.id === pid); return !!p && !(p.staves > 1 || PIANO_RE.test(p.name)); };
-function partLabel(p) { if (declaredOf(p.id)) return partName(p.id) || p.name; const own = partName(p.id) || p.name; return p.id === melodyId() && isMelodic(p.id) && S.piece.instrument && !/ (I|II|III|IV|V|VI)$/.test(own) ? S.piece.instrument : own; }
+function partLabel(p) { if (declaredOf(p.id)) return partName(p.id) || p.name; const own = partName(p.id) || p.name; return p.id === melodyId() && isMelodic(p.id) && S.piece.instrument && !ROMAN_RE.test(own) ? S.piece.instrument : own; }
 /* how far a part is written above how it sounds: the instrument it declares, else its own <transpose> (an imported
    "Trumpet in B♭"), else the instrument its exact name or the piece names (a scan read for "Trąbka B"). Verovio's
    MIDI values are the written notes (it does not apply <transpose> there), so playback subtracts this once. */
@@ -3253,7 +3212,7 @@ function partTr(pid) {
     const t = partTr.xml === S.piece.xml ? partTr.map : (partTr.xml = S.piece.xml, partTr.map = Object.fromEntries(kids(parseXml(S.piece.xml).documentElement, "part").map(p => [p.getAttribute("id"), trOfTranspose(p)])));
     if (t[pid] != null) return t[pid];
     const p = S.parts.find(x => x.id === pid); if (!p || p.staves > 1 || PIANO_RE.test(p.name)) return 0;
-    const exact = n => INSTRUMENTS.find(i => i.name.toLowerCase() === (n || "").replace(/ (I|II|III|IV|V|VI)$/, "").trim().toLowerCase());
+    const exact = n => INSTRUMENTS.find(i => i.name.toLowerCase() === (n || "").replace(ROMAN_RE, "").trim().toLowerCase());
     const i = exact(partLabel(p)) || (pid === melodyPart() ? exact(S.piece.instrument) : null); return i ? i.tr || 0 : 0;
   } catch { return 0; }
 }

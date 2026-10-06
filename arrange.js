@@ -161,14 +161,6 @@ function withChords(doc, partId, kind, shiftFifths) {
   return doc;
 }
 
-/* T27: a part for another instrument: the music moved by the inverse of the preset that reads it, in the
-   treble clef (trumpet, clarinet, saxophone, horn, violin, flute all read treble clef) */
-function partForInstrument(xml, iv, srcFifths = 0) {
-  const inv = fixEnharmonic({ d: -iv.d, s: -iv.s }, srcFifths);         // the key with the fewest signs
-  const doc = parseXml(transposeXmlString(xml, inv));                    // pitches and key signature move together
-  Array.from(doc.getElementsByTagName("clef")).forEach(c => { c.innerHTML = "<sign>G</sign><line>2</line>"; });
-  return new XMLSerializer().serializeToString(addAccidentals(doc));
-}
 
 /* ---------------- 3.8 parts: "+" adds a part for an instrument, written automatically ----------------
    role: "melody" (the same tune), "voice2" (harmony under it: thirds, sixths or fifths, chosen to move smoothly),
@@ -277,7 +269,7 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
   const srcClef = src.getElementsByTagName("clef")[0];
   /* the clef: the instrument's own, or (trombone, cello, bassoon: tenor clef; viola: treble) another one if it
      saves many ledger lines (Gould: change clef rather than read 4+ ledger lines) */
-  const CLEF_OF = { bass: "bass", treble: "treble", alto: "alto", tenor: "tenor" }, ALT = { puzon: ["tenor"], "puzon-alt": ["tenor", "treble"], wiolonczela: ["tenor"], fagot: ["tenor"], altowka: ["treble"], eufonium: ["tenor"] };
+  const CLEF_OF = { bass: "bass", treble: "treble", alto: "alto", tenor: "tenor" };
   let clefName = keepClef && srcClef && clefsOf(instr).includes(clefNameOf(srcClef)) ? null : instr.clef;
   if (clefName && !twoStaves) {
     const idx = [...wp.getElementsByTagName("pitch")].map(x => parseInt(txt(x, "octave"), 10) * 7 + STEP_I[txt(x, "step")]);
@@ -701,7 +693,7 @@ function orchestrate(xml, instrOf, newId = null) {
     const p = partEl(sp.getAttribute("id")), two = p && twoStaff(p);
     const ins = instrOf(sp, p); if (ins && !two) setDeclared(doc, sp, ins);
     const ps = p ? partPitches(p).map(m => m - (ins ? ins.tr || 0 : 0)) : [];
-    const num = ROMAN.indexOf((txt(sp, "part-name").match(/ (I|II|III|IV|V|VI)$/) || [])[1]);
+    const num = ROMAN.indexOf((txt(sp, "part-name").match(ROMAN_RE) || [])[1]);
     return { sp, p, ins, two, k, med: ps.length ? median(ps) : 0, num: num < 0 ? 98 : num, isNew: sp.getAttribute("id") === newId };
   });
   /* sections: two or more parts of one family get numbers, highest first, the bass trombone last */
@@ -709,7 +701,7 @@ function orchestrate(xml, instrOf, newId = null) {
   Object.entries(fam).forEach(([f, list]) => {
     list.sort((a, b) => (SECTION_RANK[a.ins.id] ?? 1) - (SECTION_RANK[b.ins.id] ?? 1) || a.isNew - b.isNew || a.num - b.num || a.k - b.k);
     /* Solo's own names (and new parts) are numbered; a part named by its file ("Trombone 1") keeps its name */
-    const ours = x => x.isNew || !txt(x.sp, "part-name") || INSTRUMENTS.some(i => i.name === txt(x.sp, "part-name").replace(/ (I|II|III|IV|V|VI|\d+)$/, "").trim()) || /^(Głos|Melodia)/.test(txt(x.sp, "part-name"));
+    const ours = x => x.isNew || !txt(x.sp, "part-name") || INSTRUMENTS.some(i => i.name === txt(x.sp, "part-name").replace(ROMAN_RE, "").trim()) || /^(Głos|Melodia)/.test(txt(x.sp, "part-name"));
     list.forEach((x, i) => { x.sec = i; if (ours(x)) kid(x.sp, "part-name").textContent = list.length > 1 ? `${f} ${ROMAN[i] || i + 1}` : x.ins.name; });
   });
   /* score order */
