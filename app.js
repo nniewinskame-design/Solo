@@ -3655,8 +3655,7 @@ function buildToolsSheet() {
   syncMetro();
 }
 function syncMetro() {
-  $("#m-bpm").textContent = metro.bpm;
-  const nm = $("#m-name"); if (nm) nm.textContent = tempoName(metro.bpm);
+  syncTempoUi();
   meterControls($("#m-meter"), metro.beats, metro.unit || 4, n => setMetroMeter(`${n}/${metro.unit || 4}`, true), u => setMetroMeter(`${metro.beats}/${u}`, true));
   const acc = metroAcc();
   $("#m-beats").innerHTML = acc.map((a, i) => `<button type="button" class="${i === 0 ? "one" : ""}" data-i="${i}" data-acc="${a ? 1 : 0}" aria-pressed="${a}" aria-label="Akcent na ${i + 1}"></button>`).join("");
@@ -3737,8 +3736,18 @@ $("#m-bpm").addEventListener("click", () => {
   inp.addEventListener("blur", () => { if (inp.isConnected) done(true); });
 });
 const setMetroBpm = v => { metro.bpm = Math.max(30, Math.min(240, Math.round(v))); store.set("metroBpm", metro.bpm); syncMetro(); };
-$("#m-down").addEventListener("click", () => setMetroBpm(metro.bpm - (metro.bpm > 120 ? 4 : 2)));
-$("#m-up").addEventListener("click", () => setMetroBpm(metro.bpm + (metro.bpm >= 120 ? 4 : 2)));
+/* the slider: the number follows the finger at once, the tempo is kept when the finger lifts */
+$("#m-range").addEventListener("input", e => { metro.bpm = +e.target.value; syncTempoUi(); });
+$("#m-range").addEventListener("change", e => setMetroBpm(+e.target.value));
+$("#m-names").addEventListener("click", e => { const b = e.target.closest("[data-bpm]"); if (b) setMetroBpm(+b.dataset.bpm); });
+/* the tempo name chip that covers the current tempo is marked */
+const TEMPO_CHIPS = [["Largo", 0, 66], ["Adagio", 66, 76], ["Andante", 76, 108], ["Moderato", 108, 120], ["Allegro", 120, 156], ["Presto", 156, 999]];
+function syncTempoUi() {
+  $("#m-bpm").textContent = metro.bpm; const nm = $("#m-name"); if (nm) nm.textContent = tempoName(metro.bpm);
+  const r = $("#m-range"); if (r) { if (+r.value !== metro.bpm) r.value = metro.bpm; r.style.setProperty("--p", ((metro.bpm - 30) / 210 * 100).toFixed(1) + "%"); }
+  const on = TEMPO_CHIPS.find(([, a, b]) => metro.bpm >= a && metro.bpm < b);
+  $$("#m-names [data-bpm]").forEach(b => b.setAttribute("aria-pressed", String(!!on && b.textContent === on[0])));
+}
 /* tap tempo: the average of the last 4 taps; a pause of 2 s starts again */
 function tapTempo(now = performance.now()) {
   const t = metro.taps; if (t.length && now - t[t.length - 1] > 2000) t.length = 0;

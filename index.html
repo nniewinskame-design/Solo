@@ -486,11 +486,13 @@
   <!-- one dominant element: the tempo; the beats light up above it, the controls sit under the thumb -->
   <div class="metro first">
     <div class="beats" id="m-beats" role="group" aria-label="Akcenty"></div>
-    <div class="metro-bpm"><small aria-hidden="true">♩ =</small><b id="m-bpm" aria-live="polite">100</b><span id="m-name" class="m-name"></span></div>
-    <div class="metro-row">
-      <button class="pill round big" id="m-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button>
-      <button class="m-tap" id="m-tap" aria-label="Stuknij tempo">Stuknij</button>
-      <button class="pill round big" id="m-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button>
+    <div class="metro-bpm"><b id="m-bpm" aria-live="polite">100</b><span class="m-sub"><svg class="q"><use href="#quarter"/></svg> na minutę · <span id="m-name" class="m-name"></span></span></div>
+    <!-- tempo: a slider 30-240 and the tempo names under it (one tap sets a typical tempo); tap the number to type one -->
+    <div class="m-slider"><input type="range" id="m-range" min="30" max="240" step="1" aria-label="Tempo"><div class="m-ends"><span>30</span><span>240</span></div></div>
+    <div class="chips m-names" id="m-names">
+      <button type="button" data-bpm="50">Largo</button><button type="button" data-bpm="70">Adagio</button><button type="button" data-bpm="92">Andante</button>
+      <button type="button" data-bpm="112">Moderato</button><button type="button" data-bpm="132">Allegro</button><button type="button" data-bpm="176">Presto</button>
+      <button type="button" class="m-tap" id="m-tap" aria-label="Stuknij tempo kilka razy">Stuknij</button>
     </div>
     <div class="meter" id="m-meter"></div>
     <button class="btn primary wide big" id="m-go"><svg class="i"><use href="#play"/></svg><span>Start</span></button>
