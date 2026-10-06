@@ -39,6 +39,7 @@
   <symbol id="clef-c" viewBox="-30 -550 670 1100"><path transform="scale(1,-1)" d="M175 502h43v-456c10 5 18 12 37 29c16 19 22 27 27 38s8 24 14 49c3 22 5 43 5 62c7 -34 31 -54 73 -60c73 18 99 61 100 165c0 46 -10 78 -31 100c-18 23 -41 35 -69 35c-40 0 -65 -32 -66 -84c6 12 11 16 39 24c5 0 2 1 16 -4l17 -10l10 -14l7 -18 c-4 -32 -23 -48 -56 -48c-51 0 -77 33 -77 98c10 35 16 47 30 61c9 9 15 14 23 17c3 3 22 9 27 11l34 3l35 2c123 0 192 -64 192 -178l1 -33c0 -52 -20 -97 -60 -134c-18 -15 -42 -28 -74 -39c-30 -9 -63 -13 -101 -13l-93 -88v-34l93 -88c38 0 71 -4 101 -13 c32 -11 56 -24 74 -39c40 -37 60 -82 60 -134l-3 -33c0 -115 -68 -178 -190 -178l-35 2l-34 3c-5 2 -24 8 -27 11c-26 11 -40 32 -53 78c0 65 26 98 77 98c33 0 52 -16 56 -48l-7 -18l-10 -14l-17 -10c-14 -5 -11 -4 -16 -4c-28 8 -33 12 -39 24c1 -52 26 -84 66 -84 c28 0 51 12 69 35c21 22 31 54 31 100c-1 104 -27 147 -100 165c-42 -6 -66 -26 -73 -60c0 19 -2 40 -5 62c-6 25 -9 38 -14 49s-11 19 -27 38c-19 17 -27 24 -37 29v-456h-43v1004zM0 502h118v-1004h-118v1004z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="barline" viewBox="0 0 24 24"><path d="M12 3v18M4 7h5M4 12h5M4 17h5M15 7h5M15 12h5M15 17h5"/></symbol>
+  <symbol id="rest-dash" viewBox="0 0 24 24"><path d="M3 9.5h18" stroke-width="1.6"/><rect x="7" y="9.5" width="10" height="4.5" rx=".6" fill="currentColor" stroke="none"/></symbol>
   <symbol id="bl-single" viewBox="0 0 24 24"><path d="M12 4v16"/></symbol>
   <symbol id="bl-double" viewBox="0 0 24 24"><path d="M9 4v16M15 4v16"/></symbol>
   <symbol id="bl-final" viewBox="0 0 24 24"><path d="M8 4v16"/><path d="M15 4v16" stroke-width="4.5"/></symbol>
@@ -229,7 +230,7 @@
       <button data-len="eighth" aria-label="Ósemka"><svg class="i"><use href="#n-eighth"/></svg></button>
       <button data-len="16th" aria-label="Szesnastka"><svg class="i"><use href="#n-16th"/></svg></button>
       <button data-ed="dot" id="ed-dot" aria-label="Z kropką" aria-pressed="false"><svg class="i"><use href="#n-dot"/></svg></button>
-      <button type="button" id="ed-restmode" aria-label="Pauza zamiast nuty" aria-pressed="false"><svg class="i"><use href="#rest"/></svg></button>
+      <button type="button" id="ed-restmode" aria-label="Pauza „–” zamiast nuty" aria-pressed="false"><svg class="i"><use href="#rest-dash"/></svg></button>
       <button type="button" id="ed-barin" aria-label="Kreska taktowa przed zaznaczoną nutą"><svg class="i"><use href="#barline"/></svg></button>
     </div>
     <div class="ed-pane" data-pane="note" hidden>

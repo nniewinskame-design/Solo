@@ -206,6 +206,24 @@ function processedXmlNow() {
     kids(pl, "score-part").forEach(sp => { if (!keep.has(sp.getAttribute("id"))) sp.remove(); });
     if (removed) kids(pl, "part-group").forEach(g => g.remove());
   }
+  /* a rest that fills a whole bar (written as a rest of any length, e.g. inserted with "–") is drawn as a whole-bar
+     rest, in the middle of the bar */
+  kids(root, "part").forEach(part => {
+    let div = 1, beats = 4, bt = 4;
+    kids(part, "measure").forEach(m => {
+      kids(m, "attributes").forEach(a => {
+        const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+        const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      });
+      const cap = div * 4 * beats / bt, ns = kids(m, "note").filter(n => !kid(n, "grace") && !kid(n, "cue"));
+      const staves = new Map(); ns.forEach(n => { const k = txt(n, "staff") || "1"; if (!staves.has(k)) staves.set(k, []); staves.get(k).push(n); });
+      staves.forEach(list => {
+        if (!list.every(n => kid(n, "rest"))) return;
+        const voices = new Map(); list.forEach(n => { const v = txt(n, "voice") || "1"; voices.set(v, [...(voices.get(v) || []), n]); });
+        voices.forEach(vs => { if (vs.length === 1 && Math.abs((parseFloat(txt(vs[0], "duration")) || 0) - cap) < 1e-6) kid(vs[0], "rest").setAttribute("measure", "yes"); });
+      });
+    });
+  });
   // title/composer from the editable fields
   let work = kid(root, "work");
   if (!work) { work = doc.createElement("work"); root.insertBefore(work, root.firstChild); }
@@ -590,9 +608,8 @@ function checkReading(xml, ans = {}) {
       /* the bars that carried a metre keep showing it (an exercise book prints 4/4 on every line; Tata: "identical") */
       const shown = new Set(times.map(t => measures.indexOf(t.closest("measure"))).filter(i => i > 0));
       times.forEach(t => t.remove());
-      shown.forEach(i => {      /* a metre printed again at a line start ends an exercise: the line before ends with a final bar line */
-        const prev = measures[i - 1]; if (prev && !kids(prev, "barline").some(b => (b.getAttribute("location") || "right") === "right")) { const bl = doc.createElement("barline"); bl.setAttribute("location", "right"); bl.innerHTML = "<bar-style>light-heavy</bar-style>"; prev.appendChild(bl); }
-      });
+      /* no final bar line is guessed before a restated metre (Nat: a double bar line at a line end "for no reason");
+         the kind of any bar line is set by tapping it while editing */
       shown.forEach(i => { const m = measures[i]; let a2 = kids(m, "attributes")[0]; if (!a2) { a2 = doc.createElement("attributes"); const pr = kid(m, "print"); pr ? pr.after(a2) : m.insertBefore(a2, m.firstChild); } const t2 = doc.createElement("time"); t2.innerHTML = `<beats>${want[0]}</beats><beat-type>${want[1]}</beat-type>`; a2.insertBefore(t2, kid(a2, "clef") || null); });
       let a = kids(measures[0], "attributes").find(x => kid(x, "key") || kid(x, "clef")) || kids(measures[0], "attributes")[0];
       if (!a) { a = doc.createElement("attributes"); measures[0].insertBefore(a, measures[0].firstChild); }

@@ -781,39 +781,96 @@ function scanZoom() {
 const EVEN_BARS = { spacingLinear: 0.1, spacingNonLinear: 1, minLastJustification: 0,
   /* clear room on both sides of every bar line, and after the clef, key and metre before the first note (the
      engine's default lets a note or its ♮ touch the bar line) */
-  leftMarginRightBarLine: 1.5, rightMarginRightBarLine: 2, rightMarginClef: 1.4, rightMarginKeySig: 1.6, rightMarginMeterSig: 2.4 };
+  leftMarginRightBarLine: 2, rightMarginRightBarLine: 2, rightMarginClef: 1.8, rightMarginKeySig: 2, rightMarginMeterSig: 2 };   // the engine allows at most 2
 function a4Options(extra, zoom = S.zoom) {
   const z = zoom, r = v => Math.round(v / z);
   return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: castsOff() ? "line" : S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
     pageMarginTop: r(110), pageMarginBottom: r(110), pageMarginLeft: r(150), pageMarginRight: r(150), spacingSystem: 6, svgViewBox: true,
     transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true, ...EVEN_BARS, ...extra };
 }
-/* no warning metre at the end of a line (the engine adds one when the next line starts with a metre; the paper has
-   none). Its room is shared out among the line's bars, so the last bar line stands at the very end of the line.
-   Works on the drawing's own numbers, so also on pages not shown on screen (PDF, print). */
+/* Every line laid out like a hand-made sheet: no warning metre at its end (the engine adds one when the next line
+   starts with a metre; the paper has none), the bars of a line equally long (the clef, key and metre at the start
+   stay as drawn) and the last bar line at the very end of the line. Each bar's notes are moved as whole groups (a
+   beamed group stays one piece); bar lines, staff lines, ties and slurs follow. Works on the drawing's own numbers,
+   so also on pages not shown on screen (PDF, print). */
 function endLines(root) {
-  const nums = el => (el.getAttribute("d") || "").match(/-?\d+(\.\d+)?/g)?.map(Number) || [];
-  const move = (el, dx) => { if (!dx) return; const t = el.getAttribute("transform"); el.setAttribute("transform", `translate(${dx.toFixed(1)},0)` + (t ? " " + t : "")); };
+  const NUM = /-?\d+(?:\.\d+)?/g;
+  const pathX = d => { if (/[HhVvAaQqSsTt]|[a-z]/.test(d.replace(/e-?\d/g, ""))) return null; return (d.match(NUM) || []).map(Number).filter((_, i) => i % 2 === 0); };
+  const xsOf = el => {
+    const out = [];
+    [el, ...el.querySelectorAll("*")].forEach(e => {
+      const x = e.getAttribute("x"); if (x != null && x !== "" && !isNaN(+x)) out.push(+x);
+      const t = e !== el && /^translate\(\s*(-?[\d.]+)/.exec(e.getAttribute("transform") || ""); if (t) out.push(+t[1]);      // glyphs: <use transform="translate(x, y) scale(…)">
+      if (e.tagName.toLowerCase() === "path") { const v = pathX(e.getAttribute("d") || ""); if (v) out.push(...v); }
+      const pts = e.getAttribute("points"); if (pts) (pts.match(NUM) || []).map(Number).forEach((v, i) => { if (i % 2 === 0) out.push(v); });
+    });
+    return out;
+  };
+  const minX = el => { const v = xsOf(el); return v.length ? Math.min(...v) : null; };
+  const move = (el, dx) => { if (!dx || Math.abs(dx) < 0.05) return; const t = el.getAttribute("transform"); el.setAttribute("transform", `translate(${dx.toFixed(1)},0)` + (t ? " " + t : "")); };
+  const remap = (el, f) => {          // a path whose points follow the new places (staff lines, ties, slurs, ledger lines)
+    const d = el.getAttribute("d") || "", v = pathX(d); if (!v) { const x = minX(el); if (x != null) move(el, f(x) - x); return; }
+    let i = 0; el.setAttribute("d", d.replace(NUM, m => (i++ % 2 === 0 ? String(Math.round(f(+m) * 10) / 10) : m)));
+  };
   root.querySelectorAll("g.system").forEach(sys => {
     const ms = [...sys.children].filter(g => g.matches("g.measure")); if (!ms.length) return;
     const last = ms[ms.length - 1];
-    const warn = [...last.querySelectorAll("g.staff > g.meterSig")].filter(m => { for (let p = m.previousElementSibling; p; p = p.previousElementSibling) if (p.matches("g.layer")) return true; return false; });
-    if (!warn.length) return;
-    warn.forEach(m => m.remove());
-    const lines = [...last.querySelectorAll("g.staff > path")].map(nums).filter(v => v.length >= 4);
-    const bars = [...last.querySelectorAll(":scope > g.barLine path")].map(nums).filter(v => v.length >= 2);
-    if (!lines.length || !bars.length) return;
-    const gap = Math.max(...lines.map(v => v[2])) - Math.max(...bars.map(v => v[0])), n = ms.length;
-    if (!(gap > 0)) return;
+    last.querySelectorAll("g.staff > g.meterSig").forEach(m => { for (let p = m.previousElementSibling; p; p = p.previousElementSibling) if (p.matches("g.layer")) { m.remove(); return; } });
+    const staffXs = m => [...m.querySelectorAll(":scope > g.staff > path")].map(p => pathX(p.getAttribute("d") || "") || []).flat();
+    const barX = m => { const v = [...m.querySelectorAll(":scope > g.barLine")].map(xsOf).flat(); return v.length ? Math.max(...v) : null; };
+    const st0 = staffXs(ms[0]), stN = staffXs(last); if (!st0.length || !stN.length) return;
+    const a0 = Math.min(...st0), E = Math.max(...stN);
+    const bars = ms.map(barX); if (bars.some(x => x == null)) return;
+    /* the first bar's music starts where the clef, key and metre end (they count as its bar line); the width of their
+       last glyph in staff spaces */
+    const ys = [...new Set([...ms[0].querySelectorAll(":scope > g.staff > path")].map(p => ((p.getAttribute("d") || "").match(NUM) || [])[1]).map(Number))].sort((p, q) => p - q);
+    const sp = ys.length > 1 ? ys[1] - ys[0] : 180, GLYPH = { clef: 2.7, keySig: 1.1, meterSig: 1.9, meterSigGrp: 3 };
+    let s0 = a0;
+    ms[0].querySelectorAll(":scope > g.staff > g.clef, :scope > g.staff > g.keySig, :scope > g.staff > g.meterSig, :scope > g.staff > g.meterSigGrp").forEach(g => {
+      const v = xsOf(g); if (v.length) s0 = Math.max(s0, Math.max(...v) + (GLYPH[g.getAttribute("class").split(" ")[0]] || 1.5) * sp);
+    });
+    const n = ms.length, W = (E - s0) / n; if (!(W > 0)) return;
+    const B = ms.map((_, i) => i === n - 1 ? E : s0 + (i + 1) * W);                    // the new bar lines
+    for (let i = 0; i < n; i++) if (!(bars[i] > (i ? bars[i - 1] : s0))) return;         // a drawing it can't read: left as drawn
+    /* bar lines and staff lines move to the even places; inside a bar the room after its bar line (or the metre) is
+       kept, at least 1.5 staff spaces before the first note, its stem or its ♭/♮ (the engine sometimes puts an accidental
+       on the bar line), and only the music between the first and the last note stretches or narrows */
+    const ob = [s0, ...bars], nb = [s0, ...B];
+    const lin = (os, ns) => x => {
+      if (x <= os[0]) return ns[0] + (x - os[0]);
+      for (let i = 1; i < os.length; i++) if (x <= os[i]) return ns[i - 1] + (x - os[i - 1]) * (ns[i] - ns[i - 1]) / ((os[i] - os[i - 1]) || 1);
+      return ns[ns.length - 1] + (x - os[os.length - 1]);
+    };
+    const f = x => Math.min(lin(ob, nb)(x), E);             // bar lines, staff lines, whole-bar rests
+    const fk = ms.map((m, i) => {
+      const L = ob[i], R = ob[i + 1], NL = nb[i], NR = nb[i + 1];
+      const xs = [...m.querySelectorAll(":scope > g.staff > g.layer > *:not(.mRest):not(.multiRest)")].map(minX).filter(x => x != null && x < R);
+      if (!xs.length) return lin([L, R], [NL, NR]);
+      const lo = Math.min(...xs), hi = Math.max(...xs), a = NL + Math.max(lo - L, (i ? 1.5 : 1.8) * sp), b = NR - (R - hi);
+      if (a >= NR - sp) return lin([L, R], [NL, NR]);
+      const os = lo > L ? [L, lo] : [lo], ns = lo > L ? [NL, a] : [a];
+      if (hi > lo && b > a + 1) { os.push(hi); ns.push(b); }
+      os.push(R); ns.push(NR);
+      return lin(os, ns);
+    });
+    const kOf = x => { let k = 0; while (k < n - 1 && x > ob[k + 1]) k++; return k; };
+    const F = x => fk[kOf(x)](x);                                          // ties and slurs follow the notes
     ms.forEach((m, k) => {
-      const a = gap * k / n, b = k === n - 1 ? gap : gap * (k + 1) / n;
       [...m.children].forEach(c => {
         if (c.matches("g.staff")) [...c.children].forEach(el => {
-          if (el.tagName.toLowerCase() !== "path") { move(el, a); return; }
-          const v = nums(el); if (v.length < 4) return;
-          el.setAttribute("d", `M${v[0] + a} ${v[1]} L${k === n - 1 ? v[2] : v[2] + b} ${v[3]}`);   // the staff lines of this bar
+          if (el.tagName.toLowerCase() === "path") { remap(el, f); return; }       // the staff lines
+          if (el.matches("g.layer")) { [...el.children].forEach(u => {
+            const x = minX(u); if (x == null) return;
+            /* a whole-bar rest stays in the middle of its bar */
+            if (u.matches("g.mRest, g.multiRest")) { const L = ob[k], R = ob[k + 1]; move(u, (nb[k] + nb[k + 1]) / 2 - (L + R) / 2); return; }
+            move(u, fk[k](x) - x);
+          }); return; }
+          if (el.matches("g.ledgerLines")) { el.querySelectorAll("path").forEach(p => remap(p, fk[k])); return; }
+          const x = minX(el); if (x != null) move(el, (x > ob[k] + sp ? fk[k](x) : f(x)) - x);
         });
-        else move(c, c.matches("g.barLine") ? b : a);
+        else if (c.matches("g.barLine")) { const x = barX(m); move(c, f(x) - x); }
+        else if (c.matches("g.tie, g.slur, g.hairpin, g.bracketSpan, g.octave")) c.querySelectorAll("path").forEach(p => remap(p, F));
+        else { const x = minX(c); if (x != null) move(c, F(x) - x); }
       });
     });
   });
