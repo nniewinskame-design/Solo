@@ -1083,3 +1083,12 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text}
 .of-tile{aspect-ratio:1;border-radius:16px;background:var(--fill);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--ink)}
 .of-tile b{font-size:22px}.of-tile .i{width:18px;height:18px}
 .of-tile.ok{background:color-mix(in srgb,var(--tn-ok) 14%,transparent);color:var(--tn-ok)}
+/* loop slider above the transport: two big handles with bar numbers */
+.loopbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--dock-h,70px) + 26px + var(--safe-b));z-index:4;width:min(100% - 32px,480px);padding:10px 12px;border-radius:22px;background:var(--card);box-shadow:var(--shadow-2)}
+.loopbar[hidden]{display:none}
+.lb-track{position:relative;height:44px;touch-action:none}
+.lb-track::before{content:"";position:absolute;left:22px;right:22px;top:50%;height:6px;margin-top:-3px;border-radius:3px;background:var(--fill)}
+.lb-fill{position:absolute;top:50%;height:6px;margin-top:-3px;border-radius:3px;background:#2F6FDB}
+.lb-th{position:absolute;top:0;width:44px;height:44px;border-radius:50%;background:#2F6FDB;color:#fff;font:700 15px var(--sans);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(47,111,219,.35);touch-action:none;transition:transform 200ms var(--spring)}
+.lb-th:active{transform:scale(1.12)}
+body.editmode .loopbar{display:none}

@@ -513,7 +513,7 @@ function openPiece(piece, settings) {
     $("#notice-text").textContent = n ? `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
   }
   updateTitles();
-  $("#peek").hidden = true; pb.loop = null; pb.pick = false; pb.mute.clear(); pb.resumeMs = 0; S.undo = []; S.editSel = null; S.keepSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
+  $("#peek").hidden = true; pb.loop = null; pb.pick = false; pb.mute.clear(); pb.resumeMs = 0; $("#loopbar").hidden = true; $("#btn-loop").setAttribute("aria-pressed", "false"); S.undo = []; S.editSel = null; S.keepSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
   $("#pages").innerHTML = `<div class="loading-page"><span class="spinner"></span></div>`;
   $("#scroller").scrollTop = 0;
   if (S.view !== "score") go("score");
@@ -631,7 +631,7 @@ async function doRender() {
     S.fromMs = 0; S.fromBar = -1;
     if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
     S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip();
-    requestAnimationFrame(drawLoop);
+    requestAnimationFrame(() => { drawLoop(); syncLoopUi(); });
     S.baseBpm = scoreBpm();
     if (openSheetId === "more") syncTempo();
   } catch (e) {
@@ -1038,7 +1038,7 @@ $("#btn-restore").addEventListener("click", () => {
 $("#pages").addEventListener("click", e => {
   if (!S.piece) return;
   if (S.editMode) { editTap(e); return; }
-  const m = e.target.closest("g.measure");
+  const m = e.target.closest("g.measure") || measureAt(e.clientX, e.clientY);
   if (!m) { if (S.fromMs) clearFromBar(); else if (e.target.closest(".page") && !playState) document.body.classList.toggle("immersive"); return; }
   const di = measureEls().indexOf(m);
   if (pb.pick || pb.loop) { setLoopBar(di); return; }
@@ -1364,10 +1364,36 @@ $("#btn-restart").addEventListener("click", () => {
   pb.resumeMs = 0; clearFromBar(); $("#scroller").scrollTo({ top: 0, behavior: canAnimate() ? "smooth" : "auto" });
   if (playState) { unlockAudio(); play(0); }
 });
+/* the loop button turns a 4-bar loop on (from the bar being played or chosen); the slider above the bar moves its ends */
 $("#btn-loop").addEventListener("click", () => {
   if (pb.loop || pb.pick) { pb.loop = null; pb.pick = false; drawLoop(); syncLoopUi(); if (playState) play(playPos()); return; }
-  pb.pick = "first"; syncLoopUi(); hud("Dotknij pierwszego taktu pętli", 3000);
+  const n = measureEls().length; if (!n) return;
+  let a = S.fromBar >= 0 ? S.fromBar : 0;
+  if (playState) { const cur = parseInt($("#tp-bar").textContent, 10); if (cur > 0) a = cur - 1; }
+  pb.loop = { a: Math.min(a, n - 1), b: Math.min(n - 1, a + 3) }; drawLoop(); syncLoopUi();
+  if (playState) play();
 });
+/* loop slider: two big handles that snap to bars (Flat, Tomplay); the band on the music follows at once */
+(() => {
+  const track = $("#lb-track"); let drag = null;
+  const valAt = x => { const r = track.getBoundingClientRect(), n = measureEls().length; return Math.max(0, Math.min(n - 1, Math.round((x - r.left - 22) / Math.max(1, r.width - 44) * (n - 1)))); };
+  ["lb-a", "lb-b"].forEach(id => $("#" + id).addEventListener("pointerdown", e => { drag = id; e.target.setPointerCapture?.(e.pointerId); e.preventDefault(); }));
+  track.addEventListener("pointerdown", e => { if (e.target.closest(".lb-th") || !pb.loop) return; const v = valAt(e.clientX); drag = Math.abs(v - pb.loop.a) <= Math.abs(v - pb.loop.b) ? "lb-a" : "lb-b"; move(e); });
+  const move = e => {
+    if (!drag || !pb.loop) return; const v = valAt(e.clientX), L = pb.loop;
+    if (drag === "lb-a") L.a = Math.min(v, L.b); else L.b = Math.max(v, L.a);
+    drawLoop(); syncLoopUi(); navigator.vibrate?.(4);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", () => { if (!drag) return; drag = null; const m = measureEls()[pb.loop.a]; if (m && !playState) scrollToBar(m); if (playState) play(); });
+})();
+function scrollToBar(m) { const pg = $("#pages"), pr = pg.getBoundingClientRect(), r = m.getBoundingClientRect(); scrollToLine({ top: r.top - pr.top }); }
+/* a tap anywhere on a line of music finds the nearest bar (no need to hit the bar itself) */
+function measureAt(x, y) {
+  let best = null, bd = Infinity;
+  measureEls().forEach(m => { const r = m.getBoundingClientRect(); const dx = Math.max(r.left - x, 0, x - r.right), dy = Math.max(r.top - y, 0, y - r.bottom), d = dy + dx * 2; if (d < bd) { bd = d; best = m; } });
+  return bd < 120 ? best : null;
+}
 /* the loop: tap the first and the last bar; afterwards a tap moves the nearer end (also while playing) */
 function setLoopBar(di) {
   if (pb.pick === "first") { pb.loop = { a: di, b: di }; pb.pick = "last"; hud("Teraz ostatni takt", 2500); }
@@ -1388,12 +1414,19 @@ function drawLoop() {
 }
 function syncLoopUi() {
   $("#btn-loop").setAttribute("aria-pressed", String(!!(pb.loop || pb.pick)));
+  const lb = $("#loopbar"), n = measureEls().length; lb.hidden = !pb.loop || n < 2;
+  if (pb.loop && n > 1) {
+    const pa = pb.loop.a / (n - 1), pbb = pb.loop.b / (n - 1);
+    $("#lb-a").style.left = `calc(${pa * 100}% - ${pa * 44}px)`; $("#lb-b").style.left = `calc(${pbb * 100}% - ${pbb * 44}px)`;
+    $("#lb-fill").style.left = `calc(${pa * 100}% - ${pa * 44}px + 22px)`; $("#lb-fill").style.right = `calc(${(1 - pbb) * 100}% - ${(1 - pbb) * 44}px + 22px)`;
+    $("#lb-av").textContent = String(pb.loop.a + 1); $("#lb-bv").textContent = String(pb.loop.b + 1);
+  }
   $("#loop-t").textContent = pb.loop ? `Pętla: takty ${pb.loop.a + 1}–${pb.loop.b + 1}` : "Powtarzaj kilka taktów";
-  $("#loop-s").textContent = pb.loop ? "Dotknij taktu, żeby przesunąć początek lub koniec. Dotknij tu, żeby wyłączyć." : "Dotknij pierwszego i ostatniego taktu";
+  $("#loop-s").textContent = "";
 }
 $("#loop-row").addEventListener("click", () => {
   if (pb.loop) { pb.loop = null; pb.pick = false; drawLoop(); syncLoopUi(); if (playState) play(playPos()); }
-  else { pb.pick = "first"; syncLoopUi(); closeSheet(); hud("Dotknij pierwszego taktu pętli", 3000); }
+  else closeSheetThen(() => $("#btn-loop").click());
 });
 /* practice sheet: speed, click, parts */
 function buildPracticeSheet() {
