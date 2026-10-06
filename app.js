@@ -2533,7 +2533,11 @@ function syncSettings() {
   DB.all().then(all => {
     $("#store-count").textContent = all.length ? `${all.length} ${plural(all.length, "utwór", "utwory", "utworów")} w bibliotece` : "Biblioteka jest pusta";
   }).catch(() => {});
-  navigator.storage?.estimate?.().then(e => { $("#store-size").textContent = `Zajęte: ${(e.usage / 1048576).toFixed(1).replace(".", ",")} MB${store.get("modelReady") ? ", w tym ok. 150 MB to program do czytania nut" : ""}`; }).catch(() => {});
+  navigator.storage?.estimate?.().then(async e => {
+    /* "persisted": the browser promised not to clear Solo's data when the device runs low on space */
+    const kept = await (navigator.storage.persisted ? navigator.storage.persisted().catch(() => false) : false);
+    $("#store-size").textContent = `Zajęte: ${(e.usage / 1048576).toFixed(1).replace(".", ",")} MB${store.get("modelReady") ? ", w tym ok. 150 MB to program do czytania nut" : ""}${kept ? ". Chronione przed usunięciem" : ""}`;
+  }).catch(e => console.warn(e));
 }
 $$("#themeseg button").forEach(b => b.addEventListener("click", () => {
   const t = b.dataset.theme; store.set("theme", t);
@@ -2542,18 +2546,39 @@ $$("#themeseg button").forEach(b => b.addEventListener("click", () => {
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#170B0F" : "#F4EEE4");
   syncSettings();
 }));
+/* The backup: one JSON file (older versions of Solo read it too) with the pieces and their photos, collections,
+   favourites, the profile and settings, and "Twój dźwięk". It is put together piece by piece as a Blob, so the
+   library is never one giant string in memory. */
+const BACKUP_PREFS = ["profile", "recentInstr", "theme", "sort", "libCol", "click", "metroBeats", "metroBpm", "ownUse", "tunerA4", "tunerTol", "tunerTr", "zoom2", "homrPrefer", "tourDone", "welcomed"];
 async function saveBackup() {
-  const all = await DB.all();
-  if (!all.length) return 0;
-  download(`solo-kopia-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: "solo", version: 2, saved: Date.now(), pieces: all, cols: cols(), favs: favs() }), "application/json");
+  let chunks, cur, size, n;
+  const reset = () => { chunks = []; cur = []; size = 0; n = 0; }, flush = () => { if (cur.length) { chunks.push(new Blob(cur)); cur = []; size = 0; } };
+  reset();
+  try {
+    await DB.each(p => { const j = JSON.stringify(p); cur.push((n++ ? "," : "") + j); size += j.length; if (size > 4e6) flush(); }, reset);
+  } catch (e) { console.warn(e); return { n: 0, how: "error" }; }
+  flush();
+  if (!n) return { n: 0, how: "empty" };
+  const prefs = {}; BACKUP_PREFS.forEach(k => { const v = store.get(k); if (v != null) prefs[k] = v; });
+  let sounds = {}; try { sounds = typeof ownExport === "function" ? ownExport() : {}; } catch (e) { console.warn(e); }
+  const head = JSON.stringify({ app: "solo", version: 3, saved: Date.now(), cols: cols(), favs: favs(), prefs, sounds });
+  const blob = new Blob([head.slice(0, -1), ',"pieces":[', ...chunks, "]}"], { type: "application/json" });
+  const name = `solo-kopia-${new Date().toISOString().slice(0, 10)}.json`;
+  const how = await saveFile(name, blob);
+  if (how === "blocked") hudAct("Kopia jest gotowa", "Zapisz", () => saveFile(name, blob).then(h => { if (h === "shared") backupDone(n); }), 10000);
+  if (how === "shared" || how === "downloaded") backupDone(n);
+  return { n, how };
+}
+function backupDone(n) {
   store.set("backupAt", String(Date.now()));
   const el = $("#backup-nudge"); if (el) el.hidden = true;
-  return all.length;
+  $("#backup-status").textContent = `Zapisano kopię: ${n} ${plural(n, "utwór", "utwory", "utworów")}.`;
 }
-$("#btn-backup").addEventListener("click", async () => {
-  const n = await saveBackup();
-  $("#backup-status").textContent = n ? `Zapisano kopię: ${n} ${plural(n, "utwór", "utwory", "utworów")}.` : "Biblioteka jest pusta.";
-});
+function backupText({ n, how }) {
+  return how === "empty" ? "Biblioteka jest pusta." : how === "error" ? "Nie udało się odczytać biblioteki. Spróbuj jeszcze raz." : how === "cancelled" ? "Nie zapisano kopii." :
+    how === "blocked" ? "Kopia jest gotowa: dotknij „Zapisz” na dole ekranu." : `Zapisano kopię: ${n} ${plural(n, "utwór", "utwory", "utworów")}.`;
+}
+$("#btn-backup").addEventListener("click", async () => { $("#backup-status").textContent = backupText(await saveBackup()); });
 /* A gentle reminder in the library: a few days after the first pieces, then at most monthly,
    and only when something changed since the last copy. Browsers may clear a site's storage. */
 const DAY = 864e5;
@@ -2568,30 +2593,66 @@ function nudgeBackup(all) {
   const due = last ? now - last > 30 * DAY : now - +store.get("libSince") > 3 * DAY;
   el.hidden = !(changed && due);
 }
-$("#nudge-save")?.addEventListener("click", async () => { const n = await saveBackup(); if (n) hud(`Zapisano kopię: ${n} ${plural(n, "utwór", "utwory", "utworów")}`, 3000); });
+$("#nudge-save")?.addEventListener("click", async () => { const r = await saveBackup(); if (r.how !== "blocked") hud(backupText(r), 3000); });
 $("#news-open")?.addEventListener("click", () => { store.set("newsSeen", VERSION); $("#news-nudge").hidden = true; go("settings"); setTimeout(() => $("#news").scrollIntoView({ behavior: "smooth", block: "center" }), 450); });
 $("#news-x")?.addEventListener("click", () => { store.set("newsSeen", VERSION); fadeOut($("#news-nudge"), 180); });
 $("#nudge-x")?.addEventListener("click", () => { store.set("nudgeLater", String(Date.now())); fadeOut($("#backup-nudge"), 180); });
+/* Reading a backup back: everything is checked first (nothing is written from a damaged file), an older copy never
+   overwrites newer changes, and the person is told what came in and what was left out. */
+const PIECE_FIELDS = { title: "string", composer: "string", instrument: "string", xml: "string", sourceType: "string", origXml: "string", keyLabel: "string", clefLabel: "string", created: "number", updated: "number", opened: "number" };
+const DATA_IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+function cleanPiece(p) {
+  if (!p || typeof p !== "object" || typeof p.id !== "string" || !/^[\w-]{1,64}$/.test(p.id) || typeof p.xml !== "string" || !/<score-(partwise|timewise)\b/.test(p.xml)) return null;
+  const out = { id: p.id };
+  Object.entries(PIECE_FIELDS).forEach(([k, t]) => { if (typeof p[k] === t) out[k] = p[k]; });
+  out.title = out.title || ""; out.composer = out.composer || "";
+  if (!["device", "ai", "file", "own", "example"].includes(out.sourceType)) out.sourceType = "file";
+  out.images = Array.isArray(p.images) ? p.images.filter(x => typeof x === "string" && DATA_IMG.test(x)) : [];
+  out.thumb = typeof p.thumb === "string" && DATA_IMG.test(p.thumb) ? p.thumb : null;
+  out.issues = Array.isArray(p.issues) ? p.issues.filter(x => typeof x === "string").slice(0, 1000) : [];
+  out.lines = Array.isArray(p.lines) ? p.lines.filter(l => l && typeof l === "object").map(l => { const o = {}; ["page", "cx", "cy", "w", "h", "W", "H"].forEach(k => (o[k] = Number.isFinite(+l[k]) ? +l[k] : 0)); return o; }) : null;
+  out.settings = p.settings && typeof p.settings === "object" && !Array.isArray(p.settings) ? JSON.parse(JSON.stringify(p.settings)) : null;
+  return out;
+}
+function cleanCol(c) {
+  if (!c || typeof c.id !== "string" || !/^[\w-]{1,40}$/.test(c.id) || typeof c.name !== "string") return null;
+  return { id: c.id, name: c.name.slice(0, 60), color: /^#[0-9a-f]{6}$/i.test(c.color) ? c.color : "#8D8D8D", items: Array.isArray(c.items) ? c.items.filter(x => typeof x === "string") : [] };
+}
 $("#in-backup").addEventListener("change", async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-  try {
-    const j = JSON.parse(await f.text());
-    if (!["solo", "pulpit-nutowy"].includes(j.app) || !Array.isArray(j.pieces)) throw new Error();
-    if (Array.isArray(j.cols)) { const mine = cols(); j.cols.forEach(c => { const m = mine.find(x => x.id === c.id); if (m) m.items = [...new Set([...m.items, ...c.items])]; else mine.push(c); }); saveCols(mine); }
-    if (Array.isArray(j.favs)) saveFavs([...new Set([...favs(), ...j.favs])]);
-    const have = new Map((await DB.all()).map(p => [p.id, p]));
-    let n = 0, newer = 0;
-    for (const p of j.pieces) {
-      if (!p || typeof p.id !== "string" || typeof p.xml !== "string") continue;
-      const cur = have.get(p.id);                 // an older copy never overwrites newer changes
-      if (cur && (cur.updated || 0) > (p.updated || 0)) { newer++; continue; }
-      const clean = { ...p, title: String(p.title || ""), composer: String(p.composer || ""), images: Array.isArray(p.images) ? p.images.filter(s => typeof s === "string" && s.startsWith("data:image/")) : [],
-        thumb: typeof p.thumb === "string" && p.thumb.startsWith("data:image/") ? p.thumb : null };
-      await DB.put(clean); n++;
-    }
-    $("#backup-status").textContent = `Wczytano ${n} ${plural(n, "utwór", "utwory", "utworów")}.` +
-      (newer ? ` ${newer} ${plural(newer, "utwór masz", "utwory masz", "utworów masz")} już w nowszej wersji.` : ""); syncSettings();
-  } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
+  const st = $("#backup-status"); st.textContent = "Wczytuję kopię…";
+  let j;
+  try { j = JSON.parse(await f.text()); }
+  catch (err) { console.warn(err); st.textContent = err instanceof RangeError ? "Ta kopia jest za duża dla tego urządzenia." : "To nie jest kopia zapasowa Solo albo plik jest uszkodzony."; return; }
+  if (!j || !["solo", "pulpit-nutowy"].includes(j.app) || !Array.isArray(j.pieces)) { st.textContent = "To nie jest kopia zapasowa Solo."; return; }
+  const pieces = j.pieces.map(cleanPiece), bad = pieces.filter(p => !p).length;
+  let have;
+  try { have = new Map((await DB.all()).map(p => [p.id, p])); }
+  catch (err) { console.warn(err); st.textContent = "Nie udało się otworzyć biblioteki. Spróbuj jeszcze raz."; return; }
+  const fresh = !have.size;                     // a new phone: the profile and settings come from the copy as well
+  let n = 0, newer = 0;
+  for (const p of pieces) {
+    if (!p) continue;
+    const cur = have.get(p.id);                 // an older copy never overwrites newer changes
+    if (cur && (cur.updated || 0) > (p.updated || 0)) { newer++; continue; }
+    try { await DB.put(p); n++; } catch (err) { console.warn(err); st.textContent = saveErrorText(err) + ` Wczytano ${n} z ${pieces.length}.`; syncSettings(); refreshLibrary(); return; }
+  }
+  if (Array.isArray(j.cols)) { const mine = cols(); j.cols.map(cleanCol).filter(Boolean).forEach(c => { const m = mine.find(x => x.id === c.id); if (m) m.items = [...new Set([...m.items, ...c.items])]; else mine.push(c); }); saveCols(mine); }
+  if (Array.isArray(j.favs)) saveFavs([...new Set([...favs(), ...j.favs.filter(x => typeof x === "string")])]);
+  let prefs = 0;
+  if (j.prefs && typeof j.prefs === "object") BACKUP_PREFS.forEach(k => {
+    const v = j.prefs[k]; if (typeof v !== "string" || v.length > 20000) return;
+    if (k === "profile") { try { const o = JSON.parse(v); if (!o || !Array.isArray(o.instruments)) return; } catch { return; } }
+    if ((fresh || store.get(k) == null) && store.set(k, v)) prefs++;
+  });
+  if (prefs && typeof applyProfile === "function") applyProfile();
+  let snd = 0; if (j.sounds && typeof ownImport === "function") { try { snd = await ownImport(j.sounds); } catch (err) { console.warn(err); } }
+  st.textContent = [`Wczytano ${n} ${plural(n, "utwór", "utwory", "utworów")}.`,
+    newer ? `${newer} ${plural(newer, "utwór masz", "utwory masz", "utworów masz")} już w nowszej wersji.` : "",
+    bad ? `Pominięte, bo uszkodzone: ${bad}.` : "",
+    snd ? `Twój dźwięk: ${snd} ${plural(snd, "instrument", "instrumenty", "instrumentów")}.` : "",
+    prefs && fresh ? "Profil i ustawienia też." : ""].filter(Boolean).join(" ");
+  syncSettings(); if (prefs && typeof renderProfile === "function") renderProfile();
 });
 
 const NEWS = { "3.9": ["Nuty według zasad zapisu: ósemki i szesnastki łączone belkami według metrum, pauzy pokazują miary, znaki przypominające w następnym takcie.",
