@@ -449,7 +449,7 @@ async function refreshLibrary(animate) {
   nudgeBackup(all);
   const nn = $("#news-nudge"); if (nn) nn.hidden = !(all.length && NEWS[VERSION] && store.get("newsSeen") !== VERSION);
   $("#lib").hidden = !has; $("#lib-empty").hidden = has;
-  $("#lib-count").textContent = has ? String(all.length) : "";
+  $("#lib-count").textContent = has ? String(list.length) : "";      // what is shown (filter, search), not everything
   $("#lib-none").hidden = !(has && q && !list.length);
   $("#lib-none").textContent = `Nic nie pasuje do „${q}”.`;
 }
@@ -484,7 +484,7 @@ function loadState(piece, settings) {
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null; S.clefMine = false;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
-  S.layout = S.hasLines ? "orig" : "fit"; S.page = "a4"; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
+  S.layout = S.hasLines ? "orig" : "fit"; S.page = "a4"; S.pageMine = false; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
   if (settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
@@ -501,6 +501,7 @@ function loadState(piece, settings) {
     else if (S.iv && (S.iv.d || S.iv.s)) { const s12 = S.iv.s, oc = Math.trunc(s12 / 12); if (oc && Math.abs(s12 % 12) <= 6) { S.iv = { d: S.iv.d - 7 * oc, s: s12 - 12 * oc }; S.readOct = oc; } }
     if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
     if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
+    S.pageMine = !!settings.pageMine;
     S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
   }
   if (S.piece.instrument == null) S.piece.instrument = first && !PIANO_RE.test(first.name) ? first.name : "";
@@ -520,6 +521,9 @@ function namedInstr(pid) {
   for (const n of names) { const hit = n && INSTRUMENTS.find(i => i.name.toLowerCase() === n); if (hit) return hit; }
   return null;
 }
+/* a phone shows big notes that fit the screen: an A4 page there is under half its paper size (7.2 mm staff ≈ 13 px);
+   A4 stays the view on a tablet and whenever the player picked it */
+function fitPageToDevice() { if (!S.pageMine && Math.min(innerWidth, screen.width || innerWidth) < 600) S.page = "screen"; }
 function ensureOnStaff() {
   try {
     /* a clef the instrument is never written in (trombone in treble, left by an older version) becomes its own clef;
@@ -537,6 +541,7 @@ function ensureOnStaff() {
 function openPiece(piece, settings) {
   stopPlayback();
   try { loadState(piece, settings); } catch (e) { hud(e.message || "Nie udało się otworzyć nut.", 4000); return; }
+  fitPageToDevice();
   const refit = !!ensureOnStaff();
   S.dirty = refit && !!S.piece.id; S.thumbDirty = !piece.thumb || refit; S.loadedKey = null;
   S.piece.opened = Date.now();
@@ -584,7 +589,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
+    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -1903,7 +1908,7 @@ function syncLayout() {
   $("#layout-box").hidden = !S.hasLines; $$("#layoutseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.layout === S.layout)));
   $$("#pageseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.page === S.page)));
 }
-$$("#pageseg button").forEach(b => b.addEventListener("click", () => { S.page = b.dataset.page; syncLayout(); S.loadedKey = null; changed(); }));
+$$("#pageseg button").forEach(b => b.addEventListener("click", () => { S.page = b.dataset.page; S.pageMine = true; syncLayout(); S.loadedKey = null; changed(); }));
 $$("#underseg button").forEach(b => b.addEventListener("click", () => { S.under = b.dataset.u; syncArrange(); changed(); }));
 $("#swing").addEventListener("change", e => { S.swing = e.target.checked; S.dirty = true; autosave(); if (playState) play(playPos()); });
 function syncArrange() { $$("#underseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.u === (S.under || "")))); $("#swing").checked = !!S.swing; }
@@ -2166,7 +2171,7 @@ function drawPending() {
 const cam = { open: false, stream: null, track: null, busy: false, torch: false };
 const camEl = $("#cam"), camVideo = $("#cam-video");
 const CAM_ERR = {
-  NotAllowedError: ["Brak dostępu do aparatu", "Zezwól na aparat w ustawieniach przeglądarki (ikona obok adresu strony) albo wybierz zdjęcie z galerii."],
+  NotAllowedError: ["Brak dostępu do aparatu", "Zezwól na aparat w ustawieniach albo wybierz zdjęcie z galerii."],
   NotFoundError: ["Nie znaleziono aparatu", "Wybierz zdjęcie z galerii."],
   NotReadableError: ["Aparat jest zajęty", "Zamknij inne aplikacje, które z niego korzystają, i spróbuj jeszcze raz."],
   OverconstrainedError: ["Nie udało się włączyć aparatu", "Spróbuj jeszcze raz albo wybierz zdjęcie z galerii."]
@@ -2682,14 +2687,14 @@ async function openMic() {
 }
 function micDone() { try { if (navigator.audioSession && !tuner.on && !(typeof of !== "undefined" && of.stream) && !micKeep.stream) navigator.audioSession.type = "auto"; } catch {} }
 function micError(e) {
-  return e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Zezwól w ustawieniach strony (ikona obok adresu)." :
+  return e && e.name === "NotAllowedError" ? (standalone() ? "Brak zgody na mikrofon. Włącz go w Ustawieniach telefonu." : "Brak zgody na mikrofon. Zezwól w ustawieniach przeglądarki.") :
     e && e.name === "NotFoundError" ? "Nie znaleziono mikrofonu." : e && e.name === "NotReadableError" ? "Mikrofon jest zajęty przez inną aplikację." :
     (e && e.message) || "Nie udało się włączyć mikrofonu.";
 }
 async function tunerStart() {
   $("#t-hz").textContent = "Włączam mikrofon…";
   let m; try { m = await openMic(); }
-  catch (e) { $("#t-hz").textContent = micError(e); hud(micError(e), 4500); return; }
+  catch (e) { $("#t-hz").textContent = micError(e); return; }      // said once, under the needle
   tuner.stream = m.stream; tuner.ctx = m.ctx;
   tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 4096; tuner.buf = new Float32Array(tuner.an.fftSize);
   m.src.connect(tuner.an);
@@ -2920,7 +2925,10 @@ $("#new-ready").addEventListener("click", e => {
   const d = parseXml(xml), root = d.documentElement;
   kids(root, "part").find(p => p.getAttribute("id") === "P1").remove(); kids(kid(root, "part-list"), "score-part").find(p => p.getAttribute("id") === "P1").remove();
   xml = new XMLSerializer().serializeToString(d);
-  closeSheetThen(() => { openPiece({ xml, sourceType: "own", title: t.title, composer: t.composer, instrument: ins.name }); S.dirty = true; savePiece(); });
+  closeSheetThen(async () => {
+    const names = new Set((await DB.all().catch(() => [])).map(p => p.title)); let title = t.title, k = 2; while (names.has(title)) title = `${t.title} ${k++}`;
+    openPiece({ xml, sourceType: "own", title, composer: t.composer, instrument: ins.name }); S.dirty = true; savePiece();
+  });
 });
 $("#new-go").addEventListener("click", () => {
   const ins = instrById(nm.instr), [beats, bt] = nm.time.split("/").map(Number);
@@ -2965,7 +2973,7 @@ function showOnly(pid) {
 let partSheetId = null;
 function openPartSheet(pid) { partSheetId = pid; openSheet("part"); }
 function buildPartSheet() {
-  const pid = partSheetId; $("#sh-part-t").textContent = partName(pid);
+  const pid = partSheetId, pp = S.parts.find(p => p.id === pid); $("#sh-part-t").textContent = pp ? partLabel(pp) : partName(pid);
   $("#pp-mute").setAttribute("aria-pressed", String(pb.mute.has(pid)));
   $("#pp-only").setAttribute("aria-pressed", String(S.only === pid));
   $("#pp-del").disabled = S.parts.length < 2; $("#pp-only").disabled = S.parts.length < 2;

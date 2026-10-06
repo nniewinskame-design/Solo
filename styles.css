@@ -1106,3 +1106,4 @@ body.editmode .loopbar{display:none}
 .own-name small{color:var(--ink-2);font-size:13px}
 #of-picker{width:100%;text-align:left;max-height:40vh;overflow-y:auto}
 .ownf-body .of-instr{justify-content:center}
+.lib{padding-bottom:calc(96px + var(--safe-b))}   /* the last row of cards clears the "+" button */
