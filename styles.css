@@ -1737,3 +1737,14 @@ a,.link{color:var(--brand-ink)}
 .metro .beats>button.on::before{background:#FFB21E}
 .metro .beats>button.on[data-acc="1"]::before{background:var(--g-metro)}
 .m-name{color:#E8590C}
+/* the name: typed once at the start, shown (and edited) on the Ja card */
+.onb-name{display:block;width:100%;margin-top:22px;height:56px;padding:0 18px;border:0;border-radius:16px;background:var(--surface);box-shadow:var(--shadow-1),0 0 0 .5px var(--hairline);font:600 22px var(--font);letter-spacing:-.02em;color:var(--text);text-align:center}
+.onb-name:focus{outline:none;box-shadow:0 0 0 2px var(--brand)}
+.me-name{display:block;width:100%;border:0;background:none;padding:0;margin:0;font:650 20px/1.2 var(--font);letter-spacing:-.025em;color:var(--text);border-radius:6px}
+.me-name::placeholder{color:var(--text-3);font-weight:550}
+.me-name:focus{outline:none;box-shadow:0 2px 0 var(--brand)}
+.me-txt{flex:1;min-width:0}
+.me-ini{font:650 24px/1 var(--font);letter-spacing:-.02em}
+input.onb-name[type=text]{background:var(--surface)!important;font:600 22px var(--font)!important;height:56px!important;border-radius:16px!important;text-align:center!important}
+input.me-name[type=text]{background:none!important;box-shadow:none;font:650 20px/1.2 var(--font)!important;height:auto!important;min-height:0!important;padding:2px 0!important;border-radius:0!important}
+input.me-name[type=text]:focus{box-shadow:0 2px 0 var(--brand)!important}

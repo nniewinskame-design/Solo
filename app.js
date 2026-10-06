@@ -3559,7 +3559,7 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
   "Nowa melodia: wybierasz klucz, tonację (dur albo moll) i dowolne metrum.",
-  "Każda zakładka ma swój kolor, ikonki na kolorowych kafelkach. Zakładka Ja uporządkowana, tylko jasny wygląd.",
+  "Każda zakładka ma swój kolor, ikonki na kolorowych kafelkach. Zakładka Ja z Twoim imieniem i uporządkowana. Tylko jasny wygląd.",
   "Metronom ze stukaniem tempa i akcentami. Stroik z wielką nutą.",
   "Tonacje molowe z właściwymi akordami. Przedtakt wyrównany we wszystkich partiach.",
   "Partie dla instrumentów transponujących brzmią poprawnie, także po eksporcie.",

@@ -129,7 +129,7 @@ function instrFromName(name) {
   const exact = INSTRUMENTS.find(i => plainName(i.name) === n.replace(/ (i|ii|iii|iv|v|vi|\d)$/, "")); if (exact) return exact;
   const a = NAME_ALIASES.find(([re]) => re.test(n)); return a ? instrById(a[1]) : null;
 }
-const PROFILE_DEFAULT = { instruments: ["puzon"], main: "puzon", reading: "written", role: "", a4: 440, done: false };
+const PROFILE_DEFAULT = { name: "", instruments: ["puzon"], main: "puzon", reading: "written", role: "", a4: 440, done: false };
 function profile() {
   let p = null; try { p = JSON.parse(store.get("profile", "null")); } catch {}
   const out = { ...PROFILE_DEFAULT, ...(p || {}) }; out.instruments = [...out.instruments]; return out;       // never the default's own list
@@ -157,7 +157,7 @@ function profileSummary(p = profile()) {
 
 /* ---------------- onboarding: one question per screen, big tiles, always "Pomiń" ---------------- */
 const onb = { step: 0, p: null };
-const ONB_STEPS = ["hello", "instr", "main", "reading", "done"];   // no role question (Nat, 7 Oct); A4 is set in Ja
+const ONB_STEPS = ["hello", "name", "instr", "main", "reading", "done"];   // no role question (Nat, 7 Oct); A4 is set in Ja
 function openOnboarding() {
   onb.p = profile(); onb.p.instruments = [...onb.p.instruments]; onb.step = 0;
   $("#onb").hidden = false; renderOnb();
@@ -192,6 +192,9 @@ function renderOnb() {
       <p class="onb-lead">Nuty, stroik i metronom w jednym miejscu. Do ćwiczenia w domu i na lekcji.</p>
       <p class="w-legal">Korzystając z Solo, akceptujesz <a href="regulamin.html" data-doc="regulamin">regulamin</a> i&nbsp;<a href="prywatnosc.html" data-doc="prywatnosc">politykę&nbsp;prywatności</a>.</p>`;
     next = "Zaczynamy";
+  } else if (name === "name") {
+    h = `<h2 class="h-l">Jak masz na imię?</h2><p class="onb-lead">Tak przywita Cię zakładka Ja.</p>
+      <input class="onb-name" id="onb-name" type="text" autocomplete="given-name" autocapitalize="words" enterkeyhint="next" maxlength="30" placeholder="Imię" value="${esc(p.name || "")}">`;
   } else if (name === "instr") {
     h = `<h2 class="h-l">Na czym grasz?</h2><p class="onb-lead">Możesz wybrać kilka.</p><div id="onb-picker"></div>`;
   } else if (name === "main") {
@@ -211,7 +214,7 @@ function renderOnb() {
   } else {
     const m = instrById(p.main);
     h = `<h2 class="h-l">Gotowe.</h2>
-      <div class="onb-sum"><b>${esc(m.name)}</b><span>${esc(profileSummary(p))}</span></div>
+      <div class="onb-sum"><b>${esc(p.name ? `Miłego grania, ${p.name}!` : m.name)}</b><span>${esc(profileSummary(p))}</span></div>
       <div class="onb-own"><svg class="i"><use href="#mic"/></svg><div class="grow"><b>Twoje brzmienie</b><small>Solo zagra nuty Twoim brzmieniem.</small></div><button class="btn small tinted" id="onb-own">Nagraj</button></div>`;
     next = "Zacznij";
   }
@@ -220,6 +223,8 @@ function renderOnb() {
   $("#onb-next span").textContent = next;
   $("#onb-next").disabled = name === "instr" && !p.instruments.length;
   $("#onb-skip").hidden = name === "done";
+  const ni = $("#onb-name");
+  if (ni) { ni.oninput = () => { p.name = ni.value.trim(); }; ni.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); onbGo(1); } }; setTimeout(() => ni.focus(), 350); }
 }
 $("#onb-body").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
@@ -272,7 +277,8 @@ function renderProfile() {
   const p = profile(), m = instrById(p.main);
   /* the card at the top: who plays what, at a glance; the main instrument's family colour on the tile */
   const card = $("#me-card");
-  if (card) card.innerHTML = `<span class="me-tile" ${hueStyle(m)}>${icon("user")}</span><span class="me-txt"><b>${esc(m.name)}</b><small>${p.instruments.length > 1 ? `${p.instruments.length} ${plural(p.instruments.length, "instrument", "instrumenty", "instrumentów")} · ` : ""}A = ${p.a4} Hz</small></span>`;
+  /* the name, typed at the first start, can be changed right here: the card's title is the field */
+  if (card) card.innerHTML = `<span class="me-tile" ${hueStyle(m)}>${p.name ? `<b class="me-ini">${esc(p.name.charAt(0).toUpperCase())}</b>` : icon("user")}</span><span class="me-txt"><input class="me-name" id="me-name" type="text" autocomplete="given-name" autocapitalize="words" enterkeyhint="done" maxlength="30" placeholder="Twoje imię" aria-label="Imię" value="${esc(p.name || "")}"><small>${esc(m.name)} · A = ${p.a4} Hz</small></span>`;
   const row = (label, body, note = "") => `<div class="me-row"><span class="me-l">${label}</span>${body}${note}</div>`;
   box.innerHTML = `<div class="group me-group">
     ${row("Instrumenty", `<div class="ichips">${p.instruments.map(id => `<button class="ichip" ${hueStyle(id)} data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip add" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>`, p.instruments.length > 1 ? `<small class="me-note">Dotknij, żeby wybrać główny</small>` : "")}
@@ -280,6 +286,8 @@ function renderProfile() {
     ${trPc(m) ? row("Stroik pokazuje", `<div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla ${esc(m.name.toLowerCase())}</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>`) : ""}
   </div>`;
 }
+$("#me-card")?.addEventListener("change", e => { if (e.target.id !== "me-name") return; const p = profile(); p.name = e.target.value.trim(); saveProfile(p); renderProfile(); });
+$("#me-card")?.addEventListener("keydown", e => { if (e.target.id === "me-name" && e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
 $("#prof").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   const p = profile();
