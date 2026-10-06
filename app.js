@@ -1711,12 +1711,10 @@ async function shareXml() {
   try {
     xml = transposeXmlString(processedXml(), S.iv);
     /* every transposing part says how it sounds (<transpose>), so other programs play it in tune: its instrument's
-       transposition, moved by a key change; a part read for another instrument (a preset) is the player's instrument */
+       transposition (a key change moves written and sounding notes alike); a part read for another instrument (a
+       preset) is written for the player's instrument */
     const doc = parseXml(xml), read = readingPartId();
-    kids(doc.documentElement, "part").forEach(p => {
-      const pid = p.getAttribute("id"), tr = S.preset >= 0 && pid === read ? mainInstr().tr || 0 : partTr(pid) + S.iv.s;
-      setTranspose(doc, p, S.preset >= 0 && pid === read ? trIv(tr) : { d: trIv(partTr(pid)).d + S.iv.d, s: tr });
-    });
+    kids(doc.documentElement, "part").forEach(p => { const pid = p.getAttribute("id"); setTranspose(doc, p, trIv(S.preset >= 0 && pid === read ? mainInstr().tr || 0 : partTr(pid))); });
     xml = new XMLSerializer().serializeToString(doc);
   } catch (e) { console.warn(e); xml = S.piece.xml; }
   const type = "application/vnd.recordare.musicxml+xml";
