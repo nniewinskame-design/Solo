@@ -41,7 +41,21 @@ function secondVoiceXml(xml, partId, { interval = 3, level = 1 } = {}) {
         if ([2, 4, 5, 0].includes(iv) && prev < idx) target = prev;
       }
       setPitch(doc, p, target, fifths); prev = target; prevMel = mel;
+      /* the key's note can clash with a chromatic melody note (D under F♯ is no third) or make a diminished fifth (B
+         under F): the voice takes a sharp or flat so the interval is the consonance asked for (Kwinty: always perfect) */
+      const want = { 3: [3, 4], 6: [8, 9], 5: [7], 8: [0] }[interval] || [0, 3, 4, 7, 8, 9], gap = ((mel - midiOf(p)) % 12 + 12) % 12;
+      if (!want.includes(gap) && (level === 1 || [1, 2, 6, 10, 11].includes(gap))) {
+        const d = [1, -1].find(x => (want.includes(((gap - x) % 12 + 12) % 12) || (level > 1 && [0, 3, 4, 7, 8, 9].includes(((gap - x) % 12 + 12) % 12))) && Math.abs((parseFloat(txt(p, "alter")) || 0) + x) <= 1);
+        if (d) { let al = kid(p, "alter"); const v = (al ? parseFloat(al.textContent) || 0 : 0) + d; if (v) { if (!al) { al = doc.createElement("alter"); p.insertBefore(al, kid(p, "octave")); } al.textContent = String(v); } else if (al) al.remove(); }
+      }
     });
+  });
+  /* a tie holds one pitch: where the voice's two tied notes differ, the tie goes */
+  const pn = [...part.getElementsByTagName("note")].filter(x => kid(x, "pitch") && !kid(x, "grace") && !kid(x, "chord"));
+  pn.forEach((x, i) => {
+    if (![...x.getElementsByTagName("tie")].some(t => t.getAttribute("type") === "start")) return;
+    const y = pn[i + 1]; if (y && midiOf(kid(y, "pitch")) === midiOf(kid(x, "pitch"))) return;
+    [x, y].forEach((z, k) => { if (!z) return; [...z.getElementsByTagName("tie"), ...z.getElementsByTagName("tied")].filter(t => t.getAttribute("type") === (k ? "stop" : "start")).forEach(t => t.remove()); const no = kid(z, "notations"); if (no && !no.children.length) no.remove(); });
   });
   root.appendChild(part);
   const pl = kid(root, "part-list"), sp = doc.createElement("score-part");
@@ -223,7 +237,7 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
     const midIdx = Math.round((mid - 12) * 7 / 12), cf = clefsOf(instr).reduce((a, b) => Math.abs(CLEF_LINES[b] + 4 - midIdx) < Math.abs(CLEF_LINES[a] + 4 - midIdx) ? b : a);
     const place = { range: [instr.lo + srcTr, instr.hi + srcTr], comf: cm.map(x => x + srcTr), staff: CLEF_LINES[cf], wShift: tW.d - tS.d };
     const gen = (above, placed) => { const vx = interval === 0 ? ruledVoiceXml(one, srcId, { third, lowMidi: comfOf(instr)[0] + srcTr - (above ? 12 : 0), v2Midi, above, place: placed ? place : null })
-      : interval === 9 ? chordVoiceXml(one, srcId, third ? 2 : 1)
+      : interval === 9 ? ruledVoiceXml(one, srcId, { third, lowMidi: comfOf(instr)[0] + srcTr, v2Midi, chordy: true })     // "Akordowo": chord tones, by the same rules (no parallels)
       : secondVoiceXml(one, srcId, { interval: third ? ({ 3: 5, 6: 8, 5: 8 }[interval] || 6) : interval, level: 1 });
       const v = parseXml(vx), ps = kids(v.documentElement, "part"); return soloScore(v, ps[ps.length - 1]); };
     /* a higher instrument than the melody's (trumpet with a trombone tune) plays the voice an octave up, above the
@@ -365,37 +379,6 @@ function mergeAsVoice2(xml, srcId, newId) {
   return new XMLSerializer().serializeToString(doc);
 }
 
-/* a voice from the chord under the melody: for each note the nearest chord tone below it (nth = 1: the next one
-   down, the second voice; nth = 2: the one below that, the third voice). Chords come from chordsForBars. */
-function chordVoiceXml(xml, partId, nth = 1) {
-  const doc = parseXml(xml), root = doc.documentElement, src = kids(root, "part").find(p => p.getAttribute("id") === partId); if (!src) return xml;
-  const chords = chordsForBars(xml, partId), ids = new Set(kids(root, "part").map(p => p.getAttribute("id")));
-  let n = 2; while (ids.has("P" + n)) n++; const id = "P" + n, part = src.cloneNode(true); part.setAttribute("id", id);
-  let fifths = 0;
-  kids(part, "measure").forEach((m, i) => {
-    kids(m, "attributes").forEach(a => { const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0; });
-    kids(m, "direction").forEach(d => { if (!keepDir(d)) d.remove(); });
-    const c = chords[i]; if (!c) return;
-    const r = c.tonicLof + c.lof, pcs = [r, r + (c.minor ? -3 : 4), r + 1].map(l => { const p = lofToPitch(l); return ((([0, 2, 4, 5, 7, 9, 11][STEP_I[p.letter]] + p.alter) % 12) + 12) % 12; });
-    kids(m, "note").forEach(note => {
-      kids(note, "accidental").forEach(a => a.remove()); kids(note, "lyric").forEach(a => a.remove());
-      const p = kid(note, "pitch"); if (!p) return;
-      let midi = midiOf(p), found = 0;
-      for (let t = midi - 1; t > midi - 13; t--) if (pcs.includes(((t % 12) + 12) % 12) && ++found === nth) { midi = t; break; }
-      if (!found) midi -= nth === 1 ? 3 : 7;
-      /* write it with the key's spelling: the nearest letter whose pitch matches */
-      const idx0 = parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")];
-      let best = null; for (let d = 0; d <= 8; d++) { const idx = idx0 - d, st = STEP_N[((idx % 7) + 7) % 7], oc = Math.floor(idx / 7), base = 12 * (oc + 1) + [0, 2, 4, 5, 7, 9, 11][STEP_I[st]], al = midi - base; if (Math.abs(al) <= 1 && (!best || Math.abs(al - keyAlter(fifths, st)) < Math.abs(best.al - keyAlter(fifths, best.st)))) best = { st, oc, al }; }
-      if (!best) return;
-      kid(p, "step").textContent = best.st; kid(p, "octave").textContent = String(best.oc);
-      let a = kid(p, "alter"); if (best.al) { if (!a) { a = doc.createElement("alter"); p.insertBefore(a, kid(p, "octave")); } a.textContent = String(best.al); } else if (a) a.remove();
-    });
-  });
-  root.appendChild(part);
-  const pl = kid(root, "part-list"), sp = doc.createElement("score-part"); sp.setAttribute("id", id); sp.innerHTML = `<part-name>Głos</part-name>`; pl.appendChild(sp);
-  return new XMLSerializer().serializeToString(doc);
-}
-
 /* ---------------- 3.9 voice leading: a whole line chosen at once (dynamic programming) ----------------
    Rules (Open Music Theory, first/second species; Fux; Kostka-Payne via OMT), scored per note:
    - strong beats consonant: 3rds and 6ths best, 5ths and octaves allowed, unison only on the first or last note,
@@ -479,7 +462,7 @@ function noteCost(e, c, i, n, ctx) {
   if (e.pcs) {
     if (e.pcs.includes(pc)) cost += e.strong ? -1.5 : -0.5;
     else if (e.strong && e.pcs.includes(mpc) && !ctx.loose) return Infinity;
-    else cost += e.strong ? 4 : e.beat ? 3 : 0.5;
+    else cost += (e.strong ? 4 : e.beat ? 3 : 0.5) + (ctx.chordy ? 5 : 0);          // "Akordowo": chord tones on every note
   }
   if (ctx.third && e.pcs && ctx.uppers.length > 1) {                 // a 3rd voice completes the triad
     const have = ctx.uppers.map(U => ((U[i] % 12) + 12) % 12);
@@ -606,14 +589,14 @@ function placedBest(ev, others, opts) {
   return best && best.line;
 }
 /* a 2nd (third = false) or 3rd voice under a part, following these rules; above: the 2nd voice when writing the 3rd */
-function ruledVoiceXml(xml, partId, { third = false, lowMidi = 40, v2Midi = null, above = false, place = null } = {}) {
+function ruledVoiceXml(xml, partId, { third = false, lowMidi = 40, v2Midi = null, above = false, place = null, chordy = false } = {}) {
   const doc = parseXml(xml), root = doc.documentElement, src = kids(root, "part").find(p => p.getAttribute("id") === partId); if (!src) return xml;
   const chords = chordsForBars(xml, partId), ev = melodyEvents(src, chords);
   const mel = ev.map(e => e.midi);
   let uppers = [mel];
   /* the 3rd voice is written against the 2nd voice that is really in the score (any instrument, edited or not) */
   if (third) { const v2 = v2Midi && v2Midi.length === mel.length ? v2Midi : (bestLine(ev, { uppers: [mel], lo: lowMidi }) || []).map(x => x.midi); if (v2.length === mel.length) uppers = [mel, v2]; }
-  const line = (place && placedBest(ev, uppers, { third, range: place.range, comf: place.comf, staff: place.staff, wShift: place.wShift })) || bestLine(ev, { uppers, lo: lowMidi, third, above }) || bestLine(ev, { uppers, lo: lowMidi - 12, third, above, loose: true }) || bestLine(ev, { uppers, lo: lowMidi - 24, third, loose: true })
+  const line = (place && placedBest(ev, uppers, { third, range: place.range, comf: place.comf, staff: place.staff, wShift: place.wShift })) || bestLine(ev, { uppers, lo: lowMidi, third, above, chordy }) || bestLine(ev, { uppers, lo: lowMidi - 12, third, above, loose: true, chordy }) || bestLine(ev, { uppers, lo: lowMidi - 24, third, loose: true, chordy })
     || bestLine(ev, { uppers, lo: lowMidi - 24, third, loose: true, allowParallel: true });
   if (!line) return secondVoiceXml(xml, partId, { interval: third ? 6 : 3, level: 1 });
   const ids = new Set(kids(root, "part").map(p => p.getAttribute("id"))); let n = 2; while (ids.has("P" + n)) n++;
