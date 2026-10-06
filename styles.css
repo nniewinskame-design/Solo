@@ -1839,12 +1839,20 @@ body.immersive .loopbar{display:none}
 .ed-tabs .ed-bar{background:var(--brand-tint)!important;color:var(--brand-ink)!important;font-weight:650!important;position:relative;margin-right:10px!important}
 .ed-tabs .ed-bar::after{content:"";position:absolute;right:-8px;top:10px;bottom:10px;width:1px;background:var(--hairline-2)}
 
-/* ---- home: one very delicate gradient at the top (light blue → light violet), fading into the page ---- */
-#home{position:relative;isolation:isolate}
-#home::before{content:"";position:absolute;left:0;right:0;top:0;height:320px;z-index:-1;pointer-events:none;
-  background:linear-gradient(110deg,#DDE9FF,#E6E3FF 55%,#EFE4FF);
-  -webkit-mask:var(--fade-g);mask:var(--fade-g)}
-@supports (background:linear-gradient(in oklch 90deg,red,blue)){ #home::before{background:linear-gradient(in oklch 110deg,#DAE7FF,#EEE3FF)} }
+/* ---- home: "Morning Glass" (design agent, 7 Oct): an analogous sky → periwinkle → lilac ribbon (hues 248-305°,
+   L .93, C .04, OKLCH so the middle stays clear) under a white light from above, faded with a Gaussian mask; it
+   drifts sideways over 40 s. No position on #home: it is already a positioned scroll view. ---- */
+#home{isolation:isolate}
+#home::before{content:"";position:absolute;inset:0 0 auto 0;height:360px;z-index:-1;pointer-events:none;
+  background:radial-gradient(70% 55% at 50% 0%,rgb(255 255 255/.55),rgb(255 255 255/0) 70%),linear-gradient(105deg,#D6E6FF 0%,#DFE0FF 50%,#EEE0FF 100%);
+  background-size:100% 100%,200% 100%;background-position:0 0,0% 0;-webkit-mask:var(--fade-g);mask:var(--fade-g)}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){
+  #home::before{background:radial-gradient(70% 55% at 50% 0%,oklch(1 0 0/.55),oklch(1 0 0/0) 70%),
+    linear-gradient(in oklch 105deg,oklch(.935 .040 248) 0%,oklch(.925 .046 278) 25%,oklch(.935 .042 305) 50%,oklch(.925 .046 278) 75%,oklch(.935 .040 248) 100%);
+    background-size:100% 100%,200% 100%}
+}
+@media (prefers-reduced-motion:no-preference){ #home::before{animation:soloDrift 40s ease-in-out infinite alternate} }
+@keyframes soloDrift{to{background-position:0 0,100% 0}}
 
 /* ---- smaller headings ---- */
 .mast .h-xl{font-size:28px!important;letter-spacing:-.035em}
@@ -1853,3 +1861,46 @@ body.immersive .loopbar{display:none}
 .h-m{font-size:17px!important}
 #score .stitle .a{font-size:17px!important}
 .onb .h-l{font-size:24px!important}
+
+/* search: one field (the input inside has no box of its own), as in iOS */
+.search{background:rgba(118,128,160,.12)!important;box-shadow:none!important;border-radius:12px!important;height:40px}
+.search input,.search input[type=search]{background:none!important;box-shadow:none!important;border:0!important;padding:0!important;height:100%!important;border-radius:0!important;font-size:16px}
+.search input::-webkit-search-decoration,.search input::-webkit-search-cancel-button{-webkit-appearance:none}
+.search svg.i{color:var(--text-3)}
+.sort{background:rgba(118,128,160,.12)!important;box-shadow:none!important;border-radius:12px!important;height:40px}
+/* tab bar: the chosen tab in a light tint with the gradient line (Nat liked it) */
+.tabbar .slide{border:1.5px solid transparent!important;background:linear-gradient(var(--brand-tint),var(--brand-tint)) padding-box,var(--grad-line) border-box!important;box-shadow:none!important}
+.tabbar button[aria-current]{color:var(--brand-ink)!important}
+/* metronome: the number itself is the field (tap and type any tempo 30-240) */
+#m-bpm{cursor:text;border-radius:14px;padding:0 6px}
+#m-bpm input{width:3.4ch;border:0;background:var(--brand-tint);border-radius:14px;text-align:center;font:inherit;color:inherit;padding:0;outline:none;box-shadow:0 0 0 2px var(--brand)}
+
+/* ---- Takt in the tool panel: compact, scrolls inside, the music stays in view ---- */
+.ed-pane.bar-pane{display:block!important;max-height:min(46vh,380px);overflow-y:auto;overscroll-behavior:contain;padding:2px 2px 6px;text-align:left}
+.ed-pane.bar-pane[hidden]{display:none!important}
+.bar-pane button{flex:none!important;height:auto;min-height:34px;width:auto;min-width:0}
+.bar-pane .bp-title{display:block;font:650 15px var(--font);margin:2px 2px 0;color:var(--text)}
+.bar-pane .lbl{margin:12px 2px 6px!important;font-size:11px}
+.bar-pane .chips{gap:6px}
+.bar-pane .seg{margin-top:8px!important}
+.bar-pane .seg button{min-height:34px;font-size:13.5px}
+.bar-pane .note{font-size:12.5px;margin:6px 2px 0}
+.bar-pane .keypick{padding:8px 10px;gap:6px}
+.bar-pane .kp-val b{font-size:17px}
+.bar-pane .list .li{min-height:44px;padding-top:6px;padding-bottom:6px}
+.bar-pane .list .li b{font-size:15px}
+.bar-pane .bar-fix{margin:8px 2px 0;font-size:13px;color:var(--text-2)}
+.bar-pane .li.stepper .pill.round{width:36px;height:36px;min-height:36px}
+.bar-pane .li.stepper .step-val{font-size:18px}
+/* tool names: the chosen tool shows its word again; Takt is tinted when not chosen */
+.ed-tabs button{min-width:40px!important;padding:0 9px!important}
+.ed-tabs button[aria-selected="true"] span{display:inline!important}
+.ed-tabs button[aria-selected="true"]{padding:0 13px!important}
+.ed-tabs .ed-bar span{display:none!important}
+.ed-tabs .ed-bar[aria-selected="true"] span{display:inline!important}
+.ed-tabs .ed-bar:not([aria-selected="true"]){background:var(--brand-tint)!important;color:var(--brand-ink)!important}
+.ed-tabs .ed-bar[aria-selected="true"]{background:var(--brand)!important;color:#fff!important}
+.bar-pane button{max-width:none!important;height:auto!important}
+.ed-pane.bar-pane{max-height:min(34vh,300px)}
+.bar-pane #bar-clefnote{display:none}
+body.editmode .ed-info:has(+ .bar-pane:not([hidden])){display:none}

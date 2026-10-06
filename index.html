@@ -181,7 +181,37 @@
   </div>
   <div class="editor" id="editbar" role="toolbar" aria-label="Popraw nuty" hidden>
     <div class="ed-info" id="ed-info" aria-live="polite"></div>
-    <div class="ed-pane" data-pane="pitch">
+    <div class="ed-pane bar-pane" data-pane="bar" hidden>
+
+  <p class="note first" id="bar-note" hidden></p>
+  <b class="bp-title" id="sh-bar-t">Takt</b>
+  <h3 class="lbl">Metrum</h3>
+  <div class="meter" id="bar-time"></div>
+  <h3 class="lbl" id="bar-clef-t">Klucz tej partii</h3>
+  <div class="chips" id="bar-clef"><button data-v="G">Wiolinowy</button><button data-v="F">Basowy</button><button data-v="C4">Tenorowy</button><button data-v="C3">Altowy</button></div>
+  <div class="seg" id="bar-clefmode" style="margin-top:10px"><button data-m="sound">Dźwięki zostają</button><button data-m="lines">Nuty zostają na liniach</button></div>
+  <p class="note" id="bar-clefnote"></p>
+  <h3 class="lbl">Tonacja utworu</h3>
+  <div class="keypick" id="bar-keypick">
+    <div class="kp-row"><button type="button" class="pill round sm" data-kd="-1" aria-label="Tonacja z jednym bemolem więcej"><svg class="i"><use href="#minus"/></svg></button>
+      <div class="kp-val" aria-live="polite"><b id="bar-keyname"></b><small id="bar-keysig"></small></div>
+      <button type="button" class="pill round sm" data-kd="1" aria-label="Tonacja z jednym krzyżykiem więcej"><svg class="i"><use href="#plus"/></svg></button></div>
+    <p class="note" style="margin:0;text-align:center">Wszystkie partie przenoszą się razem.</p>
+  </div>
+  <details class="bar-fix"><summary>Popraw tylko znaki przy kluczu</summary>
+  <label class="ask-row" for="bar-key"><span>Znaki przy kluczu</span><select id="bar-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label></details>
+  <h3 class="lbl">Takty</h3>
+  <div class="list">
+    <button class="li tap" id="bar-add"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt za</b></span></button>
+    <button class="li tap" id="bar-addbefore"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt przed</b></span></button>
+    <button class="li tap danger" id="bar-del"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń ten takt</b></span></button>
+  </div>
+  <h3 class="lbl">Tempo odsłuchu</h3>
+  <div class="list">
+    <div class="li stepper"><button class="pill round" id="bar-bpm-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><span class="grow step-val"><svg class="q"><use href="#quarter"/></svg> = <b id="bar-bpm">120</b></span><button class="pill round" id="bar-bpm-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div>
+  </div>
+    </div>
+    <div class="ed-pane" data-pane="pitch" hidden>
       <button data-ed="up" aria-label="W górę"><svg class="i"><use href="#up"/></svg></button>
       <button data-ed="down" aria-label="W dół"><svg class="i"><use href="#down"/></svg></button>
       <button data-ed="octup" aria-label="Oktawę wyżej"><svg class="i"><use href="#octave"/></svg></button>
@@ -225,7 +255,7 @@
       <button data-ed="slur" aria-label="Łuk do następnej nuty"><svg class="i"><use href="#slur"/></svg></button>
     </div>
     <div class="ed-tabs" role="tablist">
-      <button data-ed="bar" class="ed-bar" aria-label="Takt: metrum, klucz, tonacja"><svg class="i"><use href="#bar"/></svg><span>Takt</span></button>
+      <button role="tab" data-tab-ed="bar" class="ed-bar" aria-selected="false" aria-label="Takt: metrum, klucz, tonacja"><svg class="i"><use href="#bar"/></svg><span>Takt</span></button>
       <button role="tab" data-tab-ed="pitch" aria-selected="true" aria-label="Wysokość"><svg class="i"><use href="#drag"/></svg><span>Wysokość</span></button>
       <button role="tab" data-tab-ed="len" aria-selected="false" aria-label="Długość"><svg class="i"><use href="#dur"/></svg><span>Długość</span></button>
       <button role="tab" data-tab-ed="acc" aria-selected="false" aria-label="Znaki chromatyczne"><svg class="i"><use href="#sharp"/></svg><span>♯ ♭</span></button>
@@ -583,36 +613,7 @@
   <button class="btn primary wide" id="new-go"><svg class="i"><use href="#pencil"/></svg><span>Zacznij pisać</span></button>
 </div>
 
-<div class="sheet" id="sh-bar" role="dialog" aria-modal="true" aria-labelledby="sh-bar-t" hidden>
-  <div class="grab"></div>
-  <div class="shead"><h2 class="h-m" id="sh-bar-t">Takt</h2><button class="done" data-close>Gotowe</button></div>
-  <p class="note first" id="bar-note">Metrum, klucz i znaki zmieniają się od tego taktu do końca utworu.</p>
-  <h3 class="lbl">Metrum</h3>
-  <div class="meter" id="bar-time"></div>
-  <h3 class="lbl" id="bar-clef-t">Klucz tej partii</h3>
-  <div class="chips" id="bar-clef"><button data-v="G">Wiolinowy</button><button data-v="F">Basowy</button><button data-v="C4">Tenorowy</button><button data-v="C3">Altowy</button></div>
-  <div class="seg" id="bar-clefmode" style="margin-top:10px"><button data-m="sound">Dźwięki zostają</button><button data-m="lines">Nuty zostają na liniach</button></div>
-  <p class="note" id="bar-clefnote"></p>
-  <h3 class="lbl">Tonacja utworu</h3>
-  <div class="keypick" id="bar-keypick">
-    <div class="kp-row"><button type="button" class="pill round sm" data-kd="-1" aria-label="Tonacja z jednym bemolem więcej"><svg class="i"><use href="#minus"/></svg></button>
-      <div class="kp-val" aria-live="polite"><b id="bar-keyname"></b><small id="bar-keysig"></small></div>
-      <button type="button" class="pill round sm" data-kd="1" aria-label="Tonacja z jednym krzyżykiem więcej"><svg class="i"><use href="#plus"/></svg></button></div>
-    <p class="note" style="margin:0;text-align:center">Wszystkie partie przenoszą się razem.</p>
-  </div>
-  <details class="bar-fix"><summary>Popraw tylko znaki przy kluczu</summary>
-  <label class="ask-row" for="bar-key"><span>Znaki przy kluczu</span><select id="bar-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label></details>
-  <h3 class="lbl">Takty</h3>
-  <div class="list">
-    <button class="li tap" id="bar-add"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt za</b></span></button>
-    <button class="li tap" id="bar-addbefore"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt przed</b></span></button>
-    <button class="li tap danger" id="bar-del"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń ten takt</b></span></button>
-  </div>
-  <h3 class="lbl">Tempo odsłuchu</h3>
-  <div class="list">
-    <div class="li stepper"><button class="pill round" id="bar-bpm-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><span class="grow step-val"><svg class="q"><use href="#quarter"/></svg> = <b id="bar-bpm">120</b></span><button class="pill round" id="bar-bpm-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div>
-  </div>
-</div>
+
 
 <div class="sheet" id="sh-more" role="dialog" aria-modal="true" aria-labelledby="sh-more-t" hidden>
   <div class="grab"></div>

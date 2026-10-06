@@ -911,6 +911,7 @@ function edTab(name) {
   $$("#editbar [data-tab-ed]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tabEd === name)));
   $$("#editbar .ed-pane").forEach(p => (p.hidden = p.dataset.pane !== name));
   S.edTab = name;
+  if (name === "bar") buildBarSheet();          // Takt sits in the tool panel like the other tools (the music stays in view)
 }
 function selectNote(sel) {
   S.editSel = sel; if (sel) S.editMode = true;
@@ -920,9 +921,9 @@ function selectNote(sel) {
   $("#editbar").hidden = !on;
   $$("#pages g.nsel").forEach(g => g.classList.remove("nsel"));
   $("#ed-undo").disabled = !(S.undo && S.undo.length); syncRedo();
-  if (!S.edTab) edTab(sel ? "pitch" : "len");
+  if (!S.edTab) edTab(sel ? "pitch" : "bar");          // editing opens on Takt (Nat, 7 Oct)
   const at = sel ? xmlNoteAt(parseXml(S.piece.xml), sel) : null, n = at && at.n, isRest = !!(n && kid(n, "rest"));
-  $$("#editbar .ed-pane:not([data-pane=len]) button").forEach(b => (b.disabled = !n || (isRest && !["rest", "delete", "left", "right"].includes(b.dataset.ed))));
+  $$("#editbar .ed-pane:not([data-pane=len]):not([data-pane=bar]) button").forEach(b => (b.disabled = !n || (isRest && !["rest", "delete", "left", "right"].includes(b.dataset.ed))));
   const cur = n ? (txt(n, "type") || "whole") : (S.inLen || "quarter");
   $$("#editbar [data-len]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.len === cur)));
   $("#ed-dot").setAttribute("aria-pressed", String(!!(n && kid(n, "dot"))));
@@ -1116,7 +1117,7 @@ function redo() { if (!S.redo || !S.redo.length) return false; S.undo.push(S.pie
 function editNote(op) {
   if (op === "done") { setEditMode(false); return; }
   if (op.startsWith("len:") && !S.editSel) return;
-  if (op === "bar") { openSheet("bar"); return; }
+  if (op === "bar") { edTab("bar"); return; }
   if (op === "beam") { beamTap(); return; }
   if (op === "undo") { undo(); return; }
   if (op === "redo") { redo(); return; }
@@ -1417,7 +1418,7 @@ function barOp(op, val) {
   /* a new metre re-sizes only empty bars; written bars that no longer add up are said, not silently left red */
   const red = op === "time" ? doubtfulBars(barIssues(S.piece.xml)).filter(b => b >= bar).length : 0;
   hud(red ? `Metrum ${val}. ${red} ${plural(red, "takt trzeba", "takty trzeba", "taktów trzeba")} poprawić (na czerwono)` : { time: `Metrum ${val}`, clef: "Zmieniono klucz", key: "Zmieniono znaki przy kluczu", add: "Dodano takt", addbefore: "Dodano takt", del: "Usunięto takt" }[op], red ? 4000 : 1600);
-  if (op === "del" || op === "add" || op === "addbefore") closeSheet(); else buildBarSheet();
+  buildBarSheet();
 }
 let barClefMode = "sound";
 $$("#bar-clef button").forEach(b => b.addEventListener("click", () => barOp("clef", b.dataset.v)));
@@ -3471,7 +3472,7 @@ $("#s-sub").addEventListener("click", e => {
   const b = e.target.closest("[data-edit]"); if (!b) return;
   const k = b.dataset.edit;
   /* the clef and the key are changed in editing (Takt), not in the view (Nat, 7 Oct) */
-  if (k === "clef" || k === "key") { const go = () => { S.editSel = null; S.fromBar = -1; openSheet("bar"); }; if (S.editMode) go(); else { setEditMode(true); whenDrawn(go); } return; }
+  if (k === "clef" || k === "key") { const go = () => { S.editSel = null; S.fromBar = -1; edTab("bar"); }; if (S.editMode) go(); else { setEditMode(true); whenDrawn(go); } return; }
   inlineEdit(b, { value: S.piece[k] || "", placeholder: k === "composer" ? "Kompozytor" : "Instrument", onSave: v => setPieceField(k, v) });
 });
 
@@ -3613,6 +3614,7 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Naprawione: po pętli i dotknięciu strony znikały przyciski. Nowy utwór nie zapisuje się już dwa razy.",
   "Klucz każdej partii i tonację całego utworu zmieniasz w edycji (Takt). W „⋯” zostały tylko widok i udostępnianie.",
   "Belki ósemek: Nuta → Belka łączy z następną nutą albo rozdziela. Partię ukryjesz z nut w jej menu (Ukryj).",
+  "Edycja zaczyna się od Taktu, który jest w dolnym panelu (nuty zostają widoczne). W metronomie dotknij liczby, żeby wpisać dowolne tempo.",
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
   "Nowa melodia: wybierasz klucz, tonację (dur albo moll) i dowolne metrum.",
@@ -3710,6 +3712,15 @@ function metroStop() {
   if (!playState && !tuner.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
 }
 $("#m-go").addEventListener("click", () => metro.on ? metroStop() : metroStart());
+/* any tempo by typing: tap the number, type, Enter (or tap away) */
+$("#m-bpm").addEventListener("click", () => {
+  const b = $("#m-bpm"); if (b.querySelector("input")) return;
+  const inp = document.createElement("input"); inp.type = "text"; inp.inputMode = "numeric"; inp.enterKeyHint = "done"; inp.maxLength = 3; inp.value = String(metro.bpm); inp.setAttribute("aria-label", "Tempo, uderzenia na minutę");
+  b.textContent = ""; b.appendChild(inp); inp.focus(); inp.select();
+  const done = ok => { const v = parseInt(inp.value, 10); inp.remove(); if (ok && v >= 1) { if (v < 30 || v > 240) hud("Tempo od 30 do 240"); setMetroBpm(v); } else syncMetro(); };
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); done(true); } if (e.key === "Escape") done(false); });
+  inp.addEventListener("blur", () => { if (inp.isConnected) done(true); });
+});
 const setMetroBpm = v => { metro.bpm = Math.max(30, Math.min(240, Math.round(v))); store.set("metroBpm", metro.bpm); syncMetro(); };
 $("#m-down").addEventListener("click", () => setMetroBpm(metro.bpm - (metro.bpm > 120 ? 4 : 2)));
 $("#m-up").addEventListener("click", () => setMetroBpm(metro.bpm + (metro.bpm >= 120 ? 4 : 2)));
