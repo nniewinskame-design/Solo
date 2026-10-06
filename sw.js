@@ -5,7 +5,7 @@
    ("homr-web-models", ~150 MB) and files shared to Solo ("solo-shared") are never touched here. */
 const CACHE = "solo-v31";
 const LIBS = "solo-libs";
-const SHELL = ["./", "index.html", "styles.css", "theme.js", "core.js", "arrange.js", "motion.js", "app.js", "profile.js", "ownsound.js", "clefs.js", "manifest.webmanifest",
+const SHELL = ["./", "index.html", "styles.css", "listen.css", "theme.js", "core.js", "arrange.js", "motion.js", "orb.js", "app.js", "profile.js", "ownsound.js", "clefs.js", "manifest.webmanifest",
   "prywatnosc.html", "regulamin.html", "licencje.html", "legal.js",
   "icons/favicon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 const LIB_FILES = ["fonts/fonts.css", "fonts/geist-latin.woff2", "fonts/geist-latinext.woff2",

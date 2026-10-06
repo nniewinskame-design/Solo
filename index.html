@@ -19,6 +19,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="listen.css">
 <script src="theme.js"></script>
 </head>
 <body>
@@ -254,6 +255,10 @@
     <h3 class="lbl">Instrumenty</h3>
     <div class="prof" id="prof"></div>
 
+    <h3 class="lbl lx-over" id="snd-t">Brzmienia</h3>
+    <div class="snd-row" id="own-list" role="group" aria-labelledby="snd-t"></div>
+    <p class="snd-sub" id="own-st"></p>
+
     <h3 class="lbl">Wygląd</h3>
     <div class="group">
       <div class="li col">
@@ -307,6 +312,19 @@
   </div>
 </section>
 
+<div class="sheet" id="sh-own" role="dialog" aria-modal="true" aria-labelledby="sh-own-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-own-t">Brzmienie</h2><button class="done" data-close>Gotowe</button></div>
+  <p class="snd-sheet-st" id="own-sheet-st"></p>
+  <div class="group snd-acts">
+    <button class="li tap" data-own="play"><span class="ic"><svg class="i"><use href="#play"/></svg></span><span class="grow"><b>Posłuchaj</b></span></button>
+    <button class="li tap" data-own="again"><span class="ic"><svg class="i"><use href="#mic"/></svg></span><span class="grow"><b>Nagraj ponownie</b></span></button>
+    <label class="li" for="own-use"><span class="ic"><svg class="i"><use href="#music"/></svg></span><span class="grow"><b>Używaj w odtwarzaniu</b><small>Solo zagra Twoim brzmieniem</small></span><input type="checkbox" id="own-use" class="switch"></label>
+    <button class="li tap" data-own="re"><span class="ic"><svg class="i"><use href="#swap"/></svg></span><span class="grow"><b>Zmień instrument</b></span></button>
+    <button class="li tap danger" data-own="del"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń</b></span></button>
+  </div>
+</div>
+
 <!-- =============== WELCOME =============== -->
 <!-- =============== TABS: TUNER, METRONOME =============== -->
 <section id="tunerv" class="view tabview" hidden>
@@ -337,10 +355,19 @@
 </nav>
 
 <!-- =============== OWN SOUND: guided recording =============== -->
-<section id="ownf" class="overlay ownf" role="dialog" aria-modal="true" aria-label="Twój dźwięk" hidden>
+<section id="ownf" class="overlay ownf lx" role="dialog" aria-modal="true" aria-label="Twoje brzmienie" hidden>
+  <div class="lx-glow" aria-hidden="true"></div>
   <div class="ownf-panel">
-    <div class="onb-top"><button class="pill round" id="ownf-x" aria-label="Zamknij"><svg class="i"><use href="#x"/></svg></button><div class="onb-dots" id="ownf-dots"></div><span class="ownf-sp"></span></div>
-    <div class="ownf-body" id="ownf-body"></div>
+    <div class="lx-top"><button class="pill round" id="ownf-x" aria-label="Zamknij"><svg class="i"><use href="#x"/></svg></button><div class="lx-dots" id="ownf-dots" aria-hidden="true"></div><span class="lx-count" id="ownf-count" aria-live="polite"></span></div>
+    <div class="ownf-body" id="ownf-body">
+      <div class="lx-head" id="of-head"></div>
+      <div class="lx-stage" id="of-stage">
+        <canvas class="lx-orb" id="of-orb" aria-hidden="true"></canvas>
+        <svg class="lx-prog" viewBox="0 0 240 240" aria-hidden="true"><circle cx="120" cy="120" r="110" class="lx-prog-fill" id="of-ring" style="stroke-dasharray:691;stroke-dashoffset:691"/></svg>
+        <div class="of-note" id="of-note"></div>
+      </div>
+      <div class="lx-foot" id="of-foot"></div>
+    </div>
     <div class="ownf-acts" id="ownf-acts"></div>
   </div>
 </section>
@@ -459,32 +486,37 @@
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-tuner-t">Stroik</h2><button class="done" data-close>Gotowe</button></div>
   <div class="host" id="tuner-sheet-host"><div id="tuner-ui">
-  <div class="tuner2" id="tuner2" data-st="off">
-    <div class="tn-top">
-      <div class="tn-note"><b id="t-note">–</b><span id="t-oct"></span></div>
-      <div class="tn-read"><b id="t-cents"></b><small id="t-hz">Zagraj długi dźwięk</small></div>
+  <div class="tuner2 lx" id="tuner2" data-st="off">
+    <div class="lx-glow" aria-hidden="true"></div>
+    <div class="lx-stage tn-stage">
+      <canvas class="lx-orb" id="t-orb" aria-hidden="true"></canvas>
+      <div class="tn-top">
+        <div class="tn-note"><b id="t-note">–</b><span id="t-oct"></span></div>
+        <div class="tn-read"><b id="t-cents" aria-live="polite"></b></div>
+      </div>
     </div>
+    <small class="tn-hz" id="t-hz">Zagraj długi dźwięk</small>
     <div class="tn-meter" aria-hidden="true">
       <div class="tn-zones" id="t-zones"></div>
       <div class="tn-ticks"><i></i><i></i><i></i><i></i><i class="c"></i><i></i><i></i><i></i><i></i></div>
       <div class="tn-dot" id="t-dot"></div>
       <div class="tn-scale"><span>−50</span><span>za nisko</span><span>0</span><span>za wysoko</span><span>+50</span></div>
     </div>
-    <canvas class="tn-trace" id="t-trace" aria-label="Wykres dźwięku z ostatnich sekund"></canvas>
+    <canvas class="tn-trace" id="t-trace" aria-hidden="true"></canvas>
     <button class="btn primary wide" id="t-go"><svg class="i"><use href="#mic"/></svg><span>Włącz stroik</span></button>
-    <p class="note">Stroik słucha przez mikrofon tylko na tym urządzeniu i niczego nie nagrywa.</p>
+    <p class="note tn-priv">Stroik słucha tylko na tym urządzeniu i niczego nie nagrywa.</p>
   </div>
-  <h3 class="lbl">Strój instrumentu</h3>
-  <div class="seg" id="t-instr"><button data-tr="0">C</button><button data-tr="2">B</button><button data-tr="9">Es</button><button data-tr="7">F</button></div>
-  <h3 class="lbl">Dokładność</h3>
-  <div class="seg three" id="t-tol"><button data-tol="10">±10 ¢</button><button data-tol="5">±5 ¢</button><button data-tol="3">±3 ¢</button></div>
-  <div class="list"><div class="li"><span class="grow"><b>A</b></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><span class="unit">Hz</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
-  <div class="owncard" id="own">
-    <div class="own-head"><span class="own-ic"><svg class="i"><use href="#mic"/></svg></span><div class="grow"><b>Twój dźwięk</b><small id="own-st"></small></div></div>
-    <div class="list own-list" id="own-list"></div>
-    <button class="btn primary wide" id="own-rec"><svg class="i"><use href="#mic"/></svg><span>Nagraj</span></button>
-    <label class="li" for="own-use"><span class="grow"><b>Graj moim dźwiękiem</b></span><input type="checkbox" id="own-use" class="switch"></label>
-  </div>
+  <details class="lx-set" id="t-set">
+    <summary><span class="ic"><svg class="i"><use href="#sliders"/></svg></span><span class="grow"><b>Ustawienia stroika</b><small id="t-set-sum"></small></span><svg class="i chev"><use href="#down"/></svg></summary>
+    <div class="lx-set-body">
+      <h3 class="lbl">Strój instrumentu</h3>
+      <div class="seg" id="t-instr"><button data-tr="0">C</button><button data-tr="2">B</button><button data-tr="9">Es</button><button data-tr="7">F</button></div>
+      <h3 class="lbl">Dokładność</h3>
+      <div class="seg three" id="t-tol"><button data-tol="10">±10 ¢</button><button data-tol="5">±5 ¢</button><button data-tol="3">±3 ¢</button></div>
+      <h3 class="lbl">Strój A</h3>
+      <div class="list"><div class="li"><span class="grow"><b>A</b></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><span class="unit">Hz</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
+    </div>
+  </details>
   </div></div>
 </div>
 
@@ -788,6 +820,7 @@
 <script src="core.js" defer></script>
 <script src="arrange.js" defer></script>
 <script src="motion.js" defer></script>
+<script src="orb.js" defer></script>
 <script src="app.js" defer></script>
 <script src="profile.js" defer></script>
 <script src="ownsound.js" defer></script>
