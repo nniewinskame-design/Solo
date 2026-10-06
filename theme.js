@@ -6,5 +6,5 @@
   var root = document.documentElement;
   root.setAttribute("data-theme", t);
   var metas = document.querySelectorAll('meta[name="theme-color"]');
-  for (var i = 0; i < metas.length; i++) { metas[i].removeAttribute("media"); metas[i].setAttribute("content", t === "dark" ? "#170B0F" : "#F4EEE4"); }
+  for (var i = 0; i < metas.length; i++) { metas[i].removeAttribute("media"); metas[i].setAttribute("content", t === "dark" ? "#16131C" : "#FBF6EC"); }
 })();

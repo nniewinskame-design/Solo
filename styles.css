@@ -1,40 +1,63 @@
-/* ===== Solo · design tokens ===== */
+/* ===== Solo · design tokens: "Mosiądz i papier" (brass & paper) =====
+   One idea: paper, ink, the stave and the trombone's brass. Cherry is the brand, brass marks "you are here",
+   cobalt is the loop, vermilion the playing cursor; seven slide-position colours tell voices apart.
+   Type: Bricolage Grotesque for titles and live numbers, Atkinson Hyperlegible Next (made for low vision) for text.
+   Contrast checked against paper: ink 15.9:1, ink-2 6.4:1, ink-3 4.8:1, cherry 7.1:1. */
 :root{
-  --paper:#F4EEE4; --paper-2:#E9E1D4; --card:#FFFCF7; --ink:#1E1714; --ink-2:#6E625A; --ink-3:#A2968C;
-  --line:rgba(30,23,20,.10); --fill:rgba(30,23,20,.06); --fill-2:rgba(30,23,20,.10);
-  --velvet:#4B1622; --velvet-2:#6B2131; --velvet-deep:#2E0C15; --velvet-tint:#F1DEDB; --on-velvet:#F6E9DA;
-  --brass:#C99A45; --brass-ink:#8A5E17; --brass-hi:#E6C27A;
-  --primary:var(--velvet); --on-primary:#F8EEDF; --accent-ink:var(--velvet);
-  --danger:#B3261E;
-  --shadow-1:0 1px 2px rgba(46,12,21,.08),0 6px 18px rgba(46,12,21,.08);
-  --shadow-2:0 1px 2px rgba(46,12,21,.10),0 14px 40px rgba(46,12,21,.18);
-  --page-shadow:0 1px 2px rgba(46,12,21,.10),0 8px 24px rgba(46,12,21,.10);
+  --paper:#FBF6EC; --paper-2:#F4ECDD; --card:#FFFDF9; --score-page:#FFFDF9;
+  --ink:#1D1A24; --ink-2:#5E5868; --ink-3:#716A7A;
+  --line:rgba(29,26,36,.11); --fill:rgba(29,26,36,.055); --fill-2:rgba(29,26,36,.10);
+  --cherry:#A3173D; --cherry-2:#8A1233; --cherry-deep:#5E0D24; --cherry-tint:#FCE7EC; --on-cherry:#FFFFFF;
+  --brass:#F4B23E; --brass-deep:#8A5A00; --brass-hi:#F8CB72; --on-brass:#1D1A24;
+  --cobalt:#2A44C9; --cobalt-tint:#E8EDFF;
+  --in-tune:#11734F; --off-tune:#B8340F; --near-tune:#C27A00; --cursor:#FF4F2E;
+  --pos-1:#A3173D; --pos-2:#2A44C9; --pos-3:#C98A12; --pos-4:#11734F; --pos-5:#6B3FA0; --pos-6:#D2451E; --pos-7:#0F7C8C;
+  --scrim:rgb(22 19 28 / .32);
+  /* older names, kept so every screen follows the new palette */
+  --velvet:var(--cherry); --velvet-2:var(--cherry-2); --velvet-deep:var(--cherry-deep); --velvet-tint:var(--cherry-tint); --on-velvet:var(--on-cherry);
+  --brass-ink:var(--brass-deep);
+  --primary:var(--cherry); --on-primary:var(--on-cherry); --accent-ink:var(--cherry);
+  --danger:#B8340F;
+  --shadow-1:0 1px 1px rgb(60 30 20/.06),0 2px 6px rgb(60 30 20/.06);
+  --shadow-2:0 2px 4px rgb(60 30 20/.06),0 10px 24px -4px rgb(60 30 20/.14);
+  --shadow-3:0 8px 16px rgb(60 30 20/.08),0 24px 48px -8px rgb(60 30 20/.18);
+  --page-shadow:0 1px 0 rgb(60 30 20/.05),0 12px 32px -12px rgb(60 30 20/.25);
   --page-filter:none;
-  --sans:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  --r-card:22px; --r-sheet:30px;
-  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --display:"Bricolage Grotesque",ui-rounded,system-ui,-apple-system,sans-serif;
+  --sans:"Atkinson Hyperlegible Next",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r-xs:6px; --r-s:10px; --r-m:16px; --r-l:24px; --r-xl:32px; --r-pill:999px; --r-page:4px;
+  --r-card:18px; --r-sheet:28px;
+  --tap:48px; --tap-min:44px;
+  --ease-out:cubic-bezier(0.23,1,0.32,1); --ease-out-quick:cubic-bezier(0.2,0.8,0.2,1);
+  /* springs (SwiftUI response/damping → CSS linear()): press .20/.90, snappy .30/.86, bouncy .45/.68, gentle .50/1 */
+  --spring-press:linear(0,0.051,0.164,0.301,0.437,0.561,0.666,0.753,0.821,0.874,0.913,0.942,0.962,0.977,0.986,0.993,0.997,0.999,1.001,1.001,1.002,1.001,1.001,1.001,1); --spring-press-d:270ms;
+  --spring-snappy:linear(0,0.054,0.177,0.323,0.467,0.597,0.705,0.792,0.859,0.908,0.944,0.968,0.984,0.994,1,1.003,1.005,1.005,1.005,1.004,1.003,1.003,1.002,1.001,1); --spring-snappy-d:420ms;
+  --spring-bouncy:linear(0,0.078,0.251,0.453,0.641,0.796,0.911,0.986,1.03,1.05,1.054,1.049,1.039,1.028,1.018,1.01,1.004,1,0.998,0.997,0.997,0.997,0.998,0.999,1); --spring-bouncy-d:750ms;
+  --spring-gentle:linear(0,0.058,0.182,0.324,0.459,0.577,0.675,0.754,0.815,0.863,0.899,0.926,0.946,0.961,0.972,0.98,0.985,0.99,0.993,0.995,0.996,0.997,0.998,0.999,1); --spring-gentle-d:740ms;
   --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
   color-scheme:light;
 }
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --paper:#170B0F; --paper-2:#100709; --card:#24131A; --ink:#F4EBDD; --ink-2:#B8A39A; --ink-3:#7E6B63;
-    --line:rgba(244,235,221,.10); --fill:rgba(244,235,221,.07); --fill-2:rgba(244,235,221,.12);
-    --velvet:#5C1B29; --velvet-tint:#3A1620; --primary:#D9B062; --on-primary:#2E0C15; --accent-ink:#E6C27A;
-    --brass:#D9B062; --danger:#FF8A80;
-    --shadow-1:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.3); --shadow-2:0 14px 40px rgba(0,0,0,.5);
-    --page-shadow:0 8px 30px rgba(0,0,0,.55); --page-filter:brightness(.88) sepia(.12);
-    color-scheme:dark;
-  }
+@supports not (transition-timing-function:linear(0,1)){
+  :root{--spring-snappy:cubic-bezier(0.25,1.1,0.4,1);--spring-bouncy:cubic-bezier(0.34,1.4,0.5,1);--spring-gentle:cubic-bezier(0.22,1,0.36,1);--spring-press:cubic-bezier(0.2,0.9,0.3,1)}
 }
+/* "Scena": the stage at night, warm violet-black; scores stay paper-coloured */
 :root[data-theme="dark"]{
-  --paper:#170B0F; --paper-2:#100709; --card:#24131A; --ink:#F4EBDD; --ink-2:#B8A39A; --ink-3:#7E6B63;
-  --line:rgba(244,235,221,.10); --fill:rgba(244,235,221,.07); --fill-2:rgba(244,235,221,.12);
-  --velvet:#5C1B29; --velvet-tint:#3A1620; --primary:#D9B062; --on-primary:#2E0C15; --accent-ink:#E6C27A;
-  --brass:#D9B062; --danger:#FF8A80;
-  --shadow-1:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.3); --shadow-2:0 14px 40px rgba(0,0,0,.5);
-  --page-shadow:0 8px 30px rgba(0,0,0,.55); --page-filter:brightness(.88) sepia(.12);
+  --paper:#16131C; --paper-2:#1F1B27; --card:#25212E; --score-page:#EDE7DC;
+  --ink:#F3EEE6; --ink-2:#ABA4B3; --ink-3:#9A90A6;
+  --line:rgba(243,238,230,.12); --fill:rgba(243,238,230,.07); --fill-2:rgba(243,238,230,.12);
+  --cherry:#FF6B88; --cherry-2:#FF8AA1; --cherry-deep:#C9445F; --cherry-tint:#3A1A26; --on-cherry:#16131C;
+  --brass:#F6C25B; --brass-deep:#F6C25B; --brass-hi:#F9D486; --on-brass:#16131C;
+  --cobalt:#8EA2FF; --cobalt-tint:#262C52;
+  --in-tune:#43D19E; --off-tune:#FF8A5C; --near-tune:#F6C25B; --cursor:#FF6A4D;
+  --pos-1:#FF6B88; --pos-2:#8EA2FF; --pos-3:#F6C25B; --pos-4:#43D19E; --pos-5:#C3A2F0; --pos-6:#FF8A5C; --pos-7:#5ED3E0;
+  --scrim:rgb(0 0 0/.5); --danger:#FF8A5C;
+  --shadow-1:0 1px 2px rgba(0,0,0,.35),0 6px 18px rgba(0,0,0,.3); --shadow-2:0 2px 6px rgba(0,0,0,.4),0 14px 36px rgba(0,0,0,.45);
+  --shadow-3:0 10px 24px rgba(0,0,0,.45),0 30px 60px rgba(0,0,0,.5);
+  --page-shadow:0 10px 30px rgba(0,0,0,.55); --page-filter:brightness(.93);
   color-scheme:dark;
+}
+@media (prefers-reduced-motion:reduce){
+  :root{--spring-press:linear(0,1);--spring-snappy:var(--ease-out);--spring-bouncy:var(--ease-out);--spring-gentle:var(--ease-out);--spring-snappy-d:200ms;--spring-bouncy-d:200ms;--spring-gentle-d:200ms}
 }
 
 /* ===== Base ===== */
@@ -47,15 +70,15 @@ button,input,select,textarea{font:inherit;color:inherit}
 button{background:none;border:0;padding:0;cursor:pointer}
 button:disabled{opacity:.45;cursor:default}
 a{color:var(--accent-ink)}
-:focus-visible{outline:3px solid var(--brass);outline-offset:2px;border-radius:12px}
+:focus-visible{outline:3px solid var(--cobalt);outline-offset:2px;border-radius:12px}
 .sprite{position:absolute;width:0;height:0;overflow:hidden}
 svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
 svg.i .h{fill:var(--acc,currentColor);stroke:none}
 /* brand lockup: the note from the icon + the word, same colour; never the squircle next to the word */
 svg.mark{width:.82em;height:1.02em;fill:currentColor;flex:none;margin-bottom:.06em}
-.h-xl{font-weight:700;letter-spacing:-.045em;line-height:.98;margin:0}
-.h-l{font-size:30px;font-weight:700;letter-spacing:-.035em;line-height:1.08;margin:0}
-.h-m{font-size:22px;font-weight:650;letter-spacing:-.02em;margin:0}
+.h-xl{font-family:var(--display);font-weight:700;font-stretch:90%;letter-spacing:-.03em;line-height:1;margin:0}
+.h-l{font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.025em;line-height:1.08;margin:0}
+.h-m{font-family:var(--display);font-size:22px;font-weight:650;letter-spacing:-.01em;margin:0}
 .sub{color:var(--ink-2);margin:4px 0 0}
 .sub.sm{font-size:15px}
 .foot{font-size:13px;color:var(--ink-2);font-weight:500}
@@ -73,10 +96,10 @@ svg.mark{width:.82em;height:1.02em;fill:currentColor;flex:none;margin-bottom:.06
 .btn.small{min-height:40px;padding:0 16px;font-size:15px}
 .btn.wide{display:flex;width:100%}
 .btn.primary{background:var(--primary);color:var(--on-primary);--acc:currentColor}
-.btn.cream{background:#F8EEDF;color:#2E0C15;box-shadow:0 6px 20px rgba(0,0,0,.2);--acc:#4B1622}
+.btn.cream{background:#F8EEDF;color:#2E0C15;box-shadow:0 6px 20px rgba(0,0,0,.2);--acc:#A3173D}
 .btn.glass{background:rgba(30,12,16,.28);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3);backdrop-filter:blur(18px) saturate(1.5);-webkit-backdrop-filter:blur(18px) saturate(1.5);color:#fff;--acc:var(--brass-hi)}
 .btn.tinted{background:var(--fill);color:var(--ink);--acc:var(--accent-ink)}
-.btn.danger{background:var(--danger);color:#fff}
+.btn.danger{background:var(--danger);color:var(--on-cherry)}
 .btn.text-on-dark{color:var(--brass-hi);min-height:46px}
 .btn + .btn.wide{margin-top:8px}
 .pill{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 16px 0 10px;border-radius:99px;font-weight:600;background:var(--card);box-shadow:var(--shadow-1);color:var(--ink)}
@@ -386,7 +409,7 @@ details.help li{margin:4px 0}
 /* ===== Welcome ===== */
 .overlay{position:fixed;inset:0;z-index:30}
 .welcome{background:var(--paper);color:var(--ink);overflow:auto}
-.velvet{background:radial-gradient(120% 90% at 20% 0%,#6B2131 0%,#4B1622 45%,#2E0C15 100%)}
+.velvet{background:radial-gradient(120% 90% at 20% 0%,#B8244B 0%,#A3173D 45%,#5E0D24 100%)}
 .w-photo{position:absolute;left:0;right:0;top:0;height:60%;overflow:hidden}
 .w-photo img{width:100%;height:100%;object-fit:cover;object-position:50% 38%}
 .w-panel{position:relative;min-height:100%;display:flex;flex-direction:column;padding:calc(18px + var(--safe-t)) max(24px,env(safe-area-inset-left)) calc(20px + var(--safe-b))}
@@ -628,7 +651,7 @@ html.theming,html.theming *{transition:background-color 300ms ease,color 300ms e
   --glass-line:rgba(255,255,255,.65);
   --glass-hi:inset 0 1px 0 rgba(255,255,255,.85),inset 0 -1px 0 rgba(255,255,255,.18),inset 0 0 0 .5px rgba(255,255,255,.55);
   --glass-drop:0 1px 2px rgba(46,12,21,.10),0 10px 30px rgba(46,12,21,.16);
-  --prom:linear-gradient(180deg,#6B2131,#4B1622); --prom-ink:#F8EEDF;
+  --prom:linear-gradient(180deg,#B8244B,#A3173D); --prom-ink:#F8EEDF;
   --r-sheet:34px;
 }
 :root[data-theme="dark"]{
@@ -1000,7 +1023,7 @@ body.onhome.sheet-add .fab{transform:rotate(45deg)}
 .step{display:flex;flex-direction:column;gap:4px;background:var(--fill);border-radius:16px;padding:14px}
 .step b{font-size:15px}.step span{font-size:16px;line-height:1.5}
 .step .i{width:18px;height:18px;vertical-align:-3px}
-.tile.danger{color:#C93A2E}
+.tile.danger{color:var(--danger)}
 .card .thumb{-webkit-touch-callout:none;user-select:none}
 /* Apple-like motion: springs with a small overshoot (response ~0.35 s, damping ~0.8) */
 :root{--spring:cubic-bezier(.32,1.25,.5,1);--spring-soft:cubic-bezier(.25,1.1,.4,1)}
@@ -1037,7 +1060,7 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text}
 .emojis{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:14px 0}
 .emojis button{height:52px;border-radius:14px;background:var(--fill);font-size:24px;border:2px solid transparent}
 .emojis button[aria-pressed="true"]{background:var(--card);border-color:var(--primary)}
-.btn.danger{color:#C93A2E}
+.btn.ghost.danger{color:var(--danger);background:transparent}
 #sh-card .tiles{grid-template-columns:repeat(3,1fr)}
 #tp-fill{transition:none}
 .cdot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
@@ -1107,3 +1130,110 @@ body.editmode .loopbar{display:none}
 #of-picker{width:100%;text-align:left;max-height:40vh;overflow-y:auto}
 .ownf-body .of-instr{justify-content:center}
 .lib{padding-bottom:calc(96px + var(--safe-b))}   /* the last row of cards clears the "+" button */
+
+/* ===== Redesign: library (masthead, shelf of covers) ===== */
+.mast{position:relative;text-align:center;padding:26px 0 6px}
+.mast .brand{position:static;justify-content:center;color:var(--cherry);font-family:var(--display);font-size:22px;margin:0 auto 12px;display:inline-flex}
+.mast .h-xl{font-size:clamp(40px,10.5vw,64px);text-wrap:balance}
+.mast-stave{display:block;width:100%;height:46px;margin:18px 0 0}
+.mast-stave .lines path{stroke:var(--line);stroke-width:1.2;fill:none;vector-effect:non-scaling-stroke}
+.mast-stave .heads ellipse{transform-box:fill-box;transform-origin:center;transform:rotate(-20deg)}
+@media (prefers-reduced-motion:no-preference){
+  .mast-stave .heads ellipse{animation:headdrop var(--spring-bouncy-d) var(--spring-bouncy) both}
+  .mast-stave .heads ellipse:nth-child(2){animation-delay:40ms}.mast-stave .heads ellipse:nth-child(3){animation-delay:80ms}.mast-stave .heads ellipse:nth-child(4){animation-delay:120ms}
+  .mast-stave .heads ellipse:nth-child(5){animation-delay:160ms}.mast-stave .heads ellipse:nth-child(6){animation-delay:200ms}.mast-stave .heads ellipse:nth-child(7){animation-delay:240ms}
+}
+@keyframes headdrop{from{opacity:0;transform:translateY(-10px) rotate(-20deg)}to{opacity:1;transform:rotate(-20deg)}}
+.card{position:relative;cursor:pointer}
+.card .t{font-family:var(--display);font-size:17px;font-weight:650;cursor:pointer}
+.card .m{font-size:15px}
+.card .m .c{cursor:pointer}
+.card .key{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:24px;padding:0 7px;border-radius:var(--r-xs);background:var(--cherry-tint);color:var(--cherry);font-weight:700;font-size:13px}
+.card .more{position:absolute;top:6px;right:6px;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink);background:color-mix(in srgb,var(--card) 82%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:var(--shadow-1);z-index:3;transition:transform var(--spring-press-d) var(--spring-press)}
+.card .more:active{transform:scale(.9);transition-duration:80ms}
+.fav-badge{position:absolute;left:8px;bottom:8px;z-index:3;width:30px;height:30px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--cherry);box-shadow:var(--shadow-1)}
+.fav-badge svg.i{width:18px;height:18px;fill:currentColor}
+.thumb{border-radius:var(--r-page)}
+#tabbar [data-tab].dot{position:relative}
+#tabbar [data-tab].dot::after{content:"";position:absolute;top:8px;left:calc(50% + 10px);width:9px;height:9px;border-radius:50%;background:var(--cherry);box-shadow:0 0 0 2px var(--paper)}
+
+/* ===== Redesign: floating tab bar with the brass slide pill ===== */
+.tabbar{left:50%;right:auto;bottom:max(12px,var(--safe-b));transform:translateX(-50%);width:min(440px,calc(100% - 24px));padding:6px;border:0;border-radius:var(--r-xl);
+  background:color-mix(in srgb,var(--card) 86%,transparent);box-shadow:var(--shadow-2),inset 0 0 0 1px var(--line);justify-content:space-between}
+.tabbar .slide{position:absolute;left:0;top:6px;height:calc(100% - 12px);width:0;border-radius:26px;background:var(--brass);box-shadow:inset 0 -2px 0 rgb(0 0 0/.08);
+  transition:transform var(--spring-snappy-d) var(--spring-snappy),width var(--spring-snappy-d) var(--spring-snappy);z-index:0;pointer-events:none}
+.tabbar button{position:relative;z-index:1;max-width:none;min-height:58px;border-radius:26px;font:700 13px var(--sans);letter-spacing:.01em;color:var(--ink-2)}
+.tabbar button[aria-current]{color:var(--on-brass)}
+.tabbar button:active{background:transparent}
+.tabbar button[aria-current] .i{stroke-width:2.1}
+body.tabs main.view,body.tabs .tabview{padding-bottom:calc(96px + var(--safe-b))}
+.fab{bottom:calc(92px + max(12px,var(--safe-b)))}
+
+/* segmented controls: the selected option wears the same brass as the current tab */
+.seg{background:var(--fill);border-radius:24px;padding:4px}
+.seg button{min-height:44px;border-radius:20px;font-size:16px;color:var(--ink-2)}
+.seg button[aria-pressed=true]{background:var(--brass);color:var(--on-brass);box-shadow:inset 0 -2px 0 rgb(0 0 0/.08)}
+
+/* ===== Redesign: metronome as an instrument ===== */
+#metrov .metro{background:none;padding:8px 0 0;gap:22px}
+.metro .beats{gap:14px;margin-top:6px}
+.metro .beats i{width:22px;height:22px;background:var(--fill-2)}
+.metro .beats i.one{box-shadow:inset 0 0 0 3px var(--cherry)}
+.metro .beats i.on{background:var(--brass);transform:scale(1.25)}
+.metro .beats i.one.on{background:var(--cherry)}
+.metro .beats [data-acc="1"]{box-shadow:inset 0 0 0 3px var(--cherry)}
+.metro-bpm{display:grid;justify-items:center;gap:2px}
+.metro-bpm small{font:700 15px var(--display);color:var(--ink-2);letter-spacing:.04em}
+.metro-bpm b{font:700 clamp(88px,26vw,140px)/.9 var(--display);font-stretch:85%;letter-spacing:-.03em;font-variant-numeric:tabular-nums lining-nums}
+.m-name{font:650 18px var(--display);color:var(--cherry);min-height:1.3em;letter-spacing:.02em}
+.metro-row{gap:14px}
+.pill.round.big{width:64px;height:64px}
+.pill.round.big .i{width:28px;height:28px}
+.m-tap{min-width:120px;height:64px;padding:0 22px;border-radius:var(--r-pill);background:var(--card);box-shadow:var(--shadow-1),inset 0 0 0 1px var(--line);font:700 17px var(--sans);color:var(--ink);
+  transition:transform var(--spring-press-d) var(--spring-press)}
+.m-tap:active{transform:scale(.94);transition-duration:80ms;background:var(--brass)}
+.seg.four{grid-template-columns:repeat(4,1fr)}
+.btn.big{min-height:60px;font-size:18px}
+/* every screen title centred (the frame is symmetric, the content may not be) */
+.tabtitle,.page-title{text-align:center}
+
+/* ===== Redesign: tuner — the note is the hero, the needle is a trombone slide, the screen washes to the state ===== */
+:root{--tn-ok:var(--in-tune);--tn-near:var(--near-tune);--tn-far:var(--off-tune)}
+.tuner2{background:none;padding:6px 0 0;gap:18px;border-radius:0;position:relative}
+.tuner2::before{content:"";position:absolute;inset:0 -16px -12px;border-radius:var(--r-l);background:transparent;transition:background-color 400ms var(--ease-out);z-index:-1}
+.tuner2[data-st="ok"]::before{background:color-mix(in srgb,var(--in-tune) 10%,transparent)}
+.tuner2[data-st="far"]::before{background:color-mix(in srgb,var(--off-tune) 7%,transparent)}
+.tn-top{flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:0}
+.tn-note{justify-content:center;align-items:baseline}
+.tn-note b{font:700 clamp(96px,30vw,150px)/.9 var(--display);font-stretch:85%;letter-spacing:-.03em}
+.tn-note span{font:650 20px var(--display);color:var(--ink-2)}
+.tn-read{align-items:center;text-align:center}
+.tn-read b{font:650 30px/1.1 var(--display);font-variant-numeric:tabular-nums lining-nums}
+.tn-read small{font-size:15px;color:var(--ink-2)}
+.tn-meter{height:84px}
+.tn-zones{top:22px;height:12px;border-radius:6px;background:var(--fill-2)}
+.tn-ticks{top:14px;height:28px}
+.tn-ticks i{height:10px;margin-top:9px;background:var(--ink-3);opacity:.6}
+.tn-ticks i.c{height:28px;margin-top:0;width:3px;border-radius:2px;background:var(--in-tune);opacity:1}
+/* the slide: a tall brass capsule that glides */
+.tn-dot{top:6px;width:22px;height:58px;margin-left:-11px;border-radius:11px;background:var(--brass);border:3px solid var(--card);box-shadow:var(--shadow-2);opacity:.5}
+.tn-scale{font-size:13px;color:var(--ink-2)}
+.tn-trace{height:110px;border-radius:var(--r-m);background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+.tuner2[data-st="off"] .tn-trace,.tuner2[data-st="off"] .tn-read b{display:none}
+.tuner2[data-st="off"] .tn-note b{color:var(--line)}
+#tuner-ui .note{text-align:center}
+
+/* ===== Accessibility pass (roast K): sizes, targets, focus, overlaps ===== */
+.note{font-size:15px}
+.txt.small,.foot{font-size:15px}
+.pill.sm,.li .pill.sm{min-height:44px;width:44px}
+.pchip{height:44px;font-size:15px}
+.notice .x{width:44px;height:44px}
+.inl-clear{width:28px;height:28px}
+.search:focus-within,.sort:focus-within,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--cobalt);outline-offset:2px}
+/* status messages come from the top, so they never cover the play bar, the loop bar or the "+" (K13) */
+.toast{top:calc(var(--safe-t) + 14px);bottom:auto;transform:translate(-50%,calc(-100% - 40px));min-height:48px;display:flex;align-items:center;justify-content:center;gap:4px}
+.toast.show{transform:translate(-50%,0)}
+.toast .toast-act{min-height:40px;padding:0 10px;border-radius:99px;color:var(--brass);text-decoration:underline;text-underline-offset:3px}
+body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 110px + var(--safe-b))}
+.sheet:focus,.sheet h2:focus,.sheet h1:focus{outline:none}

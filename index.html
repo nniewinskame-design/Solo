@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="light">
 <title>Solo</title>
 <meta name="description" content="Nuty ze zdjęcia: sama partia solowa, w Twoim kluczu i tonacji.">
-<meta name="theme-color" content="#F4EEE4">
+<meta name="theme-color" content="#FBF6EC">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Solo">
@@ -103,12 +103,12 @@
 <!-- =============== HOME / LIBRARY =============== -->
 <main id="home" class="view">
   <div class="wrap">
-    <header class="hero" id="hero">
-      <img id="hero-img" src="img/window.jpg" alt="" decoding="async">
-      <div class="brand" aria-label="Solo"><svg class="mark"><use href="#note"/></svg><span>Solo</span></div>
-      <div class="hero-copy">
-        <h1 class="h-xl">Co dziś gramy?</h1>
-      </div>
+    <!-- the masthead: a stave with one note per slide position (the seven Solo colours), not a stock photo -->
+    <header class="mast" id="hero">
+      <div class="brand"><svg class="mark"><use href="#note"/></svg><span>Solo</span></div>
+      <h1 class="h-xl">Co dziś gramy?</h1>
+      <svg class="mast-stave" viewBox="0 0 320 56" preserveAspectRatio="none" aria-hidden="true"><g class="lines"><path d="M0 8H320M0 18H320M0 28H320M0 38H320M0 48H320"/></g>
+        <g class="heads"><ellipse cx="40" cy="43" rx="6.4" ry="4.6" style="fill:var(--pos-1)"/><ellipse cx="80" cy="38" rx="6.4" ry="4.6" style="fill:var(--pos-2)"/><ellipse cx="120" cy="33" rx="6.4" ry="4.6" style="fill:var(--pos-3)"/><ellipse cx="160" cy="28" rx="6.4" ry="4.6" style="fill:var(--pos-4)"/><ellipse cx="200" cy="23" rx="6.4" ry="4.6" style="fill:var(--pos-5)"/><ellipse cx="240" cy="18" rx="6.4" ry="4.6" style="fill:var(--pos-6)"/><ellipse cx="280" cy="13" rx="6.4" ry="4.6" style="fill:var(--pos-7)"/></g></svg>
     </header>
 
     <section class="lib" id="lib">
@@ -325,6 +325,7 @@
 </div>
 
 <nav class="tabbar" id="tabbar" aria-label="Zakładki">
+  <i class="slide" aria-hidden="true"></i>
   <button data-tab="home" aria-current="page"><svg class="i"><use href="#music"/></svg><span>Nuty</span></button>
   <button data-tab="tunerv"><svg class="i"><use href="#fork"/></svg><span>Stroik</span></button>
   <button data-tab="metrov"><svg class="i"><use href="#metronome"/></svg><span>Metronom</span></button>
@@ -434,15 +435,17 @@
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-tools-t">Metronom</h2><button class="done" data-close>Gotowe</button></div>
   <div class="host" id="metro-sheet-host"><div id="metro-ui">
+  <!-- one dominant element: the tempo; the beats light up above it, the controls sit under the thumb -->
   <div class="metro first">
     <div class="beats" id="m-beats" aria-hidden="true"></div>
+    <div class="metro-bpm"><small aria-hidden="true">♩ =</small><b id="m-bpm" aria-live="polite">100</b><span id="m-name" class="m-name"></span></div>
     <div class="metro-row">
-      <button class="pill round" id="m-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button>
-      <div class="metro-bpm"><b id="m-bpm">100</b><small>BPM</small></div>
-      <button class="pill round" id="m-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button>
+      <button class="pill round big" id="m-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button>
+      <button class="m-tap" id="m-tap" aria-label="Stuknij tempo">Stuknij</button>
+      <button class="pill round big" id="m-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button>
     </div>
-    <div class="seg" id="m-meter"><button data-b="2">2/4</button><button data-b="3">3/4</button><button data-b="4">4/4</button><button data-b="6">6/8</button></div>
-    <button class="btn primary wide" id="m-go"><svg class="i"><use href="#play"/></svg><span>Start</span></button>
+    <div class="seg four" id="m-meter"><button data-b="2">2/4</button><button data-b="3">3/4</button><button data-b="4">4/4</button><button data-b="6">6/8</button></div>
+    <button class="btn primary wide big" id="m-go"><svg class="i"><use href="#play"/></svg><span>Start</span></button>
   </div>
   </div></div>
 </div>

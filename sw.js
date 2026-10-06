@@ -2,7 +2,7 @@
 const CACHE = "solo-v30";
 const SHELL = ["./", "index.html", "styles.css", "theme.js", "core.js", "arrange.js", "motion.js", "app.js", "profile.js", "ownsound.js", "clefs.js", "manifest.webmanifest",
   "prywatnosc.html", "regulamin.html", "licencje.html", "legal.js",
-  "fonts/fonts.css", "fonts/geist-latin.woff2", "fonts/geist-latinext.woff2",
+  "fonts/fonts.css", "fonts/bricolage-latin.woff2", "fonts/bricolage-latinext.woff2", "fonts/atkinson-latin.woff2", "fonts/atkinson-latinext.woff2",
   "img/window.jpg", "img/brass.jpg", "img/flatlay.jpg", "img/piano.jpg",
   "icons/favicon.svg", "icons/icon-192.png", "icons/apple-touch-icon.png",
   "vendor/verovio-toolkit-wasm.js", "vendor/jszip.min.js", "vendor/pdf.min.js", "vendor/pdf.worker.min.js"];

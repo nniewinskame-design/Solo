@@ -113,11 +113,23 @@ const TABS = ["home", "tunerv", "metrov", "settings"];
 function tabShown(v, from) {
   document.body.classList.toggle("tabs", TABS.includes(v)); document.body.classList.toggle("onhome", v === "home");
   $$("#tabbar [data-tab]").forEach(b => b.toggleAttribute("aria-current", b.dataset.tab === v));
+  placeSlide();
   if (from === "tunerv" && v !== "tunerv" && tuner.on) tunerStop();
   if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerStart(); }
   if (v === "metrov") { $("#metro-tab-host").appendChild($("#metro-ui")); buildToolsSheet(); }
   if (v === "settings" && typeof renderProfile === "function") renderProfile();
+  if (v === "settings" && NEWS[VERSION]) { store.set("newsSeen", VERSION); $('#tabbar [data-tab="settings"]')?.classList.remove("dot"); }
 }
+/* the brass slide pill sits behind the current tab and glides to the next one (the one "you are here" mark) */
+function placeSlide() {
+  requestAnimationFrame(() => {                         // after the bar is laid out (it is hidden off the tabs)
+    const bar = $("#tabbar"), cur = bar && bar.querySelector("[aria-current]"), pill = bar && bar.querySelector(".slide"); if (!cur || !pill || !cur.offsetWidth) return;
+    if (!pill.style.width) pill.style.transition = "none";   // the first placement does not glide in from the left
+    pill.style.width = cur.offsetWidth + "px"; pill.style.transform = `translateX(${cur.offsetLeft}px)`;
+    if (pill.style.transition) requestAnimationFrame(() => (pill.style.transition = ""));
+  });
+}
+addEventListener("resize", () => placeSlide());
 function goTab(v) {
   if (v === S.view) { const el = $("#" + v); el && el.scrollTo({ top: 0, behavior: "smooth" }); return; }
   if (openSheetId) closeSheet();
@@ -249,14 +261,26 @@ function openSheet(name) {
   openSheetId = name; document.body.classList.toggle("sheet-add", name === "add");
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
-  const f = el.querySelector(".done, button, input"); if (f && matchMedia("(pointer:fine)").matches) f.focus({ preventScroll: true });
+  /* focus goes into the sheet on every device (VoiceOver read the page behind before), on its title rather than a
+     button, so Enter can never delete; the page behind is inert until the sheet closes, then focus returns */
+  if (!switching) sheetOpener = document.activeElement;
+  setBehindInert(el, true);
+  const h = el.querySelector("h2, h1, .h-m") || el; h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true });
+}
+let sheetOpener = null;
+function setBehindInert(sheet, on) {
+  [...document.body.children].forEach(c => {
+    if (c === sheet || c.id === "scrim" || c.id === "toast" || c.classList.contains("sheet") || c.tagName === "SCRIPT") return;
+    if (on) { if (!c.inert) { c.inert = true; c.dataset.sheetInert = "1"; } } else if (c.dataset.sheetInert) { c.inert = false; delete c.dataset.sheetInert; }
+  });
 }
 function hideSheet(instant, keepScrim) {
   if (openSheetId === "tuner" && tuner.on) tunerStop();
   if (openSheetId === "pdf" && pickPdfPages.cancel) { const c = pickPdfPages.cancel; setTimeout(c, 0); }
   if (!openSheetId) return;
   const name = openSheetId, el = $("#sh-" + name);
-  openSheetId = null; document.body.classList.remove("sheet-add"); if (name === "addpart" && typeof ap !== "undefined") setTimeout(() => { if (openSheetId !== "addpart") ap.replace = null; }, 400);
+  openSheetId = null; setBehindInert(el, false);
+  if (!keepScrim && sheetOpener && sheetOpener.isConnected) { const o = sheetOpener; sheetOpener = null; setTimeout(() => o.focus?.({ preventScroll: true }), 0); } document.body.classList.remove("sheet-add"); if (name === "addpart" && typeof ap !== "undefined") setTimeout(() => { if (openSheetId !== "addpart") ap.replace = null; }, 400);
   const v = sheetVelocity; sheetVelocity = undefined;
   if (instant) {
     ctl(el).spring.stop(); el.hidden = true; el.style.transform = ""; el.classList.remove("out", "pre");
@@ -402,7 +426,7 @@ const HERO = [
 ];
 function setupHero() {
   const h = HERO[Math.floor(Date.now() / 86400000) % HERO.length];
-  const img = $("#hero-img");
+  const img = $("#hero-img"); if (!img) return;          // the library has a drawn masthead now
   img.addEventListener("load", () => img.classList.add("loaded"), { once: true });
   img.src = h.src; $("#hero").style.setProperty("--pos", h.pos);
   if (img.complete && img.naturalWidth) img.classList.add("loaded");
@@ -421,15 +445,20 @@ async function refreshLibrary(animate) {
   const uc = cols().find(c => c.id === libCol);
   if (uc && !q) list.sort((a, b) => uc.items.indexOf(a.id) - uc.items.indexOf(b.id));     // a collection keeps its own order
   $("#col-empty").hidden = !!(list.length || q || libCol === "all");
-  const latest = all.length > 1 ? all.slice().sort(by.opened)[0].id : null;
+  const fav = new Set(favs());
   const G = $("#lib-grid"); G.innerHTML = "";
   G.classList.toggle("stagger", !refreshLibrary.done && canAnimate()); refreshLibrary.done = true;
   list.forEach((p, idx) => {
     const b = document.createElement("div"); b.className = "card"; b.style.setProperty("--i", Math.min(idx, 14));
     const meta = p.composer || (p.sourceType === "ai" || p.sourceType === "device" ? "Ze zdjęcia" : p.sourceType === "example" ? "Przykład" : p.sourceType === "own" ? "Własne" : "Z pliku");
-    b.innerHTML = `<button class="thumb" aria-label="Otwórz: ${esc(p.title || "Bez tytułu")}">${p.thumb ? `<img src="${esc(p.thumb)}" alt="">` : `<span class="ph">${esc(p.title || "Bez tytułu")}</span>`}${p.id === latest ? `<i class="ribbon" title="Ostatnio grane"></i>` : ""}</button>
-      <div class="t" role="button" tabindex="0" aria-label="Zmień tytuł">${esc(p.title || "Bez tytułu")}</div><div class="m"><span class="c${p.composer ? "" : " ph"}" role="button" tabindex="0" aria-label="Zmień kompozytora">${esc(meta)}</span>${p.keyLabel ? `<button class="key" aria-label="Tonacja: ${esc(p.keyLabel)}">${esc(shortKey(p.keyLabel))}</button>` : ""}</div>`;
+    /* the whole card opens the piece (a tap on the title used to start renaming it); renaming and everything else
+       is in the "⋯" menu, which a long press also opens */
+    b.innerHTML = `<button class="thumb" aria-label="Otwórz: ${esc(p.title || "Bez tytułu")}">${p.thumb ? `<img src="${esc(p.thumb)}" alt="">` : `<span class="ph">${esc(p.title || "Bez tytułu")}</span>`}${fav.has(p.id) ? `<i class="fav-badge" aria-hidden="true">${icon("heart-fill")}</i>` : ""}</button>
+      <button class="more" aria-label="Więcej: ${esc(p.title || "Bez tytułu")}">${icon("more")}</button>
+      <div class="t">${esc(p.title || "Bez tytułu")}</div><div class="m"><span class="c${p.composer ? "" : " ph"}">${esc(meta)}</span>${p.keyLabel ? `<span class="key" aria-label="Tonacja: ${esc(p.keyLabel)}">${esc(shortKey(p.keyLabel))}</span>` : ""}</div>`;
     b.querySelector(".thumb").addEventListener("click", () => { if (b._long) { b._long = false; return; } openPiece(p, p.settings); });
+    b.querySelector(".more").addEventListener("click", () => openCardSheet(p, b));
+    [".t", ".m"].forEach(sel => b.querySelector(sel).addEventListener("click", () => openPiece(p, p.settings)));
     { let t = 0; const th = b.querySelector(".thumb");
       /* Haptic Touch: the card sinks while pressed, lifts when the menu comes, settles back with a spring */
       const up = () => { clearTimeout(t); b.classList.remove("pressing"); };
@@ -437,17 +466,13 @@ async function refreshLibrary(animate) {
       ["pointerup", "pointerleave", "pointercancel"].forEach(ev => th.addEventListener(ev, up));
       th.addEventListener("pointermove", e => { if (Math.abs(e.movementY) > 4 || Math.abs(e.movementX) > 4) up(); });
       th.addEventListener("contextmenu", e => { e.preventDefault(); openCardSheet(p, b); }); }
-    const k = b.querySelector(".key"); if (k) k.addEventListener("click", () => { openPiece(p, p.settings); setTimeout(() => S.view === "score" && openSheet("key"), 520); });
-    const edit = (el, field, ph) => inlineEdit(el, { value: p[field] || "", placeholder: ph, onSave: v => renameInLibrary(p, field, v) });
-    const tEl = b.querySelector(".t"), cEl = b.querySelector(".c");
-    tEl.addEventListener("click", () => edit(tEl, "title", "Tytuł"));
-    cEl.addEventListener("click", () => edit(cEl, "composer", "Kompozytor"));
-    [tEl, cEl].forEach(el => el.addEventListener("keydown", e => { if (e.key === "Enter" && e.target === el) { e.preventDefault(); el.click(); } }));
     G.appendChild(b);
   });
   const has = all.length > 0;
   nudgeBackup(all);
-  const nn = $("#news-nudge"); if (nn) nn.hidden = !(all.length && NEWS[VERSION] && store.get("newsSeen") !== VERSION);
+  /* news: a quiet dot on the "Ja" tab instead of a card between the search and the music */
+  const nn = $("#news-nudge"); if (nn) nn.hidden = true;
+  document.querySelector('#tabbar [data-tab="settings"]')?.classList.toggle("dot", !!(all.length && NEWS[VERSION] && store.get("newsSeen") !== VERSION));
   $("#lib").hidden = !has; $("#lib-empty").hidden = has;
   $("#lib-count").textContent = has ? String(list.length) : "";      // what is shown (filter, search), not everything
   $("#lib-none").hidden = !(has && q && !list.length);
@@ -2062,7 +2087,7 @@ let cardPiece = null, cardEl = null;
 function openCardSheet(p, el) { cardPiece = p; cardEl = el; $("#sh-card-t").textContent = p.title || "Bez tytułu"; openSheet("card"); }
 $("#cd-open").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => openPiece(p, p.settings)); });
 $("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => { openPiece(p, p.settings); whenDrawn(() => openSheet("share")); }); });
-$("#cd-rename").addEventListener("click", () => { const el = cardEl; closeSheetThen(() => { const t = el && el.querySelector(".t"); if (t) t.click(); }); });
+$("#cd-rename").addEventListener("click", () => { const el = cardEl, p = cardPiece; closeSheetThen(() => { const t = el && el.querySelector(".t"); if (t) inlineEdit(t, { value: p.title || "", placeholder: "Tytuł", onSave: v => renameInLibrary(p, "title", v) }); }); });
 $("#cd-del").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => askDelete(p, true)); });
 
 /* ---------------- Original photo ---------------- */
@@ -2447,7 +2472,7 @@ $$("#themeseg button").forEach(b => b.addEventListener("click", () => {
   const t = b.dataset.theme; store.set("theme", t);
   const root = document.documentElement; root.classList.add("theming"); setTimeout(() => root.classList.remove("theming"), 400);
   document.documentElement.setAttribute("data-theme", t);
-  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#170B0F" : "#F4EEE4");
+  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#16131C" : "#FBF6EC");
   syncSettings();
 }));
 async function saveBackup() {
