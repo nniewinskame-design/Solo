@@ -54,31 +54,66 @@ const DEGREES = [
   { d: 0, lof: 0, minor: false, fn: "T" }, { d: 3, lof: -1, minor: false, fn: "S" }, { d: 4, lof: 1, minor: false, fn: "D" },
   { d: 5, lof: 3, minor: true, fn: "Tp" }, { d: 1, lof: 2, minor: true, fn: "Sp" }, { d: 2, lof: 4, minor: true, fn: "Dp" }
 ];
+/* The chord of each bar, chosen for the whole tune at once (iastate "Harmonizing a melody", Open Music Theory
+   harmonic syntax, folk-song practice):
+   - melody notes weigh by length and place: beat 1 ×1, beat 3 of 4/4 ×0.6, other beats ×0.3, off the beat ×0.15,
+     a note reached by a leap ×1.5; prominent notes should be chord tones
+   - few chords: T and D(7) first, then S, rarely the side chords (vi, ii, iii)
+   - functions move T → S → D → T; a step back D → S is avoided
+   - the last bar is the tonic, the bar before it prefers the dominant (a cadence) */
+const VOCAB = { T: 1, D: 1, S: 0.85, Tp: 0.45, Sp: 0.45, Dp: 0.12 };
+const FUNC = { T: "T", Tp: "T", Dp: "T", S: "S", Sp: "S", D: "D" };
 function chordsForBars(xml, partId) {
   const doc = parseXml(xml), part = kids(doc.documentElement, "part").find(p => p.getAttribute("id") === partId) || kids(doc.documentElement, "part")[0];
   if (!part) return [];
-  let fifths = 0, mode = "major";
-  const out = [];
+  let fifths = 0, mode = "major", div = 1, beats = 4, bt = 4, prevMidi = null;
+  const bars = [];
   kids(part, "measure").forEach((m, i) => {
-    kids(m, "attributes").forEach(a => { const k = kid(a, "key"); if (k) { fifths = parseInt(txt(k, "fifths"), 10) || 0; mode = txt(k, "mode") === "minor" ? "minor" : "major"; } });
-    const tonicLof = fifths + (mode === "minor" ? 3 : 0);       // a minor key is read from its relative major's triads
-    const w = new Array(12).fill(0); let first = true;
+    kids(m, "attributes").forEach(a => {
+      const k = kid(a, "key"); if (k) { fifths = parseInt(txt(k, "fifths"), 10) || 0; mode = txt(k, "mode") === "minor" ? "minor" : "major"; }
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+    });
+    const tonicLof = fifths + (mode === "minor" ? 3 : 0), beat = bt === 8 && beats % 3 === 0 ? 1.5 : 4 / bt;
+    const w = new Array(12).fill(0); let pos = 0, any = false;
     kids(m, "note").forEach(n => {
-      const p = kid(n, "pitch"); if (!p || kid(n, "grace")) return;
-      const d = parseFloat(txt(n, "duration")) || 1; w[((midiOf(p) % 12) + 12) % 12] += d * (first ? 1.6 : 1); first = false;
+      if (kid(n, "chord") || kid(n, "grace")) return;
+      const d = (parseFloat(txt(n, "duration")) || 0) / div, p = kid(n, "pitch");
+      if (p) {
+        const midi = midiOf(p), onBeat = Math.abs(pos / beat - Math.round(pos / beat)) < 1e-6, bi = Math.round(pos / beat);
+        let mw = !onBeat ? 0.15 : bi === 0 ? 1 : (beats === 4 && bt === 4 && bi === 2) ? 0.6 : 0.3;
+        if (prevMidi !== null && Math.abs(midi - prevMidi) > 2) mw *= 1.5;
+        w[((midi % 12) + 12) % 12] += Math.max(0.25, d) * mw; prevMidi = midi; any = true;
+      }
+      pos += d;
     });
-    if (!w.some(Boolean)) { out.push(null); return; }
-    const pcOfLof = l => ((l * 7) % 12 + 12) % 12;
-    let best = null, score = -1;
-    DEGREES.forEach((g, k) => {
-      const root = pcOfLof(tonicLof + g.lof), tri = [root, (root + (g.minor ? 3 : 4)) % 12, (root + 7) % 12];
-      if (g.fn === "D") tri.push((root + 10) % 12);                                  // the dominant may carry its seventh (G7)
-      const s = tri.reduce((a, pc) => a + w[pc], 0) - k * 0.01;                        // ties: T, S, D first
-      if (s > score) { score = s; best = { ...g, seventh: g.fn === "D" && w[(root + 10) % 12] > 0 }; }
-    });
-    out.push({ bar: i + 1, ...best, tonicLof, mode });
+    bars.push({ w, any, tonicLof, mode });
   });
-  return out;
+  const pcOfLof = l => ((l * 7) % 12 + 12) % 12;
+  /* how well each chord fits each bar */
+  const fit = bars.map(b => DEGREES.map(g => {
+    if (!b.any) return 0;
+    const root = pcOfLof(b.tonicLof + g.lof), tri = [root, (root + (g.minor ? 3 : 4)) % 12, (root + 7) % 12];
+    const tot = b.w.reduce((a, x) => a + x, 0) || 1;
+    let inC = tri.reduce((a, pc) => a + b.w[pc], 0); const sev = g.fn === "D" ? b.w[(root + 10) % 12] : 0; inC += sev;
+    return (inC / tot * 4 - (tot - inC) / tot * 3) * VOCAB[g.fn];
+  }));
+  const n = bars.length, K = DEGREES.length;
+  const trans = (a, b) => { const fa = FUNC[DEGREES[a].fn], fb = FUNC[DEGREES[b].fn]; if (a === b) return 0.3; if (fa === "D" && fb === "S") return -4; if ((fa === "T" && fb === "S") || (fa === "S" && fb === "D") || (fa === "D" && fb === "T") || (fa === "T" && fb === "D")) return 1; return 0; };
+  const lastPitched = (() => { for (let i = n - 1; i >= 0; i--) if (bars[i].any) return i; return -1; })();
+  const bonus = (i, k) => i === lastPitched ? (DEGREES[k].fn === "T" ? 6 : -6) : i === lastPitched - 1 && DEGREES[k].fn === "D" ? 1.5 : 0;
+  const D = Array.from({ length: n }, () => new Array(K).fill(-Infinity)), F = Array.from({ length: n }, () => new Array(K).fill(-1));
+  for (let k = 0; k < K; k++) D[0][k] = fit[0][k] + bonus(0, k) + (DEGREES[k].fn === "T" ? 1 : 0);
+  for (let i = 1; i < n; i++) for (let k = 0; k < K; k++) for (let j = 0; j < K; j++) {
+    const v = D[i - 1][j] + (bars[i].any ? fit[i][k] + trans(j, k) : (j === k ? 0 : -9)) + bonus(i, k);
+    if (v > D[i][k]) { D[i][k] = v; F[i][k] = j; }
+  }
+  let k = D[n - 1].reduce((b, x, kk) => x > D[n - 1][b] ? kk : b, 0); const pick = new Array(n);
+  for (let i = n - 1; i >= 0; i--) { pick[i] = k; k = F[i][k]; }
+  return bars.map((b, i) => {
+    const g = DEGREES[pick[i]], root = pcOfLof(b.tonicLof + g.lof);
+    return { bar: i + 1, ...g, seventh: g.fn === "D" && b.w[(root + 10) % 12] > 0, tonicLof: b.tonicLof, mode: b.mode };
+  });
 }
 function chordLabel(c, shiftFifths, kind) {
   if (!c) return "";
@@ -133,24 +168,44 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
     /* interval 0: chosen to move smoothly; 9: chord tones; 3/6/5: parallel. The third voice sits lower:
        the second chord tone below, or the interval taken twice (a third → a fifth below) */
     const third = role === "voice3";
-    const vx = interval === 9 ? chordVoiceXml(one, srcId, third ? 2 : 1)
-      : secondVoiceXml(one, srcId, { interval: third ? ({ 0: 6, 3: 5, 6: 8, 5: 8 }[interval] || 6) : (interval || 3), level: interval || third ? 1 : 3 });
+    /* 0 = "Sam dobierze": the rule-based line; 9: chord tones; 3/6/5: parallel, as the player asked */
+    const vx = interval === 0 ? ruledVoiceXml(one, srcId, { third, lowMidi: comfOf(instr)[0] })
+      : interval === 9 ? chordVoiceXml(one, srcId, third ? 2 : 1)
+      : secondVoiceXml(one, srcId, { interval: third ? ({ 3: 5, 6: 8, 5: 8 }[interval] || 6) : interval, level: 1 });
     const v = parseXml(vx), ps = kids(v.documentElement, "part"); one = soloScore(v, ps[ps.length - 1]);
+  } else if (role === "chords" && instr.group === "Klawiszowe") {
+    one = pianoPartXml(one, srcId);
   } else if (role === "chords" || role === "bass") {
     one = chordPartXml(one, srcId, role);
   }
+  const twoStaves = /<staves>2<\/staves>/.test(one);
   /* sounding range of the instrument: move by octaves so the part sits in its middle */
   const od = parseXml(one), op = kids(od.documentElement, "part")[0];
   /* octaves move only when the part would leave the instrument's range (a lower voice stays below its melody) */
   const ps = partPitches(op), lo = Math.min(...ps), hi = Math.max(...ps);
-  let oct = 0; while (lo + 12 * oct < instr.lo && oct < 4) oct++; while (hi + 12 * oct > instr.hi && oct > -4) oct--;
-  if (lo + 12 * oct < instr.lo - 2) { const med = median(ps); oct = Math.round(((instr.lo + instr.hi) / 2 - med) / 12); }
+  /* the octave: keep it if the part fits the instrument; otherwise the shift with the most notes in the range a
+     pupil plays comfortably (TRN / Bandworld grade tables), never outside the full range if it can be helped */
+  let oct = 0;
+  if (!twoStaves && (lo < instr.lo || hi > instr.hi)) {
+    const [cl, ch] = comfOf(instr); let best = Infinity;
+    for (let o = -3; o <= 3; o++) { const out = ps.filter(x => x + 12 * o < instr.lo || x + 12 * o > instr.hi).length * 10 + ps.filter(x => x + 12 * o < cl || x + 12 * o > ch).length + Math.abs(o) * 0.1; if (out < best) { best = out; oct = o; } }
+  }
   let iv = { d: 7 * oct, s: 12 * oct };
   const t = TR_IV[instr.tr] || TR_IV[0]; iv = fixEnharmonic({ d: iv.d + t.d, s: iv.s + t.s }, srcFifths);
   const wd = parseXml(transposeXmlString(one, iv)), wp = kids(wd.documentElement, "part")[0];
   const srcClef = src.getElementsByTagName("clef")[0];
-  [...wp.getElementsByTagName("clef")].forEach((c, i) => { if (i === 0) c.innerHTML = keepClef && srcClef ? srcClef.innerHTML : (PART_CLEF[instr.clef] || PART_CLEF.treble); else c.remove(); });
-  [...wp.getElementsByTagName("direction")].forEach(d => { if (!d.getElementsByTagName("sound").length) d.remove(); });
+  /* the clef: the instrument's own, or (trombone, cello, bassoon: tenor clef; viola: treble) another one if it
+     saves many ledger lines (Gould: change clef rather than read 4+ ledger lines) */
+  const CLEF_OF = { bass: "bass", treble: "treble", alto: "alto", tenor: "tenor" }, ALT = { puzon: ["tenor"], "puzon-alt": ["tenor", "treble"], wiolonczela: ["tenor"], fagot: ["tenor"], altowka: ["treble"], eufonium: ["tenor"] };
+  let clefName = keepClef && srcClef ? null : instr.clef;
+  if (clefName && !twoStaves) {
+    const idx = [...wp.getElementsByTagName("pitch")].map(x => parseInt(txt(x, "octave"), 10) * 7 + STEP_I[txt(x, "step")]);
+    const base = ledgerCost(idx, CLEF_OF[clefName]);
+    clefsOf(instr).filter(c => c !== instr.clef).forEach(c => { const v = ledgerCost(idx, c); if (v < base * 0.4 && base > 1) clefName = c; });
+  }
+  if (!twoStaves) [...wp.getElementsByTagName("clef")].forEach((c, i) => { if (i === 0) c.innerHTML = clefName ? (PART_CLEF[clefName] || PART_CLEF.treble) : srcClef.innerHTML; else c.remove(); });
+  /* tempo words and dynamics stay with the top part only (a score prints them once); the tempo itself is kept */
+  [...wp.getElementsByTagName("direction")].forEach(d => { if (!d.getElementsByTagName("sound").length) d.remove(); else [...d.getElementsByTagName("direction-type")].forEach(t => { t.innerHTML = "<words></words>"; }); });
   [...wp.getElementsByTagName("lyric")].forEach(l => l.remove());
   /* the new part joins the score with a free id */
   const ids = new Set(parts.map(p => p.getAttribute("id"))); let n = 2; while (ids.has("P" + n)) n++;
@@ -231,5 +286,174 @@ function chordVoiceXml(xml, partId, nth = 1) {
   });
   root.appendChild(part);
   const pl = kid(root, "part-list"), sp = doc.createElement("score-part"); sp.setAttribute("id", id); sp.innerHTML = `<part-name>Głos</part-name>`; pl.appendChild(sp);
+  return new XMLSerializer().serializeToString(doc);
+}
+
+/* ---------------- 3.9 voice leading: a whole line chosen at once (dynamic programming) ----------------
+   Rules (Open Music Theory, first/second species; Fux; Kostka-Payne via OMT), scored per note:
+   - strong beats consonant: 3rds and 6ths best, 5ths and octaves allowed, unison only on the first or last note,
+     2nds, 4ths, 7ths and the tritone never on a strong beat (on weak beats only as a passing step)
+   - no parallel 5ths or octaves, no hidden 5th/octave when the melody leaps, contrary/oblique motion rewarded
+   - the voice never crosses above the melody (or above the voice it sits under) and never overlaps it
+   - steps and repeated notes are easy, leaps cost more, nothing wider than an octave
+   - the same interval more than 3 times in a row costs a little (no endless parallel 3rds)
+   - chord tones on strong beats; the last note on the tonic (or its 3rd); the leading tone goes to the tonic */
+const SCALE_ST = [0, 2, 4, 5, 7, 9, 11];
+const idxMidi = (idx, fifths) => { const st = STEP_N[((idx % 7) + 7) % 7]; return 12 * (Math.floor(idx / 7) + 1) + SCALE_ST[STEP_I[st]] + keyAlter(fifths, st); };
+function strongOnsets(beats, bt) {
+  if (bt === 8 && beats % 3 === 0 && beats > 3) return [0, 1.5 * Math.floor(beats / 6) * 2].filter((v, i, a) => a.indexOf(v) === i);  // 6/8: 1 and 4
+  if (beats === 4 && bt === 4) return [0, 2];
+  if (bt === 2 && beats === 2) return [0, 2];
+  return [0];
+}
+/* the melody as events: pitch, bar, strong or weak, the bar's chord tones */
+function melodyEvents(part, chords) {
+  let div = 1, beats = 4, bt = 4, fifths = 0; const ev = [];
+  kids(part, "measure").forEach((m, bi) => {
+    kids(m, "attributes").forEach(a => {
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0;
+    });
+    const strong = strongOnsets(beats, bt); let pos = 0;
+    const c = chords[bi]; let pcs = null;
+    if (c) { const r = c.tonicLof + c.lof; pcs = [r, r + (c.minor ? -3 : 4), r + 1, ...(c.seventh ? [r - 2] : [])].map(l => { const p = lofToPitch(l); return ((SCALE_ST[STEP_I[p.letter]] + p.alter) % 12 + 12) % 12; }); }
+    [...m.children].forEach(el => {
+      if (el.tagName === "backup") { pos -= (parseFloat(txt(el, "duration")) || 0) / div; return; }
+      if (el.tagName === "forward") { pos += (parseFloat(txt(el, "duration")) || 0) / div; return; }
+      if (el.tagName !== "note" || kid(el, "chord") || kid(el, "grace")) return;
+      if ((txt(el, "voice") || "1") !== "1") return;
+      const dur = (parseFloat(txt(el, "duration")) || 0) / div, p = kid(el, "pitch");
+      if (p) ev.push({ el, bar: bi, on: pos, dur, strong: strong.some(s => Math.abs(s - pos) < 1e-6), midi: midiOf(p), idx: parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")], pcs, fifths, tonicPc: c ? ((SCALE_ST[STEP_I[lofToPitch(c.tonicLof).letter]] + lofToPitch(c.tonicLof).alter) % 12 + 12) % 12 : null });
+      pos += dur;
+    });
+  });
+  return ev;
+}
+const IS_PERFECT = iv => iv === 0 || iv === 7;
+function lineCost(prev, cur, c0, c1, ctx) {
+  /* prev/cur: the upper voices' events (melody and, for a 3rd voice, the 2nd), c0/c1: candidate midi */
+  let cost = 0;
+  const uppers = ctx.uppers;
+  for (const U of uppers) {
+    const u0 = U[prev], u1 = U[cur];
+    if (c1 > u1) return Infinity;                                   // crossing
+    if (c1 > u0 || u1 < c0) cost += 8;                              // overlap
+    const i0 = (u0 - c0) % 12, i1 = (u1 - c1) % 12, m0 = u1 - u0, m1 = c1 - c0;
+    if (!ctx.allowParallel && IS_PERFECT(i1) && IS_PERFECT(i0) && i0 === i1 && m0 !== 0 && Math.sign(m0) === Math.sign(m1)) return Infinity;   // parallel 5ths/8ves
+    if (IS_PERFECT(i1) && m0 && Math.sign(m0) === Math.sign(m1) && Math.abs(m0) > 2) cost += 6;    // hidden 5th/8ve, melody leaps
+    if (m0 && m1 && Math.sign(m0) !== Math.sign(m1)) cost -= 1.5;    // contrary
+    else if (!m0 !== !m1) cost -= 0.5;                               // oblique
+  }
+  const leap = Math.abs(c1 - c0);
+  cost += leap <= 2 ? 0 : leap <= 4 ? 1 : leap <= 7 ? 2 : leap === 12 ? 3 : leap <= 9 ? 4 : leap < 12 ? 6 : Infinity;
+  return cost;
+}
+function noteCost(e, c, i, n, ctx) {
+  let cost = 0;
+  for (const U of ctx.uppers) {
+    const u = U[i], gap = u - c, iv = gap % 12;
+    if (gap < 0) return Infinity;
+    if (gap > 19) return Infinity; if (gap > 12) cost += 5; else if (gap > 9) cost += 1.5;     // close to the voice above, within an octave
+    const cons = [3, 4, 8, 9].includes(iv) ? -3 : iv === 7 ? -1 : iv === 0 ? (gap === 0 ? (i === 0 || i === n - 1 ? 0 : 5) : -0.5) : null;
+    if (cons === null) { if (e.strong) return Infinity; cost += 4; }       // dissonance only on a weak beat
+    else cost += cons;
+  }
+  const pc = ((c % 12) + 12) % 12;
+  if (e.pcs) cost += e.pcs.includes(pc) ? (e.strong ? -1.5 : -0.5) : (e.strong ? 2 : 0.5);
+  if (ctx.third && e.pcs && ctx.uppers.length > 1) {                 // a 3rd voice completes the triad
+    const have = ctx.uppers.map(U => ((U[i] % 12) + 12) % 12);
+    if (e.strong && e.pcs.includes(pc) && !have.includes(pc)) cost -= 2;
+    if (pc === ((e.pcs[1] % 12) + 12) % 12 && have.includes(pc)) cost += 2;     // no doubled 3rd
+  }
+  if (i === n - 1 && e.tonicPc !== null) cost += pc === e.tonicPc ? -4 : (e.pcs && e.pcs.includes(pc) ? 0 : 6);
+  if (c < ctx.lo) cost += 3 * Math.ceil((ctx.lo - c) / 2);           // too low to play comfortably
+  return cost;
+}
+function bestLine(ev, ctx) {
+  const n = ev.length; if (!n) return [];
+  const cands = ev.map(e => { const out = []; for (let k = 0; k <= 9; k++) { const idx = e.idx - k; out.push({ idx, midi: idxMidi(idx, e.fifths) }); } return out; });
+  const D = cands.map(c => c.map(() => ({ cost: Infinity, from: -1 })));
+  cands[0].forEach((c, j) => { D[0][j].cost = noteCost(ev[0], c.midi, 0, n, ctx); });
+  for (let i = 1; i < n; i++) cands[i].forEach((c, j) => {
+    const nc = noteCost(ev[i], c.midi, i, n, ctx); if (nc === Infinity) return;
+    cands[i - 1].forEach((p, k) => {
+      if (D[i - 1][k].cost === Infinity) return;
+      const t = D[i - 1][k].cost + nc + lineCost(i - 1, i, p.midi, c.midi, ctx);
+      if (t < D[i][j].cost) D[i][j] = { cost: t, from: k };
+    });
+  });
+  let j = D[n - 1].reduce((b, x, k) => x.cost < D[n - 1][b].cost ? k : b, 0);
+  if (D[n - 1][j].cost === Infinity) return null;
+  const out = new Array(n);
+  for (let i = n - 1; i >= 0; i--) { out[i] = cands[i][j]; j = D[i][j].from; }
+  return out;
+}
+/* a 2nd (third = false) or 3rd voice under a part, following these rules; above: the 2nd voice when writing the 3rd */
+function ruledVoiceXml(xml, partId, { third = false, lowMidi = 40 } = {}) {
+  const doc = parseXml(xml), root = doc.documentElement, src = kids(root, "part").find(p => p.getAttribute("id") === partId); if (!src) return xml;
+  const chords = chordsForBars(xml, partId), ev = melodyEvents(src, chords);
+  const mel = ev.map(e => e.midi);
+  let uppers = [mel];
+  if (third) { const v2 = bestLine(ev, { uppers: [mel], lo: lowMidi }); if (v2) uppers = [mel, v2.map(x => x.midi)]; }
+  const line = bestLine(ev, { uppers, lo: lowMidi, third }) || bestLine(ev, { uppers, lo: lowMidi - 12, third, allowParallel: true });
+  if (!line) return secondVoiceXml(xml, partId, { interval: third ? 6 : 3, level: 1 });
+  const ids = new Set(kids(root, "part").map(p => p.getAttribute("id"))); let n = 2; while (ids.has("P" + n)) n++;
+  const id = "P" + n, part = src.cloneNode(true); part.setAttribute("id", id);
+  /* same notes in the copy, in the same order: write the chosen pitches */
+  const copyEv = melodyEvents(part, chords);
+  copyEv.forEach((e, i) => { const p = kid(e.el, "pitch"); if (p && line[i]) { setPitch(doc, p, line[i].idx, e.fifths); kids(e.el, "accidental").forEach(a => a.remove()); kids(e.el, "lyric").forEach(a => a.remove()); } });
+  kids(part, "measure").forEach(m => { kids(m, "direction").forEach(d => { if (!d.getElementsByTagName("sound").length) d.remove(); }); [...m.getElementsByTagName("lyric")].forEach(l => l.remove()); });
+  root.appendChild(part);
+  const pl = kid(root, "part-list"), sp = doc.createElement("score-part"); sp.setAttribute("id", id); sp.innerHTML = `<part-name>Głos</part-name>`; pl.appendChild(sp);
+  return new XMLSerializer().serializeToString(doc);
+}
+
+/* ---------------- piano accompaniment by metre (two staves) ----------------
+   3/4 waltz: bass on 1, chord on 2 and 3 · 2/4: bass on 1 and 2, chord on the offbeats · 4/4: bass on 1 and 3,
+   chord on 2 and 4 · 6/8: bass on 1 and 4, chord on the other eighths · other metres: bass and chord on 1.
+   Right hand in close position between C4 and C5, moving to the nearest inversion; left hand root (and fifth)
+   between E2 and E3, nothing low and thick (no thirds below C3). */
+function pianoPartXml(one, srcId) {
+  const doc = parseXml(one), part = kids(doc.documentElement, "part")[0], chords = chordsForBars(one, srcId);
+  let div = 1, beats = 4, bt = 4, prev = null, prevTop = 67;
+  const pname = midi => { const pc = ((midi % 12) + 12) % 12, names = ["C", "C", "D", "E", "E", "F", "F", "G", "G", "A", "B", "B"], alts = [0, 1, 0, -1, 0, 0, 1, 0, 1, 0, -1, 0]; return { st: names[pc], al: alts[pc], oc: Math.floor(midi / 12) - 1 }; };
+  const spellIn = (midi, fifths) => { for (const st of STEP_N) { const base = SCALE_ST[STEP_I[st]], al = ((midi % 12) - base + 18) % 12 - 6; if (al === keyAlter(fifths, st)) { const oc = Math.floor((midi - al) / 12) - 1; return { st, al, oc }; } } return pname(midi); };
+  const P = (midi, f) => { const x = spellIn(midi, f); return `<pitch><step>${x.st}</step>${x.al ? `<alter>${x.al}</alter>` : ""}<octave>${x.oc}</octave></pitch>`; };
+  let fifths = 0, first = true;
+  kids(part, "measure").forEach((m, i) => {
+    kids(m, "attributes").forEach(a => {
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0;
+      if (first) { kids(a, "clef").forEach(c => c.remove()); const st = doc.createElement("staves"); st.textContent = "2"; a.appendChild(st); a.insertAdjacentHTML("beforeend", `<clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef>`); first = false; }
+      else kids(a, "clef").forEach(c => c.remove());
+    });
+    [...m.children].filter(c => !["attributes", "print", "barline"].includes(c.tagName) && !(c.tagName === "direction" && c.getElementsByTagName("sound").length)).forEach(c => c.remove());
+    const q = div, cap = div * 4 * beats / bt, c = chords[i] || prev; prev = c;
+    const end = kid(m, "barline"), add = h => { const t = doc.createElement("x"); t.innerHTML = h; [...t.childNodes].forEach(nd => m.insertBefore(nd, end || null)); };
+    if (!c) { add(`<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice><staff>1</staff></note><backup><duration>${cap}</duration></backup><note><rest measure="yes"/><duration>${cap}</duration><voice>5</voice><staff>2</staff></note>`); return; }
+    const r = c.tonicLof + c.lof, pcs = [r, r + (c.minor ? -3 : 4), r + 1].map(l => { const p = lofToPitch(l); return ((SCALE_ST[STEP_I[p.letter]] + p.alter) % 12 + 12) % 12; });
+    if (c.seventh) pcs[2] = (pcs[0] + 10) % 12;                                // V7 without its 5th
+    /* right hand: the inversion whose top is nearest the previous one, inside C4–C5 */
+    let best = null;
+    for (let inv = 0; inv < 3; inv++) {
+      const order = [pcs[inv], pcs[(inv + 1) % 3], pcs[(inv + 2) % 3]]; let lo = 60 + ((order[0] - 60) % 12 + 12) % 12; if (lo > 64) lo -= 12;
+      const ch = [lo]; order.slice(1).forEach(pc => { let x = ch[ch.length - 1] + 1; while (((x % 12) + 12) % 12 !== pc) x++; ch.push(x); });
+      if (ch[2] > 74) continue; const sc = Math.abs(ch[2] - prevTop); if (!best || sc < best.sc) best = { ch, sc };
+    }
+    const rh = best ? best.ch : [60, 64, 67]; prevTop = rh[2];
+    let root = 40 + ((pcs[0] - 40) % 12 + 12) % 12, fifth = root + 7; if (fifth > 55) fifth -= 12;
+    const chordXml = (d, t, dot = "") => rh.map((x, j) => `<note>${j ? "<chord/>" : ""}${P(x, fifths)}<duration>${d}</duration><voice>1</voice><type>${t}</type>${dot}<staff>1</staff></note>`).join("");
+    const rest = (d, t, v, s, dot = "") => `<note><rest/><duration>${d}</duration><voice>${v}</voice><type>${t}</type>${dot}<staff>${s}</staff></note>`;
+    const bass = (x, d, t, dot = "") => `<note>${P(x, fifths)}<duration>${d}</duration><voice>5</voice><type>${t}</type>${dot}<staff>2</staff></note>`;
+    let R = "", L = "";
+    if (beats === 3 && bt === 4) { R = rest(q, "quarter", 1, 1) + chordXml(q, "quarter") + chordXml(q, "quarter"); L = bass(root, q, "quarter") + rest(2 * q, "half", 5, 2); }
+    else if (beats === 2 && bt === 4) { const e = q / 2; R = rest(e, "eighth", 1, 1) + chordXml(e, "eighth") + rest(e, "eighth", 1, 1) + chordXml(e, "eighth"); L = bass(root, q, "quarter") + bass(fifth, q, "quarter"); }
+    else if (beats === 4 && bt === 4) { R = rest(q, "quarter", 1, 1) + chordXml(q, "quarter") + rest(q, "quarter", 1, 1) + chordXml(q, "quarter"); L = bass(root, 2 * q, "half") + bass(fifth, 2 * q, "half"); }
+    else if (bt === 8 && beats === 6) { const e = q / 2; R = (rest(e, "eighth", 1, 1) + chordXml(e, "eighth") + chordXml(e, "eighth")).repeat(2); L = bass(root, 3 * e, "quarter", "<dot/>") + bass(fifth, 3 * e, "quarter", "<dot/>"); }
+    else { const t = { 4: "whole", 3: "half", 2: "half", 1.5: "quarter" }[cap / div] || "whole", dot = cap / div === 3 || cap / div === 1.5 ? "<dot/>" : ""; R = chordXml(cap, t, dot); L = bass(root, cap, t, dot); }
+    add(R + `<backup><duration>${cap}</duration></backup>` + L);
+  });
   return new XMLSerializer().serializeToString(doc);
 }

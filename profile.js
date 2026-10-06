@@ -8,42 +8,42 @@
    lo/hi = practical sounding range (MIDI); voice = playback timbre */
 const INSTRUMENTS = [
   /* Dęte blaszane */
-  { id: "puzon", name: "Puzon", clef: "bass", tr: 0, lo: 40, hi: 77, voice: "brass", group: "Dęte blaszane" },
-  { id: "puzon-alt", name: "Puzon altowy", clef: "alto", tr: 0, lo: 45, hi: 79, voice: "brass", group: "Dęte blaszane" },
-  { id: "puzon-b", name: "Puzon basowy", clef: "bass", tr: 0, lo: 34, hi: 70, voice: "brass", group: "Dęte blaszane" },
-  { id: "trabka", name: "Trąbka B", clef: "treble", tr: 2, lo: 52, hi: 82, voice: "brass", group: "Dęte blaszane" },
-  { id: "trabka-c", name: "Trąbka C", clef: "treble", tr: 0, lo: 54, hi: 84, voice: "brass", group: "Dęte blaszane" },
-  { id: "kornet", name: "Kornet B", clef: "treble", tr: 2, lo: 52, hi: 82, voice: "brass", group: "Dęte blaszane" },
-  { id: "flugelhorn", name: "Flugelhorn B", clef: "treble", tr: 2, lo: 52, hi: 79, voice: "brass", group: "Dęte blaszane" },
-  { id: "waltornia", name: "Waltornia F", clef: "treble", tr: 7, lo: 35, hi: 77, voice: "brass", group: "Dęte blaszane" },
-  { id: "sakshorn-a", name: "Sakshorn altowy Es", clef: "treble", tr: 9, lo: 43, hi: 74, voice: "brass", group: "Dęte blaszane" },
-  { id: "sakshorn-t", name: "Sakshorn tenorowy B", clef: "treble", tr: 14, lo: 40, hi: 72, voice: "brass", group: "Dęte blaszane" },
-  { id: "eufonium", name: "Eufonium", clef: "bass", tr: 0, lo: 40, hi: 74, voice: "brass", group: "Dęte blaszane" },
-  { id: "baryton", name: "Baryton B", clef: "treble", tr: 14, lo: 40, hi: 72, voice: "brass", group: "Dęte blaszane" },
-  { id: "tuba", name: "Tuba", clef: "bass", tr: 0, lo: 26, hi: 65, voice: "brass", group: "Dęte blaszane" },
-  { id: "suzafon", name: "Suzafon", clef: "bass", tr: 0, lo: 28, hi: 62, voice: "brass", group: "Dęte blaszane" },
+  { id: "puzon", name: "Puzon", clef: "bass", tr: 0, lo: 40, hi: 77, comf: [44, 63], clefs: ["bass", "tenor"], voice: "brass", group: "Dęte blaszane" },
+  { id: "puzon-alt", name: "Puzon altowy", clef: "alto", tr: 0, lo: 45, hi: 79, comf: [50, 70], clefs: ["alto", "tenor", "treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "puzon-b", name: "Puzon basowy", clef: "bass", tr: 0, lo: 34, hi: 70, comf: [36, 58], clefs: ["bass"], voice: "brass", group: "Dęte blaszane" },
+  { id: "trabka", name: "Trąbka B", clef: "treble", tr: 2, lo: 52, hi: 82, comf: [55, 74], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "trabka-c", name: "Trąbka C", clef: "treble", tr: 0, lo: 54, hi: 84, comf: [57, 76], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "kornet", name: "Kornet B", clef: "treble", tr: 2, lo: 52, hi: 82, comf: [55, 74], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "flugelhorn", name: "Flugelhorn B", clef: "treble", tr: 2, lo: 52, hi: 79, comf: [55, 72], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "waltornia", name: "Waltornia F", clef: "treble", tr: 7, lo: 35, hi: 77, comf: [48, 67], clefs: ["treble", "bass"], voice: "brass", group: "Dęte blaszane" },
+  { id: "sakshorn-a", name: "Sakshorn altowy Es", clef: "treble", tr: 9, lo: 43, hi: 74, comf: [48, 67], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "sakshorn-t", name: "Sakshorn tenorowy B", clef: "treble", tr: 14, lo: 40, hi: 72, comf: [43, 63], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "eufonium", name: "Eufonium", clef: "bass", tr: 0, lo: 40, hi: 74, comf: [43, 65], clefs: ["bass", "tenor", "treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "baryton", name: "Baryton B", clef: "treble", tr: 14, lo: 40, hi: 72, comf: [43, 63], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "tuba", name: "Tuba", clef: "bass", tr: 0, lo: 26, hi: 65, comf: [32, 51], clefs: ["bass"], voice: "brass", group: "Dęte blaszane" },
+  { id: "suzafon", name: "Suzafon", clef: "bass", tr: 0, lo: 28, hi: 62, comf: [32, 51], clefs: ["bass"], voice: "brass", group: "Dęte blaszane" },
   /* Dęte drewniane */
-  { id: "flet", name: "Flet", clef: "treble", tr: 0, lo: 60, hi: 96, voice: "flute", group: "Dęte drewniane" },
+  { id: "flet", name: "Flet", clef: "treble", tr: 0, lo: 60, hi: 96, comf: [70, 87], clefs: ["treble"], voice: "flute", group: "Dęte drewniane" },
   { id: "piccolo", name: "Flet piccolo", clef: "treble", tr: -12, lo: 74, hi: 108, voice: "flute", group: "Dęte drewniane" },
   { id: "flet-a", name: "Flet altowy G", clef: "treble", tr: 5, lo: 55, hi: 86, voice: "flute", group: "Dęte drewniane" },
   { id: "flet-p", name: "Flet prosty", clef: "treble", tr: -12, lo: 72, hi: 98, voice: "flute", group: "Dęte drewniane" },
   { id: "oboj", name: "Obój", clef: "treble", tr: 0, lo: 58, hi: 93, voice: "reed", group: "Dęte drewniane" },
   { id: "rozek", name: "Rożek angielski F", clef: "treble", tr: 7, lo: 52, hi: 81, voice: "reed", group: "Dęte drewniane" },
-  { id: "klarnet", name: "Klarnet B", clef: "treble", tr: 2, lo: 50, hi: 94, voice: "reed", group: "Dęte drewniane" },
+  { id: "klarnet", name: "Klarnet B", clef: "treble", tr: 2, lo: 50, hi: 94, comf: [51, 77], clefs: ["treble"], voice: "reed", group: "Dęte drewniane" },
   { id: "klarnet-a", name: "Klarnet A", clef: "treble", tr: 3, lo: 49, hi: 93, voice: "reed", group: "Dęte drewniane" },
   { id: "klarnet-es", name: "Klarnet Es", clef: "treble", tr: -3, lo: 55, hi: 98, voice: "reed", group: "Dęte drewniane" },
   { id: "klarnet-bas", name: "Klarnet basowy B", clef: "treble", tr: 14, lo: 38, hi: 77, voice: "reed", group: "Dęte drewniane" },
-  { id: "fagot", name: "Fagot", clef: "bass", tr: 0, lo: 34, hi: 75, voice: "reed", group: "Dęte drewniane" },
+  { id: "fagot", name: "Fagot", clef: "bass", tr: 0, lo: 34, hi: 75, comf: [38, 65], clefs: ["bass", "tenor"], voice: "reed", group: "Dęte drewniane" },
   { id: "kontrafagot", name: "Kontrafagot", clef: "bass", tr: 12, lo: 22, hi: 53, voice: "reed", group: "Dęte drewniane" },
   { id: "sax-s", name: "Saksofon sopranowy B", clef: "treble", tr: 2, lo: 56, hi: 87, voice: "reed", group: "Dęte drewniane" },
-  { id: "sax-a", name: "Saksofon altowy Es", clef: "treble", tr: 9, lo: 49, hi: 80, voice: "reed", group: "Dęte drewniane" },
-  { id: "sax-t", name: "Saksofon tenorowy B", clef: "treble", tr: 14, lo: 44, hi: 75, voice: "reed", group: "Dęte drewniane" },
-  { id: "sax-b", name: "Saksofon barytonowy Es", clef: "treble", tr: 21, lo: 36, hi: 68, voice: "reed", group: "Dęte drewniane" },
+  { id: "sax-a", name: "Saksofon altowy Es", clef: "treble", tr: 9, lo: 49, hi: 80, comf: [53, 75], clefs: ["treble"], voice: "reed", group: "Dęte drewniane" },
+  { id: "sax-t", name: "Saksofon tenorowy B", clef: "treble", tr: 14, lo: 44, hi: 75, comf: [46, 67], clefs: ["treble"], voice: "reed", group: "Dęte drewniane" },
+  { id: "sax-b", name: "Saksofon barytonowy Es", clef: "treble", tr: 21, lo: 36, hi: 68, comf: [39, 60], clefs: ["treble"], voice: "reed", group: "Dęte drewniane" },
   /* Smyczkowe */
-  { id: "skrzypce", name: "Skrzypce", clef: "treble", tr: 0, lo: 55, hi: 100, voice: "string", group: "Smyczkowe" },
-  { id: "altowka", name: "Altówka", clef: "alto", tr: 0, lo: 48, hi: 88, voice: "string", group: "Smyczkowe" },
-  { id: "wiolonczela", name: "Wiolonczela", clef: "bass", tr: 0, lo: 36, hi: 81, voice: "string", group: "Smyczkowe" },
-  { id: "kontrabas", name: "Kontrabas", clef: "bass", tr: 12, lo: 28, hi: 67, voice: "string", group: "Smyczkowe" },
+  { id: "skrzypce", name: "Skrzypce", clef: "treble", tr: 0, lo: 55, hi: 100, comf: [55, 88], clefs: ["treble"], voice: "string", group: "Smyczkowe" },
+  { id: "altowka", name: "Altówka", clef: "alto", tr: 0, lo: 48, hi: 88, comf: [48, 79], clefs: ["alto", "treble"], voice: "string", group: "Smyczkowe" },
+  { id: "wiolonczela", name: "Wiolonczela", clef: "bass", tr: 0, lo: 36, hi: 81, comf: [36, 69], clefs: ["bass", "tenor", "treble"], voice: "string", group: "Smyczkowe" },
+  { id: "kontrabas", name: "Kontrabas", clef: "bass", tr: 12, lo: 28, hi: 67, comf: [28, 55], clefs: ["bass"], voice: "string", group: "Smyczkowe" },
   /* Klawiszowe */
   { id: "fortepian", name: "Fortepian", clef: "treble", tr: 0, lo: 21, hi: 108, voice: "piano", group: "Klawiszowe" },
   { id: "organy", name: "Organy", clef: "treble", tr: 0, lo: 36, hi: 96, voice: "reed", group: "Klawiszowe" },
@@ -89,6 +89,9 @@ function instrPicker(box, { selected = [], multi = false, onPick }) {
 }
 function rememberInstr(id) { const r = JSON.parse(store.get("recentInstr", "[]")).filter(x => x !== id); r.unshift(id); store.set("recentInstr", JSON.stringify(r.slice(0, 6))); }
 const instrById = id => INSTRUMENTS.find(i => i.id === id) || INSTRUMENTS[0];
+/* the range a pupil plays comfortably (sounding MIDI): from the tables, otherwise the middle 70% of the full range */
+const comfOf = i => i.comf || [Math.round(i.lo + (i.hi - i.lo) * 0.15), Math.round(i.hi - (i.hi - i.lo) * 0.15)];
+const clefsOf = i => i.clefs || [i.clef];
 const PROFILE_DEFAULT = { instruments: ["puzon"], main: "puzon", reading: "written", role: "", a4: 440, done: false };
 function profile() {
   let p = null; try { p = JSON.parse(store.get("profile", "null")); } catch {}

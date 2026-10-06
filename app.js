@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "3.8";
+const VERSION = "3.9";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -584,7 +584,7 @@ function a4Options(extra, zoom = S.zoom) {
   const z = zoom, r = v => Math.round(v / z);
   return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
     pageMarginTop: r(110), pageMarginBottom: r(110), pageMarginLeft: r(150), pageMarginRight: r(150), spacingSystem: 6, svgViewBox: true,
-    transpose: intervalString(S.iv), justifyVertically: false, ...extra };
+    transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true, ...extra };
 }
 function enlargeTitle(root, factor, shift = 1.25) {
   const head = root.querySelector(".pgHead"); if (!head || !S.piece) return;
@@ -616,7 +616,7 @@ async function doRender() {
     else {
       const px = 38 * S.zoom;
       opts = { pageWidth: Math.round(width * 100 / px), pageHeight: 60000, adjustPageHeight: true, scale: Math.round(px), breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
-        pageMarginLeft: 50, pageMarginRight: 50, pageMarginTop: 60, pageMarginBottom: 60, spacingSystem: 8, svgViewBox: false, transpose: intervalString(S.iv), justifyVertically: false };
+        pageMarginLeft: 50, pageMarginRight: 50, pageMarginTop: 60, pageMarginBottom: 60, spacingSystem: 8, svgViewBox: false, transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true };
     }
     tk.setOptions(opts);
     if (!tk.loadData(xml)) throw new Error("Nie udało się narysować nut.");
@@ -630,9 +630,9 @@ async function doRender() {
     if (doubt.size) { const order = drawnBars(xml); $$("#pages g.measure").forEach((g, i) => g.classList.toggle("doubt", doubt.has(order[i]))); }
     S.fromMs = 0; S.fromBar = -1;
     if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
-    S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip();
+    S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip(); markRange();
     requestAnimationFrame(() => { drawLoop(); syncLoopUi(); });
-    S.baseBpm = scoreBpm();
+    S.baseBpm = scoreBpm(); $("#tp-bpm").textContent = String(curBpm());
     if (openSheetId === "more") syncTempo();
   } catch (e) {
     console.error(e);
@@ -809,10 +809,16 @@ function fitBar(doc, part, m, after) {
   }
   let pos = 0; for (const n of kids(m, "note")) { pos += len(n); if (n === after) break; }
   let gap = cap - total, at = after;
+  /* rests show the beat (Gould): each starts where its own length divides the bar; in 6/8, 9/8, 12/8 a whole beat is
+     a dotted quarter rest; in 4/4 a half rest only on beat 1 or 3 (the alignment rule gives that) */
+  const t8 = (() => { let b = 4, t = 4; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const x = kid(a, "time"); if (x) { b = parseInt(txt(x, "beats"), 10) || b; t = parseInt(txt(x, "beat-type"), 10) || t; } }); if (mm === m) break; } return t === 8 && b % 3 === 0; })();
+  const opts = [["whole", 4, false], ...(t8 ? [["half", 3, true], ["quarter", 1.5, true]] : []), ["half", 2, false], ["quarter", 1, false], ["eighth", 0.5, false], ["16th", 0.25, false]];
   while (gap > 1e-6) {
-    const t = ["whole", "half", "quarter", "eighth", "16th"].find(t => { const d = ED_LEN[t] * div; return d <= gap + 1e-6 && Math.abs(pos / d - Math.round(pos / d)) < 1e-6; });
-    if (!t) break;
-    const d = ED_LEN[t] * div, r = restNote(doc, d, t, txt(after, "voice")); at.after(r); at = r; gap -= d; pos += d;
+    const o = opts.find(([t, q]) => { const d = q * div; return d <= gap + 1e-6 && Math.abs(pos / d - Math.round(pos / d)) < 1e-6 && !(t8 && t === "quarter" && q === 1 && Math.abs(pos / (1.5 * div) - Math.round(pos / (1.5 * div))) < 1e-6 && gap >= 1.5 * div - 1e-6); });
+    if (!o) break;
+    const [t, q, dot] = o, d = q * div, r = restNote(doc, d, t, txt(after, "voice"));
+    if (dot) kid(r, "type").after(doc.createElement("dot"));
+    at.after(r); at = r; gap -= d; pos += d;
   }
 }
 function pushUndo() {
@@ -1664,19 +1670,26 @@ function octForClef(from, to) {
   const t = { "G>F": -1, "G>T": -1, "G>A": 0, "F>G": 1, "T>G": 1, "A>G": 0 };
   return t[g(from) + ">" + g(to)] || 0;
 }
+/* reading clef: the octave is chosen by the real notes (fewest ledger lines), and the clef that reads easiest is marked */
+function fitFor(clef) {
+  const idx = partIndexes(S.piece.xml, S.parts.filter(p => p.keep && !(p.staves > 1 || PIANO_RE.test(p.name))).map(p => p.id));
+  const { k, oct } = kOct(), base = ivForK(k);
+  let best = { oct, cost: Infinity };
+  for (let o = -2; o <= 2; o++) { const d = base.d + 7 * o, c = ledgerCost(idx.map(x => x + d), clef) + Math.abs(o - oct) * 0.05; if (c < best.cost) best = { oct: o, cost: c }; }
+  return { ...best, base };
+}
 function buildClefSheet() {
   const opts = [["bass", "Basowy", "F"], ["tenor", "Tenorowy", "C"], ["alto", "Altowy", "C"], ["treble", "Wiolinowy", "G"]];
+  const fits = Object.fromEntries(opts.map(([v]) => [v, fitFor(v)])), easiest = opts.map(o => o[0]).reduce((a, b) => fits[b].cost < fits[a].cost ? b : a);
   const L = $("#clef-list"); L.innerHTML = "";
   opts.forEach(([v, label, gl]) => {
     const b = document.createElement("button"); b.className = "li tap" + (S.clef === v || (S.clef === "keep" && S.srcClef === v) ? " on" : "");
-    b.innerHTML = `${gl ? glyph(gl) : `<span class="clefg">${icon("left")}</span>`}<span class="grow"><b>${esc(label)}</b></span><span class="radio"></span>`;
+    b.innerHTML = `${glyph(gl)}<span class="grow"><b>${esc(label)}</b>${v === easiest ? `<small>Najmniej linii dodanych</small>` : ""}</span><span class="radio"></span>`;
     b.addEventListener("click", () => {
-      const prev = curClef(), next = v === "keep" ? S.srcClef : v;
-      const dOct = octForClef(prev, next);
-      S.clef = v;
-      if (dOct) S.iv = { d: S.iv.d + 7 * dOct, s: S.iv.s + 12 * dOct };
+      const { k, oct } = kOct(), f = fitFor(v);
+      S.clef = v; S.iv = { d: f.base.d + 7 * f.oct, s: f.base.s + 12 * f.oct };
       if (S.clef === "bass" || S.clef === "tenor") maybeTrombone();
-      $("#clef-hint").textContent = dOct < 0 ? "O oktawę niżej, żeby nuty zmieściły się na pięciolinii." : dOct > 0 ? "O oktawę wyżej, żeby nuty zmieściły się na pięciolinii." : "";
+      $("#clef-hint").textContent = f.oct < oct ? "Oktawę niżej: nuty mieszczą się na pięciolinii." : f.oct > oct ? "Oktawę wyżej: nuty mieszczą się na pięciolinii." : "";
       buildClefSheet(); changed();
     });
     L.appendChild(b);
@@ -2416,7 +2429,13 @@ $("#in-backup").addEventListener("change", async e => {
   } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
 });
 
-const NEWS = { "3.8": ["Twój dźwięk: 5 dźwięków nagrywanych ze stroikiem, każdy zapisuje się sam, gdy jest czysty.",
+const NEWS = { "3.9": ["Nuty według zasad zapisu: ósemki i szesnastki łączone belkami według metrum, pauzy pokazują miary, znaki przypominające w następnym takcie.",
+  "Drugi i trzeci głos według zasad prowadzenia głosów: bez kwint i oktaw równoległych, bez krzyżowania, konsonanse na mocnych częściach taktu, zakończenie na tonice.",
+  "Akordy z kadencją (D → T), fortepian gra według metrum (walc w 3/4), bas idzie najbliższą drogą.",
+  "Klucz i oktawa dobierane tak, żeby nuty mieściły się na pięciolinii; nuty poza skalą instrumentu są zaznaczone.",
+  "Partie mieszczą się w wygodnej skali ucznia i w kluczach danego instrumentu.",
+  "Przykład „Wlazł kotek” poprawiony: 3/4, klucz basowy dla puzonu, tekst pod nutami."],
+  "3.8": ["Twój dźwięk: 5 dźwięków nagrywanych ze stroikiem, każdy zapisuje się sam, gdy jest czysty.",
   "Kolekcje w bibliotece: Ulubione, Ostatnie, Moje i własne. Utwór może być w kilku.",
   "Dotknij partii: tylko ta, wycisz, zmień, drukuj, wyślij, usuń.","Zakładki: Nuty, Stroik, Metronom, Ja. Nuty dodajesz jednym „+”: zdjęcie, galeria, plik, mail, nowa melodia.",
   "Przytrzymaj utwór: otwórz, wyślij, zmień nazwę, usuń.",
@@ -2745,12 +2764,13 @@ function hideWelcome() { if (!$("#welcome").hidden) { fadeOut($("#welcome"), 220
 async function migrateExample() {
   try {
     const all = await DB.all();
-    const olds = all.filter(p => p.sourceType === "example" && !/<work-title>Wlazł kotek na płotek</.test(p.xml || ""));
+    /* an example saved by an older version (wrong 2/4 metre, "meow" as composer) is replaced by the current one */
+    const olds = all.filter(p => p.sourceType === "example" && !/<beats>3<\/beats>/.test(p.xml || ""));
     if (!olds.length) return;
     await engineReady;
     for (const p of olds) {
       const rec = { ...p, xml: exampleXml(), title: /^(Oda do radości|Meow meow meow)$/.test(p.title) ? "Wlazł kotek na płotek" : p.title,
-        composer: /beethoven/i.test(p.composer || "") ? "meow" : p.composer, settings: { ...(p.settings || {}), iv: { d: 0, s: 0 }, preset: -1 }, thumb: null };
+        composer: !p.composer || /beethoven|meow/i.test(p.composer) ? "Melodia ludowa" : p.composer, settings: { ...(p.settings || {}), iv: { d: 0, s: 0 }, preset: -1 }, thumb: null };
       if (rec.settings && rec.settings.preset === undefined) rec.settings.preset = -1;
       await DB.put(rec);
       const snap = { piece: S.piece, parts: S.parts, srcKey: S.srcKey, srcClef: S.srcClef, clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm };
@@ -3058,3 +3078,15 @@ $("#addto-list").addEventListener("change", e => {
   saveCols(all); navigator.vibrate?.(8); refreshLibrary();
 });
 $("#addto-new").addEventListener("click", () => { colTarget = null; colPiece = cardPiece && cardPiece.id; closeSheetThen(() => openSheet("col")); });
+
+/* notes the instrument cannot play are tinted (often a misread octave or clef); only for the music as written */
+function markRange() {
+  if (S.iv.d || S.iv.s) return;
+  try {
+    $$("#pages g.note").forEach(g => {
+      const pid = partOfEl(g); if (!pid) return;
+      const ins = instrById(instrOfPart(pid)), v = tk.getMIDIValuesForElement(g.id); if (!v || !(v.pitch > 0)) return;
+      const w = v.pitch; g.classList.toggle("outrange", w < ins.lo + ins.tr - 1 || w > ins.hi + ins.tr + 1);
+    });
+  } catch (e) { console.warn(e); }
+}

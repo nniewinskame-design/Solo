@@ -1096,3 +1096,4 @@ body.editmode .loopbar{display:none}
 .of-target b{color:var(--ink);font-size:22px}
 .of-note b.dim{color:var(--ink-3)}
 .of-instr{justify-content:center}
+#pages g.note.outrange,#pages g.note.outrange *{fill:#D9822B;stroke:#D9822B}

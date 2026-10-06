@@ -150,7 +150,7 @@ function analyseXml(xml) {
   return { parts, key: { fifths, mode }, title, composer };
 }
 function processedXml() {
-  const doc = addAccidentals(parseXml(S.piece.xml));
+  const doc = autoBeam(addAccidentals(parseXml(S.piece.xml)));
   const root = doc.documentElement;
   const keep = new Set(S.parts.filter(p => p.keep).map(p => p.id));
   const removed = S.parts.some(p => !p.keep);
@@ -356,20 +356,27 @@ function clefId(c) { const s = txt(c, "sign"), l = txt(c, "line"); return s === 
 const ACC_BY_ALTER = { "-2": "flat-flat", "-1": "flat", "0": "natural", "1": "sharp", "2": "double-sharp" };
 function addAccidentals(doc) {
   Array.from(doc.getElementsByTagName("part")).forEach(part => {
-    let fifths = 0;
+    /* Gould: an accidental holds to the barline at its own octave; a note tied over the barline keeps it without a
+       new sign; the next bar gets a courtesy sign when that note returns to the key */
+    let fifths = 0, prevAltered = new Map();
     kids(part, "measure").forEach(m => {
       kids(m, "attributes").forEach(a => { const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0; });
-      const state = new Map();
+      const state = new Map(), altered = new Map(), seen = new Set();
       kids(m, "note").forEach(n => {
         const p = kid(n, "pitch"); if (!p) return;
-        const step = txt(p, "step"), key = step + txt(p, "octave"), alt = Math.round(parseFloat(txt(p, "alter")) || 0);
+        const step = txt(p, "step"), key = (txt(n, "staff") || "1") + step + txt(p, "octave"), alt = Math.round(parseFloat(txt(p, "alter")) || 0);
+        const tiedIn = [...n.getElementsByTagName("tie")].some(t => t.getAttribute("type") === "stop") && !seen.has(key);
         const cur = state.has(key) ? state.get(key) : keyAlter(fifths, step);
-        state.set(key, alt);
-        if (kid(n, "accidental") || alt === cur || !ACC_BY_ALTER[String(alt)]) return;
-        const acc = doc.createElement("accidental"); acc.textContent = ACC_BY_ALTER[String(alt)];
+        const first = !seen.has(key); seen.add(key);
+        state.set(key, alt); if (alt !== keyAlter(fifths, step)) altered.set(key, alt);
+        if (kid(n, "accidental") || tiedIn || !ACC_BY_ALTER[String(alt)]) return;
+        let cautionary = false;
+        if (alt === cur) { if (!(first && prevAltered.has(key) && prevAltered.get(key) !== alt)) return; cautionary = true; }
+        const acc = doc.createElement("accidental"); acc.textContent = ACC_BY_ALTER[String(alt)]; if (cautionary) acc.setAttribute("cautionary", "yes");
         const after = kids(n, "dot").pop() || kid(n, "type");
         if (after) n.insertBefore(acc, after.nextSibling); else n.insertBefore(acc, kid(n, "notations") || kid(n, "stem") || null);
       });
+      prevAltered = altered;
     });
   });
   return doc;
@@ -707,35 +714,38 @@ function aiToMusicXml(j) {
 /* ---------------- Example piece (public domain melody) ---------------- */
 /* "Wlazł kotek na płotek" (by meow, says the running joke): a folk tune with piano, so the piano can be hidden */
 function exampleXml() {
-  // "Wlazł kotek na płotek", Polish folk song (public domain): sol mi mi | fa re re | do mi sol
-  const A = [["G4", 8], ["E4", 8], ["E4", 4]], B = [["F4", 8], ["D4", 8], ["D4", 4]];
-  const mel = [A, B, [["C4", 8], ["E4", 8], ["G4", 4]],
-               A, B, [["C4", 8], ["E4", 8], ["C4", 4]],
-               [["C4", 8], ["E4", 8], ["E4", 4]], B, [["C4", 8], ["E4", 8], ["G4", 4]],
-               A, B, [["C4", 8], ["E4", 8], ["C4", 4]]];
-  const harm = ["C", "G", "C", "C", "G", "C", "C", "G", "C", "C", "G", "C"];
-  const RH = { C: ["E4", "G4", "C5"], G: ["D4", "G4", "B4"] };
-  const LH = { C: "C3", G: "G2" };
-  const dur = { 1: 96, 2: 48, 4: 24, 8: 12 };
-  const typ = { 1: "whole", 2: "half", 4: "quarter", 8: "eighth" };
+  /* "Wlazł kotek na płotek", Polish folk song (public domain). As printed on Polish Wikipedia: 3/4, C major,
+     G E E | F D D | C/E/ G2 | G E E | F D D | C/E/ C2, with the words under the notes. Waltz accompaniment.
+     For the trombone it sits in the bass clef, small octave (g e e …): on the staff, no ledger lines. */
+  const mel = [[["G3", 4, "Wlazł", "single"], ["E3", 4, "ko", "begin"], ["E3", 4, "tek", "end"]],
+               [["F3", 4, "na", "single"], ["D3", 4, "pło", "begin"], ["D3", 4, "tek", "end"]],
+               [["C3", 8, "i", "single"], ["E3", 8, "mru", "begin"], ["G3", 2, "ga,", "end"]],
+               [["G3", 4, "Ład", "begin"], ["E3", 4, "na", "end"], ["E3", 4, "to", "single"]],
+               [["F3", 4, "pio", "begin"], ["D3", 4, "sen", "middle"], ["D3", 4, "ka", "end"]],
+               [["C3", 8, "nie", "single"], ["E3", 8, "dłu", "begin"], ["C3", 2, "ga.", "end"]]];
+  const harm = ["C", "G7", "C", "C", "G7", "C"];
+  const RH = { C: ["E3", "G4", "C5"], G7: ["D3", "F4", "B4"] }, LH = { C: "C3", G7: "G2" };
+  const dur = { 2: 48, 4: 24, 8: 12 }, typ = { 2: "half", 4: "quarter", 8: "eighth" };
   const pitch = p => { const m = p.match(/^([A-G])(b|#)?(\d)$/); const alt = m[2] === "b" ? -1 : m[2] === "#" ? 1 : 0;
     return `<pitch><step>${m[1]}</step>${alt ? `<alter>${alt}</alter>` : ""}<octave>${m[3]}</octave></pitch>`; };
   let solo = "", pno = "";
   mel.forEach((m, i) => {
     let s = `<measure number="${i + 1}">`;
-    if (i === 0) s += `<attributes><divisions>24</divisions><key><fifths>0</fifths></key><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><direction placement="above"><direction-type><words font-weight="bold">Wesoło</words></direction-type><sound tempo="96"/></direction><direction placement="below"><direction-type><dynamics><mf/></dynamics></direction-type></direction>`;
-    m.forEach(([p, d, dot]) => { let dd = dur[d]; if (dot) dd *= 1.5; s += `<note>${pitch(p)}<duration>${dd}</duration><voice>1</voice><type>${typ[d]}</type>${dot ? "<dot/>" : ""}</note>`; });
+    if (i === 0) s += `<attributes><divisions>24</divisions><key><fifths>0</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes><direction placement="above"><direction-type><words font-weight="bold">Wesoło</words></direction-type><sound tempo="112"/></direction><direction placement="below"><direction-type><dynamics><mf/></dynamics></direction-type></direction>`;
+    m.forEach(([p, d, syl, kind]) => { s += `<note>${pitch(p)}<duration>${dur[d]}</duration><voice>1</voice><type>${typ[d]}</type><lyric number="1"><syllabic>${kind}</syllabic><text>${xesc(syl)}</text></lyric></note>`; });
     if (i === mel.length - 1) s += `<barline location="right"><bar-style>light-heavy</bar-style></barline>`;
     solo += s + "</measure>";
+    /* um-pa-pa: the bass on 1, the chord on 2 and 3 */
     let q = `<measure number="${i + 1}">`;
-    if (i === 0) q += `<attributes><divisions>24</divisions><key><fifths>0</fifths></key><time><beats>2</beats><beat-type>4</beat-type></time><staves>2</staves><clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef></attributes><direction placement="below"><direction-type><dynamics><p/></dynamics></direction-type><staff>1</staff></direction>`;
+    if (i === 0) q += `<attributes><divisions>24</divisions><key><fifths>0</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><staves>2</staves><clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef></attributes><direction placement="below"><direction-type><dynamics><p/></dynamics></direction-type><staff>1</staff></direction>`;
     const h = harm[i];
-    RH[h].forEach((p, k) => { q += `<note>${k ? "<chord/>" : ""}${pitch(p)}<duration>48</duration><voice>1</voice><type>half</type><staff>1</staff></note>`; });
-    q += `<backup><duration>48</duration></backup><note>${pitch(LH[h])}<duration>48</duration><voice>5</voice><type>half</type><staff>2</staff></note>`;
+    q += `<note><rest/><duration>24</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>`;
+    for (let k = 0; k < 2; k++) RH[h].forEach((p, j) => { q += `<note>${j ? "<chord/>" : ""}${pitch(p)}<duration>24</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>`; });
+    q += `<backup><duration>72</duration></backup><note>${pitch(LH[h])}<duration>24</duration><voice>5</voice><type>quarter</type><staff>2</staff></note><note><rest/><duration>48</duration><voice>5</voice><type>half</type><staff>2</staff></note>`;
     if (i === mel.length - 1) q += `<barline location="right"><bar-style>light-heavy</bar-style></barline>`;
     pno += q + "</measure>";
   });
-  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>Wlazł kotek na płotek</work-title></work><identification><creator type="composer">meow</creator></identification><part-list><part-group type="start" number="1"><group-symbol>bracket</group-symbol></part-group><score-part id="P1"><part-name>Głos solowy</part-name></score-part><score-part id="P2"><part-name>Fortepian</part-name></score-part><part-group type="stop" number="1"/></part-list><part id="P1">${solo}</part><part id="P2">${pno}</part></score-partwise>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>Wlazł kotek na płotek</work-title></work><identification><creator type="composer">Melodia ludowa</creator></identification><part-list><part-group type="start" number="1"><group-symbol>bracket</group-symbol></part-group><score-part id="P1"><part-name>Głos solowy</part-name></score-part><score-part id="P2"><part-name>Fortepian</part-name></score-part><part-group type="stop" number="1"/></part-list><part id="P1">${solo}</part><part id="P2">${pno}</part></score-partwise>`;
 }
 
 
@@ -791,3 +801,109 @@ function canvasToJpeg(srcCanvasOrImg, maxEdge, q) {
   return c.toDataURL("image/jpeg", q);
 }
 
+
+/* ---------------- engraving: beams by metre (Gould, "Behind Bars"; LilyPond/Dorico beam grouping) ----------------
+   Only for bars that have no beams of their own (scans, the editor and generated parts come without them).
+   - a group never crosses a beat; the beat is a quarter in x/4, a half in x/2, a dotted quarter in 6/8, 9/8, 12/8;
+     3/8 and 2/8 are one group
+   - 2/4 by the beat; 3/4: six eighths are one group; in 4/4 a half bar of eighths only is one group (beats 1–2,
+     3–4, never across the middle); 16ths always by the beat
+   - rests, longer notes and grace notes break a group; 16ths get a second beam inside their beat, with a hook
+     for a lone 16th; chord notes are beamed through their first note */
+const BEAMABLE = { eighth: 1, "16th": 2, "32nd": 3, "64th": 4 };
+function beamPlan(beats, bt) {
+  const compound = bt === 8 && beats % 3 === 0 && beats > 3;
+  if (bt === 8 && beats <= 3) return { beat: beats * 0.5, compound: false, whole: true };          // 3/8, 2/8: one group (in quarters)
+  if (compound) return { beat: 1.5, compound: true };
+  if (bt === 2) return { beat: 2 };
+  if (bt === 8) return { beat: 0.5, groups: beats === 7 ? [1, 1, 1.5] : beats === 5 ? [1, 1.5] : null };
+  return { beat: 4 / bt };
+}
+function autoBeam(doc) {
+  [...doc.getElementsByTagName("part")].forEach(part => {
+    let div = 1, beats = 4, bt = 4;
+    kids(part, "measure").forEach(m => {
+      kids(m, "attributes").forEach(a => {
+        const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+        const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+      });
+      if (m.getElementsByTagName("beam").length) return;                  // the bar already says how it is beamed
+      const plan = beamPlan(beats, bt), barQ = beats * 4 / bt;
+      /* onsets per voice, in quarter notes from the start of the bar */
+      const voices = new Map(); let pos = 0, last = null;
+      [...m.children].forEach(el => {
+        if (el.tagName === "backup") { pos -= (parseFloat(txt(el, "duration")) || 0) / div; return; }
+        if (el.tagName === "forward") { pos += (parseFloat(txt(el, "duration")) || 0) / div; return; }
+        if (el.tagName !== "note") return;
+        if (kid(el, "chord")) { if (last) last.chord.push(el); return; }
+        const grace = !!kid(el, "grace"), dur = grace ? 0 : (parseFloat(txt(el, "duration")) || 0) / div;
+        const v = (txt(el, "voice") || "1") + "/" + (txt(el, "staff") || "1");
+        const o = { el, chord: [], on: pos, dur, grace, rest: !!kid(el, "rest"), lvl: BEAMABLE[txt(el, "type")] || 0 };
+        if (!voices.has(v)) voices.set(v, []); voices.get(v).push(o); last = o;
+        pos += dur;
+      });
+      voices.forEach(list => {
+        const notes = list.filter(o => !o.grace);
+        const eighthsOnly = notes.length && notes.every(o => !o.rest && o.lvl === 1);
+        /* in 4/4 a half bar of eighths only may be one group (never across the middle) */
+        const halfOnly = h => { const hs = notes.filter(o => (o.on < 2 - 1e-6) === (h === 0)); return hs.length && hs.every(o => !o.rest && o.lvl === 1); };
+        /* which group a note belongs to */
+        const bounds = []; if (plan.groups) { let x = 0; plan.groups.forEach(g => { x += g; bounds.push(x); }); }
+        const groupOf = o => {
+          if (plan.whole) return 0;
+          if (plan.groups) return bounds.findIndex(b => o.on < b - 1e-6);
+          if (eighthsOnly && beats === 3 && bt === 4) return 0;                       // 3/4: six eighths are one group
+          if (beats === 4 && bt === 4) { const h = o.on < 2 - 1e-6 ? 0 : 1; if (halfOnly(h)) return 10 + h; }   // 4/4: half bars of eighths
+          return Math.floor(o.on / plan.beat + 1e-6);
+        };
+        let grp = [];
+        const flush = () => {
+          if (grp.length > 1) grp.forEach((o, i) => {
+            const pos = i === 0 ? "begin" : i === grp.length - 1 ? "end" : "continue";
+            const set = (n, txtv) => { const b = doc.createElement("beam"); b.setAttribute("number", String(n)); b.textContent = txtv; insertBeam(o.el, b); };
+            set(1, pos);
+            /* second beam between neighbouring 16ths; a lone 16th gets a hook towards its group */
+            if (o.lvl >= 2) {
+              const p = grp[i - 1], q = grp[i + 1], lp = p && p.lvl >= 2, lq = q && q.lvl >= 2;
+              set(2, lp && lq ? "continue" : lp ? "end" : lq ? "begin" : i === grp.length - 1 ? "backward hook" : "forward hook");
+            }
+          });
+          grp = [];
+        };
+        let g = null;
+        list.forEach(o => {
+          if (o.grace) return;
+          if (o.rest || !o.lvl) { flush(); g = null; return; }
+          const k = groupOf(o); if (grp.length && k !== g) flush();
+          g = k; grp.push(o);
+        });
+        flush();
+      });
+    });
+  });
+  return doc;
+}
+/* <beam> goes after <type>, <dot>s, <accidental>, <time-modification> and <stem>, before <notations> and <lyric> */
+function insertBeam(note, beam) {
+  const after = ["notations", "lyric", "play", "listen"].map(t => kid(note, t)).find(Boolean);
+  note.insertBefore(beam, after || null);
+}
+
+/* ---------------- staff fit: how many ledger lines a part needs (Gould: 2–3 are comfortable, more is hard) ----------------
+   Diatonic index = octave × 7 + step (C=0 … B=6). The five lines of a clef span bottom … bottom + 8. */
+const CLEF_LINES = { treble: 30, bass: 18, tenor: 22, alto: 24 };     // bottom line: E4, G2, D3, F3
+function ledgerCost(idxs, clef) {
+  const lo = CLEF_LINES[clef] ?? 30, hi = lo + 8; let cost = 0;
+  idxs.forEach(d => { const n = d < lo - 1 ? Math.floor((lo - d) / 2) : d > hi + 1 ? Math.floor((d - hi) / 2) : 0; cost += n * n + (n > 3 ? 6 : 0); });
+  return cost / Math.max(1, idxs.length);
+}
+/* written diatonic positions of the melody-like parts (not a piano) of a score */
+function partIndexes(xml, keepIds) {
+  const doc = parseXml(xml), out = [];
+  kids(doc.documentElement, "part").forEach(p => {
+    if (keepIds && !keepIds.includes(p.getAttribute("id"))) return;
+    if (p.getElementsByTagName("staves")[0] && parseInt(p.getElementsByTagName("staves")[0].textContent, 10) > 1) return;
+    [...p.getElementsByTagName("pitch")].forEach(x => out.push(parseInt(txt(x, "octave"), 10) * 7 + STEP_I[txt(x, "step")]));
+  });
+  return out;
+}
