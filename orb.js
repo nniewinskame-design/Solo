@@ -56,7 +56,7 @@ function createOrb(canvas, opt = {}) {
   }
   const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
   /* palette v3: soft pastels as in Copilot: every colour 40 % towards white, every alpha at most ~0.45 */
-  const SOFT = opt.soft ?? 0.48, PALE = opt.pale ?? 0.4, pale = v => Math.round(v + (255 - v) * PALE);
+  const SOFT = opt.soft ?? 0.26, PALE = opt.pale ?? 0.45, pale = v => Math.round(v + (255 - v) * PALE);
   const rgba = (c, a) => `rgba(${pale(c[0])},${pale(c[1])},${pale(c[2])},${(a * SOFT).toFixed(3)})`;
   /* gradients in unit space (radius 1 around 0,0); the transform scales them to the orb */
   function body(c, a0, a1, ox, oy) {
