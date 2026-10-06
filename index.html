@@ -225,6 +225,7 @@
       <button data-ed="bar" aria-label="Takt: metrum, klucz, znaki"><svg class="i"><use href="#bar"/></svg><span>Takt</span></button>
       <i class="ed-sep"></i>
       <button data-ed="undo" id="ed-undo" aria-label="Cofnij"><svg class="i"><use href="#undo"/></svg><span>Cofnij</span></button>
+      <button data-ed="redo" id="ed-redo" aria-label="Ponów" disabled><svg class="i" style="transform:scaleX(-1)"><use href="#undo"/></svg><span>Ponów</span></button>
     </div>
   </div>
   <div class="loopbar" id="loopbar" hidden>
@@ -484,24 +485,6 @@
     <label class="li" for="own-use"><span class="grow"><b>Graj moim dźwiękiem</b></span><input type="checkbox" id="own-use" class="switch"></label>
   </div>
   </div></div>
-</div>
-
-<div class="sheet" id="sh-voice" role="dialog" aria-modal="true" aria-labelledby="sh-voice-t" hidden>
-  <div class="grab"></div>
-  <div class="shead"><h2 class="h-m" id="sh-voice-t">Drugi głos</h2><button class="done ghost" data-close>Anuluj</button></div>
-  <h3 class="lbl first">Odstęp</h3>
-  <div class="seg" id="v-int"><button data-i="3">Tercje</button><button data-i="6">Seksty</button></div>
-  <h3 class="lbl">Poziom</h3>
-  <div class="seg" id="v-lev"><button data-l="1">Łatwy</button><button data-l="2">Średni</button><button data-l="3">Zaawansowany</button></div>
-  <p class="note" id="v-desc"></p>
-  <button class="btn primary wide" id="v-go"><svg class="i"><use href="#plus"/></svg><span>Dodaj drugi głos</span></button>
-</div>
-
-<div class="sheet" id="sh-partfor" role="dialog" aria-modal="true" aria-labelledby="sh-partfor-t" hidden>
-  <div class="grab"></div>
-  <div class="shead"><h2 class="h-m" id="sh-partfor-t">Partia dla instrumentu</h2><button class="done ghost" data-close>Anuluj</button></div>
-  <p class="note">Solo zrobi nowe nuty dla wybranego instrumentu: przeniesione o właściwy interwał i w kluczu wiolinowym. Oryginał zostaje bez zmian.</p>
-  <div class="list" id="partfor-list"></div>
 </div>
 
 <div class="sheet" id="sh-pdf" role="dialog" aria-modal="true" aria-labelledby="sh-pdf-t" hidden>
