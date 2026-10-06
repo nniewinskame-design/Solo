@@ -1458,9 +1458,13 @@ const player = new Audio(); player.preload = "auto"; player.setAttribute("playsi
 const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
 /* the microphone is in use (tuner or a recording): iOS must then stay in "play-and-record" */
 const micBusy = () => (typeof tuner !== "undefined" && tuner.on) || (typeof of !== "undefined" && !!of.stream);
+/* The audio session type is set only at the moment a sound starts (playback) or the microphone opens
+   (play-and-record), never when things go quiet: on iPhone every change of the session's category re-routes the
+   audio hardware, which can be heard as a soft tick or buzz, and a change made by a timer comes "for no reason".
+   The type alone does not hold the phone's audio: iOS gives it back to other apps once nothing plays. */
 function setSession(type) { try { if (navigator.audioSession && navigator.audioSession.type !== type) navigator.audioSession.type = type; } catch {} }
-/* nothing sounds and nothing listens: give the phone's audio back to other apps (iOS 17+) */
-function sessionIdle() { if (!playState && !pb.preparing && !micBusy() && !(typeof metro !== "undefined" && metro.on)) setSession("auto"); }
+/* nothing sounds and nothing listens: the session is left as it is (see above) */
+function sessionIdle() {}
 function unlockAudio() {
   if (!micBusy()) setSession("playback");
   if (!player.src || player.src === SILENCE || player.paused) {
@@ -1468,7 +1472,9 @@ function unlockAudio() {
   }
 }
 /* one audio context for the short sounds (note preview, metronome, listening to a recording): iOS allows only a
-   few, and a running one keeps the phone's audio busy, so it is suspended after 20 s of quiet */
+   few, and a running one keeps the phone's audio busy (a running, silent context can also be heard as a faint hum
+   on some iPhones), so it is suspended a few seconds after its last sound has ended, and at once when the app is
+   left */
 const fx = { ctx: null, idle: 0 };
 function fxCtx() {
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -1477,10 +1483,12 @@ function fxCtx() {
   if (fx.ctx.state !== "running") { const r = fx.ctx.resume?.(); if (r) r.catch(() => {}); }
   fxIdle(); return fx.ctx;
 }
-function fxIdle(ms = 20000) {
+function fxIdle(ms = 8000) {
   clearTimeout(fx.idle);
-  fx.idle = setTimeout(() => { if (metro.on || !fx.ctx || fx.ctx.state !== "running") return; const r = fx.ctx.suspend?.(); if (r) r.catch(() => {}); sessionIdle(); }, ms);
+  fx.idle = setTimeout(fxSleep, ms);
 }
+function fxSleep() { clearTimeout(fx.idle); if (metro.on || !fx.ctx || fx.ctx.state !== "running") return; const r = fx.ctx.suspend?.(); if (r) r.catch(() => {}); }
+document.addEventListener("visibilitychange", () => { if (document.hidden) fxSleep(); });
 const yieldNow = () => (globalThis.scheduler && typeof scheduler.yield === "function") ? scheduler.yield() : new Promise(r => setTimeout(r, 0));
 /* ---------------- 3.8 player (benchmark: Soundslice, MuseScore 4, Songsterr, Tomplay, Flat, SmartMusic) ----------------
    The cursor follows the sound itself (the audio clock, so it never drifts): a soft highlight on the bar and a thin
@@ -1743,7 +1751,7 @@ async function playLive(ev, clicks, total, token, k, fromMs, countLen, freq) {
     for (; c < cl.length && cl[c].t < until; c++) clickNote(ctx, bus, t0 + LEAD + cl[c].t, cl[c].acc);
   };
   pump(); const timer = setInterval(pump, 1000);
-  const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > total + LEAD + 0.3; }, get paused() { return ctx.state !== "running"; }, pause() { clearInterval(timer); try { ctx.close(); } catch {} } };
+  const src = { get currentTime() { return ctx.currentTime - t0; }, get ended() { return ctx.currentTime - t0 > total + LEAD + 0.3; }, get paused() { return ctx.state !== "running"; }, pause() { clearInterval(timer); try { bus.gain.setTargetAtTime(0, ctx.currentTime, 0.008); } catch {} setTimeout(() => { try { ctx.close(); } catch {} }, 80); } };
   if (token !== playToken) { src.pause(); return; }
   playState = { raf: 0, k, fromMs, url: null, src, ev, countLen, total, loopLen: 0, live: true, clock: { a: -1, at: 0 }, di: -1 };
   setPlayUi(true); keepAwake(); mediaState("playing"); follow(token);
@@ -3450,7 +3458,7 @@ $("#m-beats").addEventListener("click", e => {
 function metroClick(t, accent) {
   const c = metro.ctx, o = c.createOscillator(), g = c.createGain();
   o.frequency.value = accent ? 1500 : 1000; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(accent ? .9 : .55, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .06);
-  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + .08);
+  o.connect(g); g.connect(metro.out || c.destination); o.start(t); o.stop(t + .08);
 }
 const metroBeatLen = () => (metro.beats === 6 ? 30 : 60) / metro.bpm;
 /* look ahead 120 ms, so the clicks stay exact even when the page is busy. When the page was held up (a phone call,
@@ -3474,6 +3482,7 @@ function metroStart() {
   if (playState || pb.preparing) stopPlayback(true);                 // never two clicks at two tempi
   unlockAudio();
   metro.ctx = fxCtx(); clearTimeout(fx.idle);
+  metro.out = metro.ctx.createGain(); metro.out.connect(metro.ctx.destination);      // clicks already queued are faded at stop
   metro.on = true; metro.n = 0; metro.next = metro.ctx.currentTime + .08; metro.queue = [];
   metro.timer = setInterval(metroTick, 25);
   const draw = () => {
@@ -3487,7 +3496,11 @@ function metroStart() {
 }
 function metroStop() {
   metro.on = false; clearInterval(metro.timer); cancelAnimationFrame(metro.raf); metro.queue = [];
-  metro.dots.forEach(d => d.classList.remove("on")); syncMetro(); fxIdle();
+  metro.dots.forEach(d => d.classList.remove("on")); syncMetro();
+  /* the clicks handed ahead to the audio clock (up to 120 ms) are not heard after Stop */
+  const out = metro.out; metro.out = null;
+  if (out) { try { out.gain.setTargetAtTime(0, metro.ctx.currentTime, 0.005); } catch {} setTimeout(() => { try { out.disconnect(); } catch {} }, 300); }
+  if (document.hidden) fxSleep(); else fxIdle();
   if (!playState && !tuner.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
 }
 $("#m-go").addEventListener("click", () => metro.on ? metroStop() : metroStart());
