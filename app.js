@@ -3538,7 +3538,12 @@ $("#in-backup").addEventListener("change", async e => {
   syncSettings(); if (prefs && typeof renderProfile === "function") renderProfile();
 });
 
-const NEWS = { "4.0": ["Nowy wygląd: papier, atrament i mosiądz. Większe litery i przyciski, wyraźniejsze kolory.",
+const NEWS = { "4.0": ["Nowy, jasny wygląd. Każda rodzina instrumentów ma swój kolor.",
+  "Edytuj i Gotowe zamiast ołówka i ptaszka. Cofnij i ponów na górze.",
+  "Twoje brzmienia są w zakładce Ja: plus dodaje nowe. Nagrywanie i stroik z kulą, która słucha.",
+  "Odsłuch nuty przy edycji gra jak w zapisie: tonacja, długość, dynamika, instrument.",
+  "Mikrofon włącza się dopiero, gdy go potrzebujesz, i gaśnie po wyjściu ze stroika.",
+  "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Na telefonie nuty są duże i czytelne; strona A4 zostaje do wyboru i do druku.",
   "Metronom ze stukaniem tempa i akcentami. Stroik z wielką nutą.",
   "Tonacje molowe z właściwymi akordami. Przedtakt wyrównany we wszystkich partiach.",

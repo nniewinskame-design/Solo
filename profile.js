@@ -72,7 +72,7 @@ const INSTRUMENTS = [
 ];
 const INSTR_GROUPS = ["Dęte blaszane", "Dęte drewniane", "Smyczkowe", "Klawiszowe", "Szarpane", "Perkusyjne", "Głos"];
 /* one colour per instrument family, everywhere (Clear Stage: colour = meaning, never a part's index) */
-const FAMILY_HUE = { "Dęte blaszane": "amber", "Dęte drewniane": "green", "Smyczkowe": "coral", "Klawiszowe": "blue", "Szarpane": "violet", "Perkusyjne": "teal", "Głos": "pink" };
+/* (FAMILY_HUE, the family → colour map, lives in orb.js, which loads first) */
 function hueOf(instr) { const i = typeof instr === "string" ? instrById(instr) : instr; return (i && FAMILY_HUE[i.group]) || "slate"; }
 const hueStyle = instr => { const h = hueOf(instr); return `style="--h:var(--${h});--h-ink:var(--${h}-ink)"`; };
 /* the instrument picker (benchmark: MuseScore, StaffPad, Dorico, BandLab): search, "yours" first, then families */

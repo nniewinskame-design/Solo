@@ -166,3 +166,4 @@
   .lx-dots i.on{transform:none}
   .snd-tile:active,.ownf.lx .of-tile:active{transform:none;opacity:.7}
 }
+.tuner2[data-st="off"] .tn-note b,.tuner2[data-st="off"] .tn-note span{visibility:hidden}   /* nothing inside the orb until it hears something */
