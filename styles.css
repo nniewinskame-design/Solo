@@ -1748,3 +1748,19 @@ a,.link{color:var(--brand-ink)}
 input.onb-name[type=text]{background:var(--surface)!important;font:600 22px var(--font)!important;height:56px!important;border-radius:16px!important;text-align:center!important}
 input.me-name[type=text]{background:none!important;box-shadow:none;font:650 20px/1.2 var(--font)!important;height:auto!important;min-height:0!important;padding:2px 0!important;border-radius:0!important}
 input.me-name[type=text]:focus{box-shadow:0 2px 0 var(--brand)!important}
+
+/* ---- playback: a thin line on the music; the whole player bar fills with a light, see-through violet as the
+   piece goes on (instead of a sharp line on its top edge) ---- */
+.playline{width:2px!important;box-shadow:none!important;opacity:.85!important}
+.dock.transport .tp-prog{left:0;right:0;top:0;bottom:0;height:auto;border-radius:inherit;background:none;z-index:0}
+.dock.transport .tp-prog i{border-radius:0;background:linear-gradient(90deg,rgb(45 140 255/.10),rgb(154 77 255/.22));transition:width 120ms linear!important}
+.dock.transport>button{position:relative;z-index:1}
+
+/* ---- start screen: all gradient, the note alone in white ---- */
+#splash{background:linear-gradient(150deg,#2D8CFF,#5A63FF 50%,#9A4DFF)}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){ #splash{background:linear-gradient(in oklch 150deg,#2D8CFF,#9A4DFF)} }
+#splash .aura{display:none}
+#splash .sp-tile{width:auto;height:auto;background:none;box-shadow:none;border-radius:0}
+#splash .sp-tile svg.mark{width:64px;height:80px;color:#fff;filter:drop-shadow(0 10px 24px rgb(40 20 140/.25))}
+#splash .sp-word{color:#fff;font-size:32px}
+#splash .sp-word{display:none}
