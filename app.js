@@ -1924,7 +1924,7 @@ function loopMemory(set) {
     if (!drag || !pb.loop) return; const v = valAt(e.clientX), L = pb.loop, a = L.a, b = L.b;
     if (drag === "lb-a") L.a = Math.min(v, L.b); else L.b = Math.max(v, L.a);
     if (L.a === a && L.b === b) return;                        // same bar: nothing to redraw
-    drawLoop(); syncLoopUi(); navigator.vibrate?.(4);
+    drawLoop(); syncLoopUi();
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", () => { if (!drag) return; drag = null; const m = measureEls()[pb.loop.a]; if (m && !playState) scrollToBar(m); if (playState) play(); });
@@ -3503,7 +3503,7 @@ function tapTempo(now = performance.now()) {
   const bpm = 60000 / ((t[t.length - 1] - t[0]) / (t.length - 1));
   setMetroBpm(metro.beats === 6 ? bpm / 2 : bpm); return metro.bpm;
 }
-{ const tap = $("#m-tap"); if (tap) tap.addEventListener("pointerdown", e => { e.preventDefault(); tapTempo(); navigator.vibrate?.(6); }); }
+{ const tap = $("#m-tap"); if (tap) tap.addEventListener("pointerdown", e => { e.preventDefault(); tapTempo(); }); }
 /* the metronome speeds up by itself (Pro Metronome's "Automator"): metroRamp({ to: 120, step: 4, bars: 4 }) adds
    4 BPM every 4 bars up to 120; metroRamp(null) stops it. Logic only, for the lead's controls. */
 function metroRamp(o) { metro.ramp = o ? { to: Math.min(240, o.to || 120), step: o.step || 4, bars: o.bars || 4, bar: 0 } : null; return metro.ramp; }
@@ -4267,7 +4267,7 @@ $("#col-del").addEventListener("click", () => {
 function syncFavTile() { const on = cardPiece && favs().includes(cardPiece.id); $("#cd-fav").innerHTML = icon(on ? "heart-fill" : "heart") + `<span>Ulubione</span>`; $("#cd-fav").setAttribute("aria-pressed", String(!!on)); }
 $("#cd-fav").addEventListener("click", () => {
   const f = favs(), id = cardPiece.id, on = f.includes(id);
-  saveFavs(on ? f.filter(x => x !== id) : [...f, id]); syncFavTile(); navigator.vibrate?.(8); refreshLibrary();
+  saveFavs(on ? f.filter(x => x !== id) : [...f, id]); syncFavTile(); refreshLibrary();
 });
 $("#cd-col").addEventListener("click", () => closeSheetThen(() => openSheet("addto")));
 function buildAddtoSheet() {
@@ -4278,7 +4278,7 @@ $("#addto-list").addEventListener("change", e => {
   const cid = e.target.dataset.c, id = cardPiece && cardPiece.id; if (!cid || !id) return;
   const all = cols(), c = all.find(x => x.id === cid); if (!c) return;
   c.items = e.target.checked ? [...new Set([...c.items, id])] : c.items.filter(x => x !== id);
-  saveCols(all); navigator.vibrate?.(8); refreshLibrary();
+  saveCols(all); refreshLibrary();
 });
 $("#addto-new").addEventListener("click", () => { colTarget = null; colPiece = cardPiece && cardPiece.id; closeSheetThen(() => openSheet("col")); });
 

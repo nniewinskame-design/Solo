@@ -215,7 +215,7 @@ function listenLoop(t) {
   if (prog >= 1) capture();
 }
 function capture() {
-  of.state = "got"; navigator.vibrate?.(15);
+  of.state = "got";
   const smp = makeSample(lastAudio(OWN_HOLD / 1000 + 0.15), of.sr, of.targets[of.step]);
   of.done[of.step] = smp; renderOwn();
 }
