@@ -2901,13 +2901,17 @@ function buildNewSheet() {
   const p = profile(); nm.instr = nm.instr || p.main;
   const ids = [...new Set([...p.instruments, nm.instr])];
   $("#new-instr").innerHTML = ids.map(id => `<button data-i="${id}" aria-pressed="${id === nm.instr}">${esc(instrById(id).name)}</button>`).join("") +
-    `<select id="new-instr-more" aria-label="Inny instrument"><option value="">Inny…</option>${INSTRUMENTS.filter(i => !ids.includes(i.id)).map(i => `<option value="${i.id}">${esc(i.name)}</option>`).join("")}</select>`;
+    `<button data-more aria-label="Inny instrument">${icon("plus")}</button>`;
   $$("#new-time button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === nm.time)));
   $("#new-key").value = String(nm.key); $("#new-bpm").textContent = String(nm.bpm);
   $("#new-title").value = nm.title;
   $("#new-clef").textContent = instrById(nm.instr).clef === "bass" ? "klucz basowy" : "klucz wiolinowy";
 }
-$("#new-instr").addEventListener("click", e => { const b = e.target.closest("[data-i]"); if (b) { nm.instr = b.dataset.i; buildNewSheet(); } });
+$("#new-instr").addEventListener("click", e => {
+  const b = e.target.closest("[data-i]"); if (b) { nm.instr = b.dataset.i; buildNewSheet(); }
+  /* any instrument: the same searchable picker as everywhere, then back to this sheet */
+  if (e.target.closest("[data-more]")) pickInstrument("Instrument", id => { nm.instr = id; openSheet("new"); });
+});
 $("#new-instr").addEventListener("change", e => { if (e.target.id === "new-instr-more" && e.target.value) { nm.instr = e.target.value; buildNewSheet(); } });
 $$("#new-time button").forEach(b => b.addEventListener("click", () => { nm.time = b.dataset.v; buildNewSheet(); }));
 $("#new-key").addEventListener("change", e => { nm.key = +e.target.value; });
@@ -2944,9 +2948,10 @@ const partName = id => { const sp = [...parseXml(S.piece.xml).getElementsByTagNa
 function renderPartStrip() {
   const box = $("#pstrip"); if (!box || !S.piece) return;
   const only = S.only;
-  box.innerHTML = S.parts.map(p => {
+  box.innerHTML = S.parts.map((p, k) => {
     const nm = partLabel(p);
-    return `<button class="pchip${only === p.id ? " only" : ""}${pb.mute.has(p.id) ? " muted" : ""}${p.keep ? "" : " off"}" data-pid="${p.id}">${icon(p.staves > 1 || PIANO_RE.test(nm) ? "piano" : "trombone")}<span>${esc(nm)}</span></button>`;
+    /* each part keeps one of the seven slide-position colours, as a dot on its chip */
+    return `<button style="--pc:var(--pos-${(k % 7) + 1})" class="pchip${only === p.id ? " only" : ""}${pb.mute.has(p.id) ? " muted" : ""}${p.keep ? "" : " off"}" data-pid="${p.id}">${icon(p.staves > 1 || PIANO_RE.test(nm) ? "piano" : "trombone")}<span>${esc(nm)}</span></button>`;
   }).join("") + `<button class="pchip add" data-sheet="addpart" aria-label="Dodaj partię">${icon("plus")}</button>`;
 }
 /* a tap shows only that part (again: all of them); a long press opens what can be done with it */

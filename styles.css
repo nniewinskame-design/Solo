@@ -1258,3 +1258,7 @@ body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 1
 /* ===== Score header: the title in the display face, up to two lines; the details may wrap (V28) ===== */
 .stitle .a{font-family:var(--display);font-size:18px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-wrap:balance;line-height:1.15}
 .stitle .b{font-size:14px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pchip::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--pc,var(--ink-3));flex:none}
+.pchip.add::before{display:none}
+.sheet .ask-row{background:var(--card);border-radius:var(--r-m);padding:8px 8px 8px 16px;min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+#score #s-sub{white-space:normal;display:block;line-height:1.35;-webkit-line-clamp:unset}   /* composer · clef · key wrap as whole words instead of "…" */
