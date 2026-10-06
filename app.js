@@ -125,7 +125,9 @@ function placeSlide() {
   requestAnimationFrame(() => {                         // after the bar is laid out (it is hidden off the tabs)
     const bar = $("#tabbar"), cur = bar && bar.querySelector("[aria-current]"), pill = bar && bar.querySelector(".slide"); if (!cur || !pill || !cur.offsetWidth) return;
     if (!pill.style.width) pill.style.transition = "none";   // the first placement does not glide in from the left
-    pill.style.width = cur.offsetWidth + "px"; pill.style.transform = `translateX(${cur.offsetLeft}px)`;
+    /* the pill takes the button's own box, so it can never sit lower or higher than the tab it marks */
+    pill.style.width = cur.offsetWidth + "px"; pill.style.height = cur.offsetHeight + "px"; pill.style.top = cur.offsetTop + "px";
+    pill.style.transform = `translateX(${cur.offsetLeft}px)`;
     if (pill.style.transition) requestAnimationFrame(() => (pill.style.transition = ""));
   });
 }

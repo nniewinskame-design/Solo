@@ -1296,3 +1296,4 @@ body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 1
 #score .stitle .a{grid-row:1;grid-column:2;text-align:center}
 #score #s-sub{grid-row:2;grid-column:1/-1;text-align:center;margin-top:-4px;white-space:normal;display:block;font-size:14px}
 #score .pstrip{grid-row:3;grid-column:1/-1}
+.tabbar .slide{margin:0}   /* an older ".tabbar i"-style margin pushed the pill 12 px down */
