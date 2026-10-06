@@ -484,7 +484,7 @@ function loadState(piece, settings) {
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
-  S.layout = S.hasLines ? "orig" : "fit"; S.page = "a4"; S.pz = 1; S.under = ""; S.swing = false;
+  S.layout = S.hasLines ? "orig" : "fit"; S.page = "a4"; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
   if (settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
@@ -494,6 +494,7 @@ function loadState(piece, settings) {
     if (settings.bpm >= 20 && settings.bpm <= 300) S.bpm = Math.round(settings.bpm);
     if (settings.zoom >= .5 && settings.zoom <= 2) S.zoom = settings.zoom;
     if (settings.pz >= .5 && settings.pz <= 3) S.pz = settings.pz;
+    if (Number.isInteger(settings.readOct)) S.readOct = Math.max(-2, Math.min(2, settings.readOct));
     if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
     if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
     S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
@@ -549,7 +550,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
+    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -688,9 +689,9 @@ function setEditMode(on) {
   S.editMode = on;
   /* big notes across the screen while correcting (a finger must hit a line); the A4 page comes back after */
   if (on) {
-    const moved = S.iv.d || S.iv.s || S.clef !== "keep";
-    S.editView = { iv: S.iv, clef: S.clef, preset: S.preset, page: S.page, zoom: S.zoom };
-    S.iv = { d: 0, s: 0 }; S.clef = "keep"; S.preset = -1; S.page = "screen"; S.zoom = Math.max(S.zoom, 1.5);
+    const moved = S.iv.d || S.iv.s || S.clef !== "keep" || S.readOct;
+    S.editView = { iv: S.iv, clef: S.clef, preset: S.preset, page: S.page, zoom: S.zoom, readOct: S.readOct };
+    S.iv = { d: 0, s: 0 }; S.clef = "keep"; S.preset = -1; S.readOct = 0; S.page = "screen"; S.zoom = Math.max(S.zoom, 1.5);
     S.loadedKey = null; render(); if (moved) hud("Poprawiasz nuty tak, jak są zapisane", 2500);
   }
   if (!on && S.editView) { Object.assign(S, S.editView); S.editView = null; S.loadedKey = null; changed(); }
@@ -868,6 +869,35 @@ function editNote(op) {
     const ph = doc.createElement("x"); n.replaceWith(ph); other.replaceWith(n); ph.replaceWith(other);
     const i = kids(n.parentNode, "note").indexOf(n), di = bar === sel.bar ? sel.di : drawnBars(processedXml()).indexOf(bar) + (op === "left" ? 0 : 0);
     S.editSel = { ...sel, bar, i, di: bar === sel.bar ? sel.di : Math.max(0, sel.di + (op === "left" ? -1 : 1)) };
+  } else if (op.startsWith("dyn:") || op.startsWith("wedge:") || op.startsWith("art:") || op === "fermata" || op === "slur") {
+    /* markings on the selected note, as in printed parts: dynamics and hairpins below the staff, articulations
+       on the note, a slur to the next note; the same button again takes the mark away */
+    const nots = () => { let x = kid(n, "notations"); if (!x) { x = doc.createElement("notations"); n.insertBefore(x, kid(n, "lyric") || null); } return x; };
+    const before = n.previousElementSibling, dirBefore = t => before && before.tagName === "direction" && before.getElementsByTagName(t)[0] ? before : null;
+    if (op.startsWith("dyn:")) {
+      const v = op.slice(4), old = dirBefore("dynamics"), same = old && old.getElementsByTagName(v)[0];
+      if (old) old.remove();
+      if (!same) { const d = doc.createElement("direction"); d.setAttribute("placement", "below"); d.innerHTML = `<direction-type><dynamics><${v}/></dynamics></direction-type>`; n.before(d); }
+    } else if (op.startsWith("wedge:")) {
+      const kind = op.slice(6), old = dirBefore("wedge");
+      if (old) { old.remove(); [...at.m.getElementsByTagName("wedge")].filter(w => w.getAttribute("type") === "stop").forEach(w => w.closest("direction").remove()); }
+      else {
+        const d = doc.createElement("direction"); d.setAttribute("placement", "below"); d.innerHTML = `<direction-type><wedge type="${kind}"/></direction-type>`; n.before(d);
+        const e = doc.createElement("direction"); e.setAttribute("placement", "below"); e.innerHTML = `<direction-type><wedge type="stop"/></direction-type>`;
+        const last = kids(at.m, "note").pop(); last.after(e);                 // to the end of the bar
+      }
+    } else if (op.startsWith("art:")) {
+      const v = op.slice(4), x = nots(); let a = kid(x, "articulations"); if (!a) { a = doc.createElement("articulations"); x.appendChild(a); }
+      const ex = kid(a, v); if (ex) ex.remove(); else a.appendChild(doc.createElement(v));
+      if (!a.children.length) a.remove(); if (!x.children.length) x.remove();
+    } else if (op === "fermata") {
+      const x = nots(), ex = kid(x, "fermata"); if (ex) ex.remove(); else x.appendChild(doc.createElement("fermata")); if (!x.children.length) x.remove();
+    } else {
+      const notes = [...at.part.getElementsByTagName("note")].filter(x => !kid(x, "chord") && !kid(x, "grace") && kid(x, "pitch")), k = notes.indexOf(n), nx = notes[k + 1];
+      const x = nots(), ex = [...x.getElementsByTagName("slur")].find(sl => sl.getAttribute("type") === "start");
+      if (ex) { ex.remove(); const stop = nx && [...nx.getElementsByTagName("slur")].find(sl => sl.getAttribute("type") === "stop"); if (stop) stop.remove(); if (!x.children.length) x.remove(); }
+      else if (nx) { const st = doc.createElement("slur"); st.setAttribute("type", "start"); st.setAttribute("number", "1"); x.appendChild(st); let y = kid(nx, "notations"); if (!y) { y = doc.createElement("notations"); nx.insertBefore(y, kid(nx, "lyric") || null); } const sp = doc.createElement("slur"); sp.setAttribute("type", "stop"); sp.setAttribute("number", "1"); y.appendChild(sp); }
+    }
   } else if (op === "up") move(1); else if (op === "down") move(-1);
   else if (op === "octup") move(7); else if (op === "octdown") move(-7);
   else if (op === "flat") setAlter(-1); else if (op === "sharp") setAlter(1); else if (op === "natural") setAlter(0);
@@ -1672,11 +1702,12 @@ function octForClef(from, to) {
 }
 /* reading clef: the octave is chosen by the real notes (fewest ledger lines), and the clef that reads easiest is marked */
 function fitFor(clef) {
-  const idx = partIndexes(S.piece.xml, S.parts.filter(p => p.keep && !(p.staves > 1 || PIANO_RE.test(p.name))).map(p => p.id));
-  const { k, oct } = kOct(), base = ivForK(k);
-  let best = { oct, cost: Infinity };
-  for (let o = -2; o <= 2; o++) { const d = base.d + 7 * o, c = ledgerCost(idx.map(x => x + d), clef) + Math.abs(o - oct) * 0.05; if (c < best.cost) best = { oct: o, cost: c }; }
-  return { ...best, base };
+  /* only the part being read; the key transposition (S.iv) stays as chosen, the octave is its own */
+  const idx = partIndexes(S.piece.xml, [readingPartId()]), cur = S.readOct || 0;
+  let best = { oct: cur, cost: Infinity };
+  /* one or two ledger lines are normal (Gould): every octave away from the real pitch costs more than that */
+  for (let o = -2; o <= 2; o++) { const c = ledgerCost(idx.map(x => x + S.iv.d + 7 * o), clef) + Math.abs(o) * 0.35 + Math.abs(o - cur) * 0.02; if (c < best.cost) best = { oct: o, cost: c }; }
+  return best;
 }
 function buildClefSheet() {
   const opts = [["bass", "Basowy", "F"], ["tenor", "Tenorowy", "C"], ["alto", "Altowy", "C"], ["treble", "Wiolinowy", "G"]];
@@ -1686,8 +1717,8 @@ function buildClefSheet() {
     const b = document.createElement("button"); b.className = "li tap" + (S.clef === v || (S.clef === "keep" && S.srcClef === v) ? " on" : "");
     b.innerHTML = `${glyph(gl)}<span class="grow"><b>${esc(label)}</b>${v === easiest ? `<small>Najmniej linii dodanych</small>` : ""}</span><span class="radio"></span>`;
     b.addEventListener("click", () => {
-      const { k, oct } = kOct(), f = fitFor(v);
-      S.clef = v; S.iv = { d: f.base.d + 7 * f.oct, s: f.base.s + 12 * f.oct };
+      const oct = S.readOct || 0, f = fitFor(v);
+      S.clef = v; S.readOct = f.oct;
       if (S.clef === "bass" || S.clef === "tenor") maybeTrombone();
       $("#clef-hint").textContent = f.oct < oct ? "Oktawę niżej: nuty mieszczą się na pięciolinii." : f.oct > oct ? "Oktawę wyżej: nuty mieszczą się na pięciolinii." : "";
       buildClefSheet(); changed();

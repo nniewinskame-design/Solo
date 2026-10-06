@@ -1097,3 +1097,6 @@ body.editmode .loopbar{display:none}
 .of-note b.dim{color:var(--ink-3)}
 .of-instr{justify-content:center}
 #pages g.note.outrange,#pages g.note.outrange *{fill:#D9822B;stroke:#D9822B}
+.ed-pane.wrap2{flex-wrap:wrap}
+.ed-pane.wrap2 button{flex:1 0 calc(14.28% - 6px);min-width:40px;height:48px}
+.ed-pane button.dyn{font:italic 800 19px/1 "Times New Roman",Georgia,serif;letter-spacing:-.04em}

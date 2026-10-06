@@ -149,6 +149,12 @@ function analyseXml(xml) {
   const composer = ident ? (Array.from(ident.getElementsByTagName("creator")).find(c => c.getAttribute("type") === "composer")?.textContent.trim() || "") : "";
   return { parts, key: { fifths, mode }, title, composer };
 }
+function readingPartId() {
+  const shown = S.parts.filter(p => p.keep);
+  if (shown.length === 1) return shown[0].id;
+  const m = shown.find(p => !(p.staves > 1 || PIANO_RE.test(p.name))) || shown[0];
+  return m && m.id;
+}
 function processedXml() {
   const doc = autoBeam(addAccidentals(parseXml(S.piece.xml)));
   const root = doc.documentElement;
@@ -207,11 +213,16 @@ function processedXml() {
   const keptParts = kids(root, "part");
   if (pl && keptParts.length === 1) kids(pl, "score-part").forEach(sp => { const pn = kid(sp, "part-name"); if (pn) pn.setAttribute("print-object", "no"); });
   // clef change
-  if (S.clef !== "keep") {
-    const map = { treble: ["G", "2"], bass: ["F", "4"], tenor: ["C", "4"], alto: ["C", "3"] }[S.clef];
+  /* the reading clef (and the octave that fits it) belongs to the part being read: the only part shown, or the
+     melody; every other part keeps its own clef and octave (a bass trombone stays in the bass clef) */
+  const readPart = readingPartId();
+  if (S.clef !== "keep" || S.readOct) {
+    const map = { treble: ["G", "2"], bass: ["F", "4"], tenor: ["C", "4"], alto: ["C", "3"] }[S.clef] || null;
     kids(root, "part").forEach(p => {
       const info = S.parts.find(x => x.id === p.getAttribute("id"));
-      if (!info || info.staves > 1) return;
+      if (!info || info.staves > 1 || p.getAttribute("id") !== readPart) return;
+      if (S.readOct) [...p.getElementsByTagName("octave")].forEach(o => { o.textContent = String((parseInt(o.textContent, 10) || 0) + S.readOct); });
+      if (!map) return;
       const clefs = Array.from(p.getElementsByTagName("clef"));
       clefs.forEach(c => {
         const n = c.getAttribute("number"); if (n && n !== "1") return;
