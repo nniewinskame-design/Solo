@@ -16,10 +16,14 @@ const INSTRUMENTS = [
   { id: "kornet", name: "Kornet B", clef: "treble", tr: 2, lo: 52, hi: 82, comf: [55, 74], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
   { id: "flugelhorn", name: "Flugelhorn B", clef: "treble", tr: 2, lo: 52, hi: 79, comf: [55, 72], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
   { id: "waltornia", name: "Waltornia F", clef: "treble", tr: 7, lo: 35, hi: 77, comf: [48, 67], clefs: ["treble", "bass"], voice: "brass", group: "Dęte blaszane" },
-  { id: "sakshorn-a", name: "Sakshorn altowy Es", clef: "treble", tr: 9, lo: 43, hi: 74, comf: [48, 67], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "sakshorn-a", name: "Sakshorn altowy Es", clef: "treble", tr: 9, lo: 45, hi: 74, comf: [48, 67], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },   // lowest written F♯3 sounds A2
   { id: "sakshorn-t", name: "Sakshorn tenorowy B", clef: "treble", tr: 14, lo: 40, hi: 72, comf: [43, 63], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
-  { id: "eufonium", name: "Eufonium", clef: "bass", tr: 0, lo: 40, hi: 74, comf: [43, 65], clefs: ["bass", "tenor", "treble"], voice: "brass", group: "Dęte blaszane" },
+  /* euphonium and baritone: at concert pitch in the bass (and tenor) clef, or in B♭ a ninth up in the treble clef
+     (brass band and many Polish band parts); a treble part is never at concert pitch */
+  { id: "eufonium", name: "Eufonium", clef: "bass", tr: 0, lo: 40, hi: 74, comf: [43, 65], clefs: ["bass", "tenor"], voice: "brass", group: "Dęte blaszane" },
+  { id: "eufonium-b", name: "Eufonium B (klucz wiolinowy)", clef: "treble", tr: 14, lo: 40, hi: 74, comf: [43, 65], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
   { id: "baryton", name: "Baryton B", clef: "treble", tr: 14, lo: 40, hi: 72, comf: [43, 63], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "baryton-c", name: "Baryton (klucz basowy)", clef: "bass", tr: 0, lo: 40, hi: 72, comf: [43, 63], clefs: ["bass", "tenor"], voice: "brass", group: "Dęte blaszane" },
   { id: "tuba", name: "Tuba", clef: "bass", tr: 0, lo: 26, hi: 65, comf: [32, 51], clefs: ["bass"], voice: "brass", group: "Dęte blaszane" },
   { id: "suzafon", name: "Suzafon", clef: "bass", tr: 0, lo: 28, hi: 62, comf: [32, 51], clefs: ["bass"], voice: "brass", group: "Dęte blaszane" },
   /* Dęte drewniane */
@@ -68,8 +72,9 @@ const INSTRUMENTS = [
 ];
 const INSTR_GROUPS = ["Dęte blaszane", "Dęte drewniane", "Smyczkowe", "Klawiszowe", "Szarpane", "Perkusyjne", "Głos"];
 /* the instrument picker (benchmark: MuseScore, StaffPad, Dorico, BandLab): search, "yours" first, then families */
+const recentInstr = () => { try { const r = JSON.parse(store.get("recentInstr", "[]")); return Array.isArray(r) ? r : []; } catch { return []; } };
 function instrPicker(box, { selected = [], multi = false, onPick }) {
-  const p = profile(), mine = [...new Set([...(p.instruments || []), ...JSON.parse(store.get("recentInstr", "[]"))])].filter(id => INSTRUMENTS.some(i => i.id === id)).slice(0, 8);
+  const p = profile(), mine = [...new Set([...(p.instruments || []), ...recentInstr()])].filter(id => INSTRUMENTS.some(i => i.id === id)).slice(0, 8);
   const chip = i => `<button class="ichip" data-i="${i.id}" aria-pressed="${selected.includes(i.id)}">${esc(i.name)}</button>`;
   const draw = q => {
     /* without Polish letters too ("trabka", "altowka"), and by other names ("skrzydłówka", "cello") */
@@ -88,8 +93,8 @@ function instrPicker(box, { selected = [], multi = false, onPick }) {
   });
   draw("");
 }
-function rememberInstr(id) { const r = JSON.parse(store.get("recentInstr", "[]")).filter(x => x !== id); r.unshift(id); store.set("recentInstr", JSON.stringify(r.slice(0, 6))); }
-const instrById = id => INSTRUMENTS.find(i => i.id === id) || INSTRUMENTS[0];
+function rememberInstr(id) { const r = recentInstr().filter(x => x !== id); r.unshift(id); store.set("recentInstr", JSON.stringify(r.slice(0, 6))); }
+const instrById = id => INSTRUMENTS.find(i => i.id === id) || INSTRUMENTS[0];      // an unknown id (a removed instrument): the trombone
 /* the range a pupil plays comfortably (sounding MIDI): from the tables, otherwise the middle 70% of the full range */
 const comfOf = i => i.comf || [Math.round(i.lo + (i.hi - i.lo) * 0.15), Math.round(i.hi - (i.hi - i.lo) * 0.15)];
 const clefsOf = i => i.clefs || [i.clef];
@@ -123,7 +128,7 @@ function instrFromName(name) {
 const PROFILE_DEFAULT = { instruments: ["puzon"], main: "puzon", reading: "written", role: "", a4: 440, done: false };
 function profile() {
   let p = null; try { p = JSON.parse(store.get("profile", "null")); } catch {}
-  return { ...PROFILE_DEFAULT, ...(p || {}) };
+  const out = { ...PROFILE_DEFAULT, ...(p || {}) }; out.instruments = [...out.instruments]; return out;       // never the default's own list
 }
 function saveProfile(p) { store.set("profile", JSON.stringify(p)); applyProfile(); }
 const mainInstr = () => instrById(profile().main);
@@ -150,7 +155,7 @@ function openOnboarding() {
 function onbSkipStep(name) {
   const p = onb.p;
   if (name === "main") return p.instruments.length < 2;
-  if (name === "reading") return !instrById(p.main).tr;
+  if (name === "reading") return !(instrById(p.main).tr % 12);          // C → C either way (also octave instruments)
   return false;
 }
 function onbGo(d) {
@@ -159,7 +164,7 @@ function onbGo(d) {
   onb.step = Math.max(0, Math.min(ONB_STEPS.length - 1, s)); renderOnb();
 }
 function finishOnb(skipped) {
-  const p = skipped && !onb.p.done ? { ...PROFILE_DEFAULT, done: true } : { ...onb.p, done: true };
+  const p = { ...onb.p, done: true };          // "Pomiń" keeps what was already answered
   if (!p.instruments.includes(p.main)) p.main = p.instruments[0] || "puzon";
   saveProfile(p); store.set("welcomed", "1");
   fadeOut($("#onb"), 220);
@@ -182,7 +187,7 @@ function renderOnb() {
     h = `<h2 class="h-l">Główny instrument</h2><div class="onb-grid one">` +
       p.instruments.map(id => tile(p.main === id, instrById(id).name, `data-main="${id}"`)).join("") + `</div>`;
   } else if (name === "reading") {
-    const m = instrById(p.main), w = NOTE_PL[(0 + m.tr) % 12];
+    const m = instrById(p.main), w = NOTE_PL[((m.tr % 12) + 12) % 12];
     h = `<h2 class="h-l">Stroik pokazuje</h2><div class="onb-grid one">` +
       tile(p.reading === "written", `Zapis dla instrumentu`, `data-read="written"`, `<b class="onb-ex">C → ${w}</b>`) +
       tile(p.reading === "concert", `Dźwięki rzeczywiste`, `data-read="concert"`, `<b class="onb-ex">C → C</b>`) + `</div>`;
@@ -207,13 +212,7 @@ function renderOnb() {
 $("#onb-body").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   const p = onb.p;
-  if (b.dataset.instr && false) {
-    const id = b.dataset.instr, i = p.instruments.indexOf(id);
-    if (i >= 0) p.instruments.splice(i, 1); else p.instruments.push(id);
-    if (!p.instruments.includes(p.main)) p.main = p.instruments[0] || "puzon";
-    if (p.instruments.length === 1) p.main = p.instruments[0];
-    renderOnb(); return;
-  }
+
   if (b.dataset.main) { p.main = b.dataset.main; renderOnb(); return; }
   if (b.dataset.read) { p.reading = b.dataset.read; renderOnb(); return; }
   if (b.dataset.role) { p.role = b.dataset.role; renderOnb(); return; }

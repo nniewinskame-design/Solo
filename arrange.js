@@ -683,7 +683,7 @@ function pianoPartXml(one, srcId) {
    follows the usual order: woodwinds, brass, percussion, harp and guitars, keyboards, voices, strings. */
 const SCORE_ORDER = ["piccolo", "flet", "flet-a", "flet-p", "oboj", "rozek", "klarnet-es", "klarnet", "klarnet-a", "klarnet-bas", "fagot", "kontrafagot",
   "sax-s", "sax-a", "sax-t", "sax-b", "waltornia", "trabka", "trabka-c", "kornet", "flugelhorn", "sakshorn-a", "sakshorn-t", "puzon-alt", "puzon", "puzon-b",
-  "eufonium", "baryton", "tuba", "suzafon", "dzwonki", "ksylofon", "marimba", "wibrafon", "harfa", "gitara", "ukulele", "mandolina", "gitara-bas",
+  "eufonium", "baryton-c", "eufonium-b", "baryton", "tuba", "suzafon", "dzwonki", "ksylofon", "marimba", "wibrafon", "harfa", "gitara", "ukulele", "mandolina", "gitara-bas",
   "fortepian", "organy", "akordeon", "keyboard", "sopran", "alt", "tenor", "bas", "skrzypce", "altowka", "wiolonczela", "kontrabas"];
 const SECTION = { puzon: "Puzon", "puzon-alt": "Puzon", "puzon-b": "Puzon", trabka: "Trąbka", "trabka-c": "Trąbka" };
 const SECTION_RANK = { "puzon-alt": 0, puzon: 1, "puzon-b": 2 };
@@ -697,7 +697,7 @@ function declaredInstr(sp) {
   const n = si.getElementsByTagName("instrument-name")[0]; return n ? INSTRUMENTS.find(i => i.name === n.textContent.trim()) || null : null;
 }
 /* General MIDI programs (1–128), so other programs open each part with its own sound, not a piano */
-const GM = { puzon: 58, "puzon-alt": 58, "puzon-b": 58, trabka: 57, "trabka-c": 57, kornet: 57, flugelhorn: 57, waltornia: 61, "sakshorn-a": 61, "sakshorn-t": 59, eufonium: 59, baryton: 59, tuba: 59, suzafon: 59,
+const GM = { puzon: 58, "puzon-alt": 58, "puzon-b": 58, trabka: 57, "trabka-c": 57, kornet: 57, flugelhorn: 57, waltornia: 61, "sakshorn-a": 61, "sakshorn-t": 59, eufonium: 59, "eufonium-b": 59, baryton: 59, "baryton-c": 59, tuba: 59, suzafon: 59,
   flet: 74, piccolo: 73, "flet-a": 74, "flet-p": 75, oboj: 69, rozek: 70, klarnet: 72, "klarnet-a": 72, "klarnet-es": 72, "klarnet-bas": 72, fagot: 71, kontrafagot: 71,
   "sax-s": 65, "sax-a": 66, "sax-t": 67, "sax-b": 68, skrzypce: 41, altowka: 42, wiolonczela: 43, kontrabas: 44, fortepian: 1, organy: 20, akordeon: 22, keyboard: 1,
   gitara: 25, "gitara-bas": 34, ukulele: 25, mandolina: 26, harfa: 47, dzwonki: 10, ksylofon: 14, marimba: 13, wibrafon: 12, sopran: 53, alt: 53, tenor: 53, bas: 53 };
