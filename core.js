@@ -121,7 +121,8 @@ function clefNameOf(clefEl) {
   return null;
 }
 const PIANO_RE = /piano|fortepian|klavier|pianoforte|^pf\.?$|^pno\.?$|klaw|keyboard|organ|organy|akompan|accomp|harf|harp|cembal/i;
-function analyseXml(xml) {
+/* pref: the part whose key is the piece's key (the melody); otherwise the first part that is not a piano */
+function analyseXml(xml, pref = null) {
   const doc = parseXml(xml);
   const root = doc.documentElement;
   if (root.tagName !== "score-partwise") throw new Error("Ten rodzaj pliku MusicXML (timewise) nie jest obsługiwany. Zapisz go w programie jeszcze raz jako zwykły MusicXML.");
@@ -139,7 +140,7 @@ function analyseXml(xml) {
   });
   if (!parts.some(p => p.keep)) parts.forEach(p => (p.keep = true));
   let fifths = 0, mode = "major";
-  const firstKept = parts.find(p => p.keep);
+  const firstKept = parts.find(p => p.id === pref) || parts.find(p => p.keep);
   const pEl = firstKept && kids(root, "part").find(p => p.getAttribute("id") === firstKept.id);
   const keyEl = pEl && pEl.getElementsByTagName("key")[0];
   if (keyEl) { fifths = parseInt(txt(keyEl, "fifths") || "0", 10) || 0; const md = txt(keyEl, "mode"); mode = md === "minor" || (!md && detectMode(pEl, fifths) === "minor") ? "minor" : "major"; }
@@ -149,9 +150,29 @@ function analyseXml(xml) {
   const composer = ident ? (Array.from(ident.getElementsByTagName("creator")).find(c => c.getAttribute("type") === "composer")?.textContent.trim() || "") : "";
   return { parts, key: { fifths, mode }, title, composer };
 }
+/* the melody: the part the piece is for. Kept with the piece (settings.melody), so a part added above it in score
+   order (a flute over a trombone tune) never takes its place; otherwise the first part that is not a piano */
+function melodyId() {
+  if (!S.parts || !S.parts.length) return null;
+  if (S.melody && S.parts.some(p => p.id === S.melody)) return S.melody;
+  const solo = p => !(p.staves > 1 || PIANO_RE.test(p.name));
+  return (S.parts.find(p => p.keep && solo(p)) || S.parts.find(solo) || S.parts[0]).id;
+}
+/* the melody of a score just opened: the part the piece's instrument names (declared or by its name), else the first
+   part that is not a piano */
+function guessMelody(xml, parts, instrument) {
+  const solo = parts.filter(p => !(p.staves > 1 || PIANO_RE.test(p.name))); if (!solo.length) return parts[0] ? parts[0].id : null;
+  if (instrument && typeof declaredInstr === "function") {
+    const want = String(instrument).replace(/ (I|II|III|IV|V|VI)$/, "").trim().toLowerCase(), sps = [...parseXml(xml).getElementsByTagName("score-part")];
+    const hit = solo.find(p => { const sp = sps.find(x => x.getAttribute("id") === p.id), d = sp && declaredInstr(sp); return (d && d.name.toLowerCase() === want) || p.name.replace(/ (I|II|III|IV|V|VI)$/, "").trim().toLowerCase() === want; });
+    if (hit) return hit.id;
+  }
+  return solo[0].id;
+}
 function readingPartId() {
   const shown = S.parts.filter(p => p.keep);
   if (shown.length === 1) return shown[0].id;
+  const mel = melodyId(); if (shown.some(p => p.id === mel)) return mel;
   const m = shown.find(p => !(p.staves > 1 || PIANO_RE.test(p.name))) || shown[0];
   return m && m.id;
 }
@@ -198,7 +219,7 @@ function processedXml() {
     credit("\u00a0", x, 2800, j); credit("\u00a0", x, 2760, j); credit(t || "\u00a0", x, 2700, j);
   });
   // the solo part is named after the instrument in the header, so the score never says two different things
-  const soloInfo = S.parts.find(p => !(p.staves > 1 || PIANO_RE.test(p.name)));
+  const soloInfo = S.parts.find(p => p.id === melodyId() && !(p.staves > 1 || PIANO_RE.test(p.name)));
   if (pl && soloInfo && S.piece.instrument) {
     const sp = kids(pl, "score-part").find(x => x.getAttribute("id") === soloInfo.id);
     if (sp) {
@@ -244,7 +265,7 @@ function processedXml() {
       }
     });
   }
-  if (S.under && typeof withChords === "function") { const first = S.parts.find(p => p.keep); withChords(doc, first && first.id, S.under, intervalFifths(S.iv)); }
+  if (S.under && typeof withChords === "function") { const first = S.parts.find(p => p.keep && p.id === melodyId()) || S.parts.find(p => p.keep); withChords(doc, first && first.id, S.under, intervalFifths(S.iv)); }
   return new XMLSerializer().serializeToString(doc);
 }
 

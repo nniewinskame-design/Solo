@@ -479,8 +479,10 @@ function loadState(piece, settings) {
   const info = analyseXml(piece.xml);
   S.piece = { ...piece, title: piece.title || info.title || "Bez tytułu", composer: piece.composer ?? info.composer ?? "" };
   S.parts = info.parts; S.srcKey = info.key;
-  const first = S.parts.find(p => p.keep) || S.parts[0];
+  S.melody = settings && settings.melody && S.parts.some(p => p.id === settings.melody) ? settings.melody : guessMelody(piece.xml, S.parts, piece.instrument);
+  const first = S.parts.find(p => p.id === S.melody) || S.parts.find(p => p.keep) || S.parts[0];
   S.srcClef = first ? first.clef : "treble";
+  if (first && first.id !== (info.parts.find(p => p.keep) || {}).id) S.srcKey = analyseXml(piece.xml, first.id).key;
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null; S.clefMine = false;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
@@ -505,6 +507,7 @@ function loadState(piece, settings) {
     S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
   }
   if (S.piece.instrument == null) S.piece.instrument = first && !PIANO_RE.test(first.name) ? first.name : "";
+  const rp = S.parts.find(p => p.id === readingPartId()); if (rp) S.srcClef = rp.clef;     // the clef of the part being read
 }
 /* the music must sit on the staff: if most notes of the part being read are far off it (an old setting, a wrong
    octave), the octave that fits is taken and the player is told */
@@ -590,7 +593,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
+    settings: { melody: S.melody || null, keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -977,16 +980,15 @@ function clefAt(part, m) { let c = "G"; for (const mm of kids(part, "measure")) 
 function timeAt(part, m) { const { div, cap } = barCap(part, m); let t = null; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const x = kid(a, "time"); if (x) t = `${txt(x, "beats")}/${txt(x, "beat-type")}`; }); if (mm === m) break; } return t || (cap / div === 4 ? "4/4" : ""); }
 /* key, clef and parts are read again after a change to the music itself */
 function refreshInfo() {
-  const info = analyseXml(S.piece.xml); S.srcKey = info.key;
+  const info = analyseXml(S.piece.xml, melodyId()); S.srcKey = info.key;
   S.parts.forEach(p => { const q = info.parts.find(x => x.id === p.id); if (q) Object.assign(p, { clef: q.clef, staves: q.staves }); });
-  const first = S.parts.find(p => p.keep) || S.parts[0]; if (first) S.srcClef = first.clef;
+  const first = S.parts.find(p => p.id === readingPartId()) || S.parts[0]; if (first) S.srcClef = first.clef;
 }
 /* ---------------- the bar sheet: metre, clef, key signature, adding and removing bars, tempo ---------------- */
 function barTarget() {
   if (S.editSel) return { bar: S.editSel.bar, pid: S.editSel.pid };
   const b = S.fromBar >= 0 ? drawnBars(processedXml())[S.fromBar] : null;
-  const first = S.parts.find(p => p.keep && !(p.staves > 1)) || S.parts.find(p => p.keep);
-  return { bar: b || 1, pid: first && first.id };
+  return { bar: b || 1, pid: readingPartId() };
 }
 function attrsOf(doc, m) {
   let a = kid(m, "attributes");
@@ -1825,7 +1827,7 @@ function buildKeySheet() {
     });
     PL.appendChild(b);
   });
-  const solo = S.parts.find(p => p.keep) || S.parts[0];
+  const solo = S.parts.find(p => p.id === readingPartId()) || S.parts[0];
   const inB = solo && (solo.transp === -2 || /\b(in|w)\s*(Bb|B♭|B)(?![a-z])/i.test(solo.name) || /tr[aą]bk|trumpet|klarnet|clarinet/i.test(solo.name));
   $("#preset-hint").hidden = !inB;
   $("#preset-hint").textContent = `Nuty na „${solo ? solo.name : ""}”? Wybierz „Trąbka, klarnet”.`;
@@ -3078,9 +3080,10 @@ $$("#ap-role [data-role]").forEach(b => b.addEventListener("click", () => { ap.r
 $("#ap-src").addEventListener("click", e => { const b = e.target.closest("[data-src]"); if (!b) return; ap.src = b.dataset.src; $$("#ap-src [data-src]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); });
 $$("#ap-int button").forEach(b => b.addEventListener("click", () => { ap.int = +b.dataset.int; syncAp(); }));
 $$("#ap-show button").forEach(b => b.addEventListener("click", () => { ap.show = b.dataset.show; syncAp(); }));
-/* the melody part: the first kept one that is not a piano */
-const melodyPart = () => (S.parts.find(p => p.keep && !(p.staves > 1 || PIANO_RE.test(p.name))) || S.parts[0]).id;
-function partLabel(p) { if (declaredOf(p.id)) return partName(p.id) || p.name; const own = partName(p.id) || p.name, solo = S.parts.find(x => !(x.staves > 1 || PIANO_RE.test(x.name))); return p === solo && S.piece.instrument && !/ (I|II|III|IV)$/.test(own) ? S.piece.instrument : own; }
+/* the melody part (core.js melodyId: kept with the piece, not "whichever part is first") */
+const melodyPart = () => melodyId();
+const isMelodic = pid => { const p = S.parts.find(x => x.id === pid); return !!p && !(p.staves > 1 || PIANO_RE.test(p.name)); };
+function partLabel(p) { if (declaredOf(p.id)) return partName(p.id) || p.name; const own = partName(p.id) || p.name; return p.id === melodyId() && isMelodic(p.id) && S.piece.instrument && !/ (I|II|III|IV|V|VI)$/.test(own) ? S.piece.instrument : own; }
 /* how far a part is written above how it sounds: the instrument it declares, else its own <transpose> (an imported
    "Trumpet in B♭"), else the instrument its exact name or the piece names (a scan read for "Trąbka B"). Verovio's
    MIDI values are the written notes (it does not apply <transpose> there), so playback subtracts this once. */
@@ -3127,26 +3130,33 @@ $("#ap-go").addEventListener("click", () => {
   try {
     const r = addPart(S.piece.xml, ap.instr, ap.role, { int: ap.int, src: ap.src, same: (ap.role === "voice2" || ap.role === "voice3") && ap.show === "same" && !$("#ap-showbox").hidden });
     const rep = ap.replace; ap.replace = null;
-    if (rep && r.id) r.xml = replacePart(r.xml, rep, r.id);
+    if (rep && r.id) { r.xml = replacePart(r.xml, rep, r.id); if (rep === S.melody) S.melody = r.id; }
     pushUndo(); closeSheetThen(() => { applyNewXml(r.xml, r.id); hudUndo(rep ? "Zmieniono partię" : "Dodano partię"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać tej partii"); }
 });
 /* quick ensembles: duo = melody + second voice, trio = + bass; for the player's own instrument */
 $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
+  if (!isMelodic(melodyPart())) { hud("Najpierw potrzebna jest melodia (jeden głos)", 3000); return; }
   if (b.dataset.quick === "canon") return quickCanon();
   try {
     const me = instrById(instrOfPart(melodyPart()));
     let r = addPart(S.piece.xml, me.id, "voice2"), xml = r.xml, ids = [r.id];
     if (b.dataset.quick === "trio") {
       /* a trio of the piece's own instrument: violins → three violins, trumpet → three trumpets; in a trombone
-         section the third is the bass trombone (Puzon I–III) */
-      const third = ["puzon", "puzon-alt"].includes(me.id) ? "puzon-b" : me.id;
+         section the third is the bass trombone (Puzon I–III). When the instrument cannot go a fifth under the tune's
+         lowest note, the section's lower instrument plays the third voice (violin → viola, alto sax → tenor sax) */
+      const low = Math.min(...soundingLine(S.piece.xml, melodyPart()));
+      const third = ["puzon", "puzon-alt"].includes(me.id) ? "puzon-b" : me.lo <= low - 7 || !SECTION_BASS[me.id] ? me.id : SECTION_BASS[me.id];
       const r2 = addPart(xml, third, "voice3"); xml = r2.xml; ids.push(r2.id);
     }
     pushUndo(); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać partii"); }
 }));
 
+/* the lower instrument of a section, for a third voice the instrument itself cannot reach */
+const SECTION_BASS = { trabka: "puzon", "trabka-c": "puzon", kornet: "puzon", flugelhorn: "eufonium", waltornia: "puzon", "sakshorn-a": "sakshorn-t", skrzypce: "altowka", altowka: "wiolonczela",
+  piccolo: "flet", flet: "klarnet", oboj: "fagot", rozek: "fagot", "klarnet-es": "klarnet", klarnet: "klarnet-bas", "klarnet-a": "klarnet-bas", "sax-s": "sax-t", "sax-a": "sax-t", "sax-t": "sax-b",
+  sopran: "alt", alt: "tenor", tenor: "bas", mandolina: "gitara", ukulele: "gitara", dzwonki: "marimba", ksylofon: "marimba", wibrafon: "marimba" };
 /* Kanon: three voices of the piece's instrument (trombones: Puzon I–III, the third a bass trombone), entering at
    the distance where they sound best; a tune that does not work as a canon is said so, not written badly */
 function quickCanon() {
