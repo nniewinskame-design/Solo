@@ -908,14 +908,27 @@ function selectNote(sel) {
     $("#ed-info").innerHTML = `<b>${plName(txt(p, "step"), Math.round(parseFloat(txt(p, "alter")) || 0))}</b> ${OCTAVE_NAMES[oct] || ""} · ${len}${kid(n, "dot") ? " z kropką" : ""} · takt ${sel.bar}`;
   } else $("#ed-info").innerHTML = `<b>Pauza</b> · ${len || "cały takt"} · takt ${sel.bar}`;
 }
-/* the sound of a note when it is placed or changed */
+/* the sound of a note when it is placed or changed: exactly as the player will play it (children hear what is
+   written). The pitch as written (its alter: the key and the accidentals in effect), in the key and reading octave
+   chosen for the view (correcting shows the notes as written, the chosen view waits in S.editView), as concert
+   pitch for its instrument (a B♭ trumpet sounds a tone lower), at the tuning A; its length at the playing tempo with
+   dots and ties; its dynamic, hairpin and articulation; its part's instrument or own sound. A new note cuts the one
+   before with a short fade (no click). */
+const pv = { g: null };
 function previewNote(n) {
   const p = n && kid(n, "pitch"); if (!p) return;
   try {
-    const ctx = fxCtx(), pid = S.editSel && S.editSel.pid;                // the shared context (suspended when quiet)
-    const g = ctx.createGain(); g.gain.value = 0.16; g.connect(ctx.destination);
-    const t = ctx.currentTime + 0.02; voiceForPart(pid)(ctx, g, (tuner.a4 || 440) * Math.pow(2, (midiOf(p) - partTr(pid) - 69) / 12), t, t + 0.4);
-    setTimeout(() => { try { g.disconnect(); } catch {} }, 1200);
+    let part = n.parentNode; while (part && part.tagName !== "part") part = part.parentNode;
+    const pid = part ? part.getAttribute("id") : S.editSel && S.editSel.pid, v = S.editView || S, info = S.parts.find(x => x.id === pid);
+    const oct = pid === readingPartId() && !(info && info.staves > 1) ? 12 * (v.readOct || 0) : 0;
+    const pitch = midiOf(p) + ((v.iv && v.iv.s) || 0) + oct - partTr(pid);
+    const sh = (part && partShapes(part).get(n)) || NOTE_PLAIN, sec = Math.max(0.12, Math.min(8, sh.q * 60 / playBpm()));
+    const ctx = fxCtx();                                              // the shared context (asleep when quiet)
+    if (pv.g) { const old = pv.g; try { old.gain.setTargetAtTime(0, ctx.currentTime, 0.008); } catch {} setTimeout(() => { try { old.disconnect(); } catch {} }, 120); }
+    const g = pv.g = ctx.createGain(); g.gain.value = 0.16; g.connect(ctx.destination);
+    playShaped(ctx, g, voiceForPart(pid), (tuner.a4 || 440) * Math.pow(2, (pitch - 69) / 12), ctx.currentTime + 0.01, sec, sh);
+    fxIdle(Math.max(8000, sec * 1000 + 3000));
+    setTimeout(() => { if (pv.g === g) pv.g = null; try { g.disconnect(); } catch {} }, sec * 1000 + 1500);
   } catch (e) { console.warn(e); }
 }
 /* which written note a height on the staff means: the five lines of the tapped staff give the steps */
@@ -1224,7 +1237,8 @@ function editNote(op) {
   }
   pushUndo();
   S.piece.xml = new XMLSerializer().serializeToString(doc);
-  if (["up", "down", "octup", "octdown", "flat", "sharp", "natural", "rest", "add"].includes(op)) previewNote(op === "add" ? kids(at.m, "note")[S.editSel ? S.editSel.i : 0] : n);
+  /* a change you can hear is heard: pitch, length, dot, dynamic, hairpin, articulation */
+  if (["up", "down", "octup", "octdown", "flat", "sharp", "natural", "rest", "add", "dot", "shorter", "longer"].includes(op) || /^(len|dyn|wedge|art):/.test(op)) previewNote(op === "add" ? kids(at.m, "note")[S.editSel ? S.editSel.i : 0] : n);
   afterEdit();
 }
 function keyAt(part, m) { let f = 0; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const k = kid(a, "key"); if (k) f = parseInt(txt(k, "fifths"), 10) || 0; }); if (mm === m) break; } return f; }
@@ -1551,6 +1565,100 @@ function clickNote(ctx, out, t, accent) {
   o.frequency.value = accent ? 1760 : 1175; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(accent ? 2.2 : 1.4, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .05);
   o.connect(g); g.connect(out); o.start(t); o.stop(t + .07);
 }
+/* How a written note is played: one helper for the player and for the sound of a note while correcting, so both
+   always agree. The dynamic in effect (ppp…fff; mf when nothing is written), a hairpin as a gain curve towards the
+   next dynamic (or one step up/down when none follows), sf/sfz/fz/fp as a stronger start (fp, sfp then piano),
+   accents as a stronger start, staccato (½), staccatissimo (⅓), tenuto (full length), otherwise 95 %. q is the length
+   in quarter notes with dots and ties. Read from the MusicXML part, so a mark just added is heard at once. */
+const DYN_LV = { ppp: .22, pp: .3, p: .42, mp: .56, mf: .7, f: .85, ff: 1, fff: 1.12 };
+const DYN_SF = { sf: null, sfz: null, sffz: null, fz: null, rfz: null, rf: null, fp: "p", sfp: "p", sfzp: "p" };
+const NOTE_PLAIN = { g0: DYN_LV.mf, g1: DYN_LV.mf, acc: 0, len: .95, q: 1 };
+function partShapes(part) {
+  const dyn = [], wedges = [], notes = [], sfAt = []; let pos = 0, div = 1, open = null, last = 0;
+  kids(part, "measure").forEach(m => {
+    for (const c of m.children) {
+      const t = c.tagName;
+      if (t === "attributes") { const d = parseFloat(txt(c, "divisions")); if (d > 0) div = d; }
+      else if (t === "backup") pos -= (parseFloat(txt(c, "duration")) || 0) / div;
+      else if (t === "forward") pos += (parseFloat(txt(c, "duration")) || 0) / div;
+      else if (t === "direction") {
+        const at = pos + (parseFloat(txt(c, "offset")) || 0) / div;
+        for (const d of c.getElementsByTagName("dynamics")) for (const x of d.children) {
+          const k = x.tagName;
+          if (k in DYN_LV) dyn.push({ at, lv: DYN_LV[k] });
+          else if (k in DYN_SF) { sfAt.push(at); if (DYN_SF[k]) dyn.push({ at, lv: DYN_LV[DYN_SF[k]] }); }
+        }
+        for (const w of c.getElementsByTagName("wedge")) {
+          const ty = w.getAttribute("type");
+          if (ty === "crescendo" || ty === "diminuendo") open = { a: at, up: ty === "crescendo" };
+          else if (ty === "stop" && open) { wedges.push({ a: open.a, up: open.up, b: at }); open = null; }
+        }
+      } else if (t === "note" && !kid(c, "grace")) {
+        const q = (parseFloat(txt(c, "duration")) || 0) / div, chord = !!kid(c, "chord");
+        const st = chord ? last : pos; if (!chord) { last = pos; pos += q; }
+        notes.push({ n: c, at: st, q });
+      }
+    }
+  });
+  const byTime = () => dyn.sort((x, y) => x.at - y.at);
+  const lvAt = t => { let v = NOTE_PLAIN.g0; for (const d of dyn) { if (d.at > t + 1e-6) break; v = d.lv; } return v; };
+  const steps = Object.values(DYN_LV), step = (v, up) => { let i = steps.findIndex(x => x >= v - 1e-6); if (i < 0) i = steps.length - 1; return steps[Math.max(0, Math.min(steps.length - 1, i + (up ? 1 : -1)))]; };
+  byTime();
+  wedges.sort((x, y) => x.a - y.a).forEach(w => {
+    w.from = lvAt(w.a);
+    const nx = dyn.find(d => d.at >= w.b - 1e-3 && d.at <= w.b + 4);
+    if (nx && (w.up ? nx.lv > w.from : nx.lv < w.from)) w.to = nx.lv;
+    else { w.to = step(w.from, w.up); dyn.push({ at: w.b, lv: w.to }); byTime(); }        // the level reached stays
+  });
+  const gAt = t => { for (const w of wedges) if (w.b > w.a && t >= w.a - 1e-6 && t <= w.b + 1e-6) return w.from + (w.to - w.from) * Math.min(1, (t - w.a) / (w.b - w.a)); return lvAt(t); };
+  const tied = (n, ty) => [...n.getElementsByTagName("tie")].some(e => e.getAttribute("type") === ty);
+  const map = new Map();
+  notes.forEach((x, i) => {
+    const arts = x.n.getElementsByTagName("articulations")[0], has = k => !!(arts && arts.getElementsByTagName(k).length);
+    const len = has("staccatissimo") ? .33 : has("staccato") || has("spiccato") ? .5 : has("detached-legato") ? .75 : has("tenuto") ? 1 : .95;
+    const acc = sfAt.some(a => Math.abs(a - x.at) < 2e-3) ? 2 : has("accent") || has("strong-accent") ? 1 : 0;      // 2: sf, sfz, fp (at least forte-fortissimo at the start)
+    /* a tie carries the sound on into the next note of the same pitch */
+    let q = x.q, cur = x;
+    for (let guard = 0; guard < 16 && tied(cur.n, "start") && kid(cur.n, "pitch"); guard++) {
+      const mi = midiOf(kid(cur.n, "pitch")), end = cur.at + cur.q;
+      const nx = notes.slice(i + 1, i + 40).find(y => Math.abs(y.at - end) < 1e-3 && kid(y.n, "pitch") && tied(y.n, "stop") && midiOf(kid(y.n, "pitch")) === mi);
+      if (!nx) break; q += nx.q; cur = nx;
+    }
+    map.set(x.n, { g0: gAt(x.at), g1: gAt(x.at + x.q), acc, len, q });
+  });
+  return map;
+}
+/* one note through its shape: the voice (instrument, own sound) inside a gain that carries the dynamic; mf is the
+   level the sounds always had, so a piece without marks sounds as before */
+function playShaped(ctx, out, voice, f, st, dur, sh) {
+  sh = sh || NOTE_PLAIN;
+  const en = st + Math.max(0.05, dur * sh.len), g = ctx.createGain(), a = sh.g0 / NOTE_PLAIN.g0, b = sh.g1 / NOTE_PLAIN.g0;
+  const settle = Math.min(st + 0.15, (st + en) / 2);
+  g.gain.setValueAtTime(sh.acc ? Math.max(a * 1.5, sh.acc > 1 ? DYN_LV.ff / NOTE_PLAIN.g0 : 0) : a, st);
+  if (sh.acc) g.gain.linearRampToValueAtTime(a, settle);
+  if (Math.abs(b - a) > 1e-3) { if (!sh.acc) g.gain.setValueAtTime(a, settle); g.gain.linearRampToValueAtTime(b, en); }
+  g.connect(out); voice(ctx, g, f, st, en);
+}
+/* the drawn note (from the player's timemap) → its shape: same bar, staff and place as a tap in correcting mode
+   (locateNote), but with the bar list and each staff's notes read once for the whole piece */
+function playShapes(slots) {
+  try {
+    const doc = parseXml(S.piece.xml), bars = drawnBars(processedXml()), mIdx = new Map(), stNotes = new Map(), byPart = new Map(), meas = new Map();
+    measureEls().forEach((m, i) => mIdx.set(m, i));
+    const parts = new Map([...doc.getElementsByTagName("part")].map(p => [p.getAttribute("id"), p]));
+    return el => {
+      try {
+        const m = el && el.closest("g.measure"), st = el && el.closest("g.staff"); if (!m || !st) return null;
+        const slot = slots[staffsOf(m).indexOf(st)]; if (!slot || slot.multi) return null;
+        const part = parts.get(slot.pid), bar = bars[mIdx.get(m)]; if (!part || !bar) return null;
+        let list = stNotes.get(st); if (!list) { list = [...st.querySelectorAll(NOTE_SEL)]; stNotes.set(st, list); }
+        let sh = byPart.get(part); if (!sh) { sh = partShapes(part); byPart.set(part, sh); meas.set(part, kids(part, "measure")); }
+        const xm = meas.get(part)[bar - 1], n = xm && kids(xm, "note")[list.indexOf(el)];
+        return (n && sh.get(n)) || null;
+      } catch { return null; }
+    };
+  } catch (e) { console.warn(e); return () => null; }
+}
 /* 16-bit WAV, written in slices with a breath between them (no long task). Int16Array is little-endian on every
    phone and computer Solo runs on, as WAV wants. */
 async function wavBlob(buf) {
@@ -1613,7 +1721,7 @@ const wavCache = { key: "", url: null };
 function wavKey(ev, clicks, len, a4) {
   let h = 2166136261 >>> 0; const mix = v => { h = Math.imul(h ^ (Math.round(v * 1000) | 0), 16777619) >>> 0; };
   const mixS = s => { for (let i = 0; i < s.length; i++) mix(s.charCodeAt(i) / 1000); };
-  ev.forEach(e => { mix(e.t); mix(e.dur); mix(e.pitch); mix(e.silent ? 1 : 0); mixS(e.vk); });
+  ev.forEach(e => { mix(e.t); mix(e.dur); mix(e.pitch); mix(e.silent ? 1 : 0); mixS(e.vk); const s = e.shape; if (s) { mix(s.g0); mix(s.g1); mix(s.len); mix(s.acc); } });
   clicks.forEach(c => { mix(c.t); mix(c.acc ? 1 : 0); });
   mix(len); mix(a4); mixS(store.get("ownUse") || "");
   if (typeof own !== "undefined") mixS(Object.entries(own.byInstr).map(([id, l]) => id + l.map(x => x.midi.toFixed(3)).join()).join());
@@ -1625,7 +1733,7 @@ async function renderWav(ev, clicks, fileLen, freq, token) {
   try { off = new Off(1, Math.ceil((fileLen + LEAD) * sr), sr); } catch { sr = 44100; off = new Off(1, Math.ceil((fileLen + LEAD) * sr), sr); }
   const bus = off.createGain(); bus.gain.value = 0.18; bus.connect(off.destination);
   for (let i = 0; i < ev.length; i++) {
-    const e = ev[i]; if (!e.silent) e.voice(off, bus, freq(e.pitch), LEAD + e.t, LEAD + e.t + e.dur * 0.95);
+    const e = ev[i]; if (!e.silent) playShaped(off, bus, e.voice, freq(e.pitch), LEAD + e.t, e.dur, e.shape);
     if (i % 300 === 299) { await yieldNow(); if (token !== playToken) return null; }
   }
   clicks.forEach(c => clickNote(off, bus, LEAD + c.t, c.acc));
@@ -1669,7 +1777,7 @@ async function play(fromMs, opt = {}) {
   fromMs = pb.loop ? A : Math.max(0, fromMs || 0);
   const k = (S.baseBpm || 120) / playBpm(), sec = ms => ms / 1000 * k, ev = [];
   /* one look-up per part: concert pitch (partTr), its sound, muted or not */
-  const slots = staffSlots(), parts = new Map();
+  const slots = staffSlots(), parts = new Map(), shapeOf = playShapes(slots);
   const partOf = pid => { let p = parts.get(pid); if (!p) { const vk = instrOfPart(pid); p = { tr: partTr(pid), voice: voiceFor(vk), vk, mute: pb.mute.has(pid) }; parts.set(pid, p); } return p; };
   tm.forEach(e => (e.on || []).forEach(id => {
     if (e.tstamp >= B) return;
@@ -1678,7 +1786,7 @@ async function play(fromMs, opt = {}) {
     const end = Math.min(e.tstamp + v.duration, B); if (end <= fromMs + 20) return;
     const start = Math.max(e.tstamp, fromMs);      // resuming mid-note: the note keeps sounding
     const el = document.getElementById(baseId(id)), pid = partOfEl(el, slots), p = partOf(pid);
-    ev.push({ id, el, pid, q0: e.tstamp, t: sec(start - fromMs), dur: Math.max(0.08, sec(end - start)), pitch: v.pitch - p.tr, voice: p.voice, vk: p.vk, silent: p.mute });
+    ev.push({ id, el, pid, q0: e.tstamp, t: sec(start - fromMs), dur: Math.max(0.08, sec(end - start)), pitch: v.pitch - p.tr, voice: p.voice, vk: p.vk, silent: p.mute, shape: p.mute ? null : shapeOf(el) });
   }));
   if (!ev.length) { fail("Brak nut do odtworzenia"); return; }
   ev.sort((a, b) => a.q0 - b.q0);
@@ -1747,7 +1855,7 @@ async function playLive(ev, clicks, total, token, k, fromMs, countLen, freq) {
   const pump = () => {
     if (ctx.state === "closed") return;
     const until = ctx.currentTime - t0 + 8;
-    for (; i < ev.length && ev[i].t < until; i++) { const e = ev[i]; if (!e.silent) e.voice(ctx, bus, freq(e.pitch), t0 + LEAD + e.t, t0 + LEAD + e.t + e.dur * 0.95); }
+    for (; i < ev.length && ev[i].t < until; i++) { const e = ev[i]; if (!e.silent) playShaped(ctx, bus, e.voice, freq(e.pitch), t0 + LEAD + e.t, e.dur, e.shape); }
     for (; c < cl.length && cl[c].t < until; c++) clickNote(ctx, bus, t0 + LEAD + cl[c].t, cl[c].acc);
   };
   pump(); const timer = setInterval(pump, 1000);
