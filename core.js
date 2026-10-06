@@ -726,7 +726,7 @@ function aiToMusicXml(j) {
 /* "Wlazł kotek na płotek" (by meow, says the running joke): a folk tune with piano, so the piano can be hidden */
 function exampleXml() {
   /* "Wlazł kotek na płotek", Polish folk song (public domain). As printed on Polish Wikipedia: 3/4, C major,
-     G E E | F D D | C/E/ G2 | G E E | F D D | C/E/ C2, with the words under the notes. Waltz accompaniment.
+     G E E | F D D | C/E/ G2 | G E E | F D D | C/E/ C2 (no words: an instrumental part). Waltz accompaniment.
      For the trombone it sits in the bass clef, small octave (g e e …): on the staff, no ledger lines. */
   const mel = [[["G3", 4, "Wlazł", "single"], ["E3", 4, "ko", "begin"], ["E3", 4, "tek", "end"]],
                [["F3", 4, "na", "single"], ["D3", 4, "pło", "begin"], ["D3", 4, "tek", "end"]],
@@ -743,7 +743,7 @@ function exampleXml() {
   mel.forEach((m, i) => {
     let s = `<measure number="${i + 1}">`;
     if (i === 0) s += `<attributes><divisions>24</divisions><key><fifths>0</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes><direction placement="above"><direction-type><words font-weight="bold">Wesoło</words></direction-type><sound tempo="112"/></direction><direction placement="below"><direction-type><dynamics><mf/></dynamics></direction-type></direction>`;
-    m.forEach(([p, d, syl, kind]) => { s += `<note>${pitch(p)}<duration>${dur[d]}</duration><voice>1</voice><type>${typ[d]}</type><lyric number="1"><syllabic>${kind}</syllabic><text>${xesc(syl)}</text></lyric></note>`; });
+    m.forEach(([p, d]) => { s += `<note>${pitch(p)}<duration>${dur[d]}</duration><voice>1</voice><type>${typ[d]}</type></note>`; });
     if (i === mel.length - 1) s += `<barline location="right"><bar-style>light-heavy</bar-style></barline>`;
     solo += s + "</measure>";
     /* um-pa-pa: the bass on 1, the chord on 2 and 3 */

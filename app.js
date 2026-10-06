@@ -481,7 +481,7 @@ function loadState(piece, settings) {
   S.parts = info.parts; S.srcKey = info.key;
   const first = S.parts.find(p => p.keep) || S.parts[0];
   S.srcClef = first ? first.clef : "treble";
-  S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null;
+  S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null; S.clefMine = false;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
   S.layout = S.hasLines ? "orig" : "fit"; S.page = "a4"; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
@@ -489,6 +489,7 @@ function loadState(piece, settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
     if (settings.clef) S.clef = settings.clef;
+    S.clefMine = !!settings.clefMine;                                   // chosen by hand in the Klucz sheet: kept as it is
     if (settings.iv) S.iv = { d: settings.iv.d | 0, s: settings.iv.s | 0 };
     if (Number.isInteger(settings.preset)) S.preset = settings.preset;
     if (settings.bpm >= 20 && settings.bpm <= 300) S.bpm = Math.round(settings.bpm);
@@ -506,11 +507,24 @@ function loadState(piece, settings) {
 }
 /* the music must sit on the staff: if most notes of the part being read are far off it (an old setting, a wrong
    octave), the octave that fits is taken and the player is told */
+/* the instrument a part is written for, only when its name (or the piece) says so; null when unknown */
+function namedInstr(pid) {
+  const p = S.parts && S.parts.find(x => x.id === pid); if (!p || p.staves > 1 || PIANO_RE.test(p.name)) return null;
+  const names = [(typeof partLabel === "function" ? partLabel(p) : p.name) || "", S.piece && S.piece.instrument || ""].map(n => n.replace(/ (I|II|III|IV|V)$/, "").trim().toLowerCase());
+  for (const n of names) { const hit = n && INSTRUMENTS.find(i => i.name.toLowerCase() === n); if (hit) return hit; }
+  return null;
+}
 function ensureOnStaff() {
   try {
+    /* a clef the instrument is never written in (trombone in treble, left by an older version) becomes its own clef;
+       a clef picked by hand in the Klucz sheet stays */
+    const ins = namedInstr(readingPartId()), own = ins && clefsOf(ins);
+    let swapped = false;
+    if (own && !S.clefMine && CLEF_LINES[curClef()] && !own.includes(curClef())) { S.clef = own[0]; S.readOct = fitFor(own[0]).oct; swapped = true; }
     const clef = curClef(), idx = partIndexes(S.piece.xml, [readingPartId()]); if (!idx.length || !CLEF_LINES[clef]) return;
     const cur = ledgerCost(idx.map(x => x + S.iv.d + 7 * (S.readOct || 0)), clef), f = fitFor(clef);
     const curScore = cur + Math.abs(S.readOct || 0) * 0.35;
+    if (swapped) return true;
     if (cur > 0.8 && f.oct !== (S.readOct || 0) && f.cost < curScore - 0.6) { const up = f.oct > (S.readOct || 0); S.readOct = f.oct; setTimeout(() => hud(up ? "Oktawę wyżej: nuty mieszczą się na pięciolinii" : "Oktawę niżej: nuty mieszczą się na pięciolinii", 3000), 900); return true; }
   } catch (e) { console.warn(e); }
 }
@@ -564,7 +578,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
+    settings: { keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -1732,7 +1746,7 @@ function buildClefSheet() {
     b.innerHTML = `${glyph(gl)}<span class="grow"><b>${esc(label)}</b>${v === easiest ? `<small>Najmniej linii dodanych</small>` : ""}</span><span class="radio"></span>`;
     b.addEventListener("click", () => {
       const oct = S.readOct || 0, f = fitFor(v);
-      S.clef = v; S.readOct = f.oct;
+      S.clef = v; S.readOct = f.oct; S.clefMine = true;
       if (S.clef === "bass" || S.clef === "tenor") maybeTrombone();
       $("#clef-hint").textContent = f.oct < oct ? "Oktawę niżej: nuty mieszczą się na pięciolinii." : f.oct > oct ? "Oktawę wyżej: nuty mieszczą się na pięciolinii." : "";
       buildClefSheet(); changed();
@@ -2813,12 +2827,13 @@ async function migrateExample() {
   try {
     const all = await DB.all();
     /* an example saved by an older version (wrong 2/4 metre, "meow" as composer) is replaced by the current one */
-    const olds = all.filter(p => p.sourceType === "example" && !/<beats>3<\/beats>/.test(p.xml || ""));
+    const olds = all.filter(p => p.sourceType === "example" && (!/<beats>3<\/beats>/.test(p.xml || "") || /<lyric\b/.test(p.xml || "")));
     if (!olds.length) return;
     await engineReady;
     for (const p of olds) {
-      const rec = { ...p, xml: exampleXml(), title: /^(Oda do radości|Meow meow meow)$/.test(p.title) ? "Wlazł kotek na płotek" : p.title,
-        composer: !p.composer || /beethoven|meow/i.test(p.composer) ? "Melodia ludowa" : p.composer, settings: { ...(p.settings || {}), iv: { d: 0, s: 0 }, preset: -1 }, thumb: null };
+      /* 3/4 already: only the words go (parts added by the player stay); older ones get the whole new example */
+      const rec = { ...p, xml: /<beats>3<\/beats>/.test(p.xml) ? p.xml.replace(/<lyric\b[\s\S]*?<\/lyric>/g, "") : exampleXml(), title: /^(Oda do radości|Meow meow meow)$/.test(p.title) ? "Wlazł kotek na płotek" : p.title,
+        composer: !p.composer || /beethoven|meow/i.test(p.composer) ? "Melodia ludowa" : p.composer, settings: /<beats>3<\/beats>/.test(p.xml) ? p.settings : { ...(p.settings || {}), iv: { d: 0, s: 0 }, preset: -1 }, thumb: null };
       if (rec.settings && rec.settings.preset === undefined) rec.settings.preset = -1;
       await DB.put(rec);
       const snap = { piece: S.piece, parts: S.parts, srcKey: S.srcKey, srcClef: S.srcClef, clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm };
