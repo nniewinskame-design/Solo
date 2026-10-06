@@ -2992,7 +2992,9 @@ function drawPending() {
   });
   if (pending.length && pending.length < MAX_PAGES) {
     const f = document.createElement("figure");
-    f.innerHTML = `<button class="add" data-act="camera" aria-label="Dodaj stronę">${icon("plus")}</button><figcaption>&nbsp;</figcaption>`;
+    /* another page: from the camera, the photo library or a file (not the camera only) */
+    f.className = "addfig";
+    f.innerHTML = `<div class="addpick" role="group" aria-label="Dodaj stronę"><button type="button" data-act="camera">${icon("camera")}<span>Aparat</span></button><label for="in-gallery" role="button" tabindex="0">${icon("image")}<span>Galeria</span></label><label for="in-files" role="button" tabindex="0">${icon("file")}<span>Plik</span></label></div><figcaption>Dodaj stronę</figcaption>`;
     t.appendChild(f);
   }
   $("#btn-read").disabled = !pending.length;
