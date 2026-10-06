@@ -495,16 +495,30 @@ function loadState(piece, settings) {
     if (settings.zoom >= .5 && settings.zoom <= 2) S.zoom = settings.zoom;
     if (settings.pz >= .5 && settings.pz <= 3) S.pz = settings.pz;
     if (Number.isInteger(settings.readOct)) S.readOct = Math.max(-2, Math.min(2, settings.readOct));
+    /* settings saved before 3.9: the octave picked for the reading clef sat inside the transposition and moved every
+       part; it now belongs to the part being read only */
+    else if (S.iv && (S.iv.d || S.iv.s)) { const s12 = S.iv.s, oc = Math.trunc(s12 / 12); if (oc && Math.abs(s12 % 12) <= 6) { S.iv = { d: S.iv.d - 7 * oc, s: s12 - 12 * oc }; S.readOct = oc; } }
     if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
     if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
     S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
   }
   if (S.piece.instrument == null) S.piece.instrument = first && !PIANO_RE.test(first.name) ? first.name : "";
 }
+/* the music must sit on the staff: if most notes of the part being read are far off it (an old setting, a wrong
+   octave), the octave that fits is taken and the player is told */
+function ensureOnStaff() {
+  try {
+    const clef = curClef(), idx = partIndexes(S.piece.xml, [readingPartId()]); if (!idx.length || !CLEF_LINES[clef]) return;
+    const cur = ledgerCost(idx.map(x => x + S.iv.d + 7 * (S.readOct || 0)), clef), f = fitFor(clef);
+    const curScore = cur + Math.abs(S.readOct || 0) * 0.35;
+    if (cur > 0.8 && f.oct !== (S.readOct || 0) && f.cost < curScore - 0.6) { const up = f.oct > (S.readOct || 0); S.readOct = f.oct; setTimeout(() => hud(up ? "Oktawę wyżej: nuty mieszczą się na pięciolinii" : "Oktawę niżej: nuty mieszczą się na pięciolinii", 3000), 900); return true; }
+  } catch (e) { console.warn(e); }
+}
 function openPiece(piece, settings) {
   stopPlayback();
   try { loadState(piece, settings); } catch (e) { hud(e.message || "Nie udało się otworzyć nut.", 4000); return; }
-  S.dirty = false; S.thumbDirty = !piece.thumb; S.loadedKey = null;
+  const refit = !!ensureOnStaff();
+  S.dirty = refit && !!S.piece.id; S.thumbDirty = !piece.thumb || refit; S.loadedKey = null;
   S.piece.opened = Date.now();
   if (!store.get("tourDone")) setTimeout(() => { if (S.view === "score" && !openSheetId && !store.get("tourDone")) tourStart(); }, 1600);
   $("#notice").hidden = !(S.piece.issues && S.piece.issues.length);
@@ -1751,9 +1765,9 @@ function ivForK(k) {
 }
 function setKOct(k, oct) {
   k = Math.max(-6, Math.min(6, k)); oct = Math.max(-2, Math.min(2, oct));
-  const base = ivForK(k);
+  const base = ivForK(k), same = kOct().oct === oct;
   S.iv = { d: base.d + 7 * oct, s: base.s + 12 * oct };
-  S.preset = -1; changed();
+  S.preset = -1; if (same) ensureOnStaff(); changed();          // a new key keeps the notes on the staff; an octave the player chose is kept
 }
 function buildKeySheet() {
   const T = $("#ticks"); T.innerHTML = "";
@@ -1772,6 +1786,7 @@ function buildKeySheet() {
     b.addEventListener("click", () => {
       if (idx < 0) { if (S.preset >= 0) S.iv = { d: 0, s: 0 }; S.preset = -1; }
       else { S.iv = fixEnharmonic(PRESETS[idx].iv, S.srcKey.fifths); S.clef = "bass"; S.preset = idx; maybeTrombone(); }
+      ensureOnStaff();
       changed();
     });
     PL.appendChild(b);
@@ -1790,7 +1805,7 @@ const IVS = [["sekunda", 1, 2], ["tercja", 2, 4], ["kwarta", 3, 5], ["kwinta", 4
     const b = document.createElement("button"); b.dataset.d = d * dir; b.dataset.s = s * dir;
     b.innerHTML = `${name}<small>${dir > 0 ? "w górę ↑" : "w dół ↓"}</small>`;
     b.setAttribute("aria-label", `O ${name.replace(/a$/, "ę")} ${dir > 0 ? "w górę" : "w dół"}`);
-    b.addEventListener("click", () => { S.iv = { d: d * dir, s: s * dir }; S.preset = -1; changed(); });
+    b.addEventListener("click", () => { S.iv = { d: d * dir, s: s * dir }; S.preset = -1; ensureOnStaff(); changed(); });
     box.appendChild(b);
   }));
 })();
