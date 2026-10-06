@@ -408,13 +408,29 @@ function setupHero() {
   if (img.complete && img.naturalWidth) img.classList.add("loaded");
 }
 function shortKey(label) { if (!label) return ""; const m = label.match(/^(.+?)-(dur|moll)$/); return m ? m[1] : label; }
+/* a library that cannot be read is never shown as empty ("Tu będą Twoje nuty" would look like everything is gone) */
+function libError(e) {
+  let el = $("#lib-err");
+  if (!e) { if (el) el.hidden = true; return; }
+  console.warn("library", e);
+  if (!el) {
+    el = document.createElement("section"); el.className = "empty"; el.id = "lib-err";
+    el.innerHTML = `<div class="empty-copy"><h2 class="h-l">Nie udało się otworzyć biblioteki</h2><p class="txt">Nuty są w pamięci urządzenia. Spróbuj jeszcze raz. Jeśli to nie pomoże, zamknij Solo i otwórz je ponownie.</p><div class="row-btns"><button class="btn primary" id="lib-retry"><span>Spróbuj jeszcze raz</span></button></div></div>`;
+    $("#lib-empty").after(el); $("#lib-retry").addEventListener("click", () => refreshLibrary());
+  }
+  el.hidden = false; $("#lib").hidden = true; $("#lib-empty").hidden = true;
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.view === "home" && $("#lib-err") && !$("#lib-err").hidden) refreshLibrary(); });
 async function refreshLibrary(animate) {
-  let all = [];
-  try { all = await DB.all(); } catch {}
-  const q = $("#lib-search").value.trim().toLowerCase();
+  const my = refreshLibrary.n = (refreshLibrary.n || 0) + 1;     // fast typing: an older, slower read never draws over a newer one
+  let all;
+  try { all = await DB.all(); } catch (e) { if (my === refreshLibrary.n) libError(e); return; }
+  if (my !== refreshLibrary.n) return;
+  libError(null);
+  const q = fold($("#lib-search").value.trim());
   const sort = $("#lib-sort").value;
   renderCols(all);
-  const list = all.filter(p => q ? ((p.title || "") + " " + (p.composer || "")).toLowerCase().includes(q) : inCol(p, all));
+  const list = all.filter(p => q ? fold((p.title || "") + " " + (p.composer || "")).includes(q) : inCol(p, all));
   const by = { title: (a, b) => (a.title || "").localeCompare(b.title || "", "pl"), composer: (a, b) => (a.composer || "￿").localeCompare(b.composer || "￿", "pl"),
     created: (a, b) => (b.created || 0) - (a.created || 0), opened: (a, b) => (b.opened || b.updated || 0) - (a.opened || a.updated || 0) };
   list.sort(by[sort] || by.opened);
@@ -429,7 +445,7 @@ async function refreshLibrary(animate) {
     const meta = p.composer || (p.sourceType === "ai" || p.sourceType === "device" ? "Ze zdjęcia" : p.sourceType === "example" ? "Przykład" : p.sourceType === "own" ? "Własne" : "Z pliku");
     b.innerHTML = `<button class="thumb" aria-label="Otwórz: ${esc(p.title || "Bez tytułu")}">${p.thumb ? `<img src="${esc(p.thumb)}" alt="">` : `<span class="ph">${esc(p.title || "Bez tytułu")}</span>`}${p.id === latest ? `<i class="ribbon" title="Ostatnio grane"></i>` : ""}</button>
       <div class="t" role="button" tabindex="0" aria-label="Zmień tytuł">${esc(p.title || "Bez tytułu")}</div><div class="m"><span class="c${p.composer ? "" : " ph"}" role="button" tabindex="0" aria-label="Zmień kompozytora">${esc(meta)}</span>${p.keyLabel ? `<button class="key" aria-label="Tonacja: ${esc(p.keyLabel)}">${esc(shortKey(p.keyLabel))}</button>` : ""}</div>`;
-    b.querySelector(".thumb").addEventListener("click", () => { if (b._long) { b._long = false; return; } openPiece(p, p.settings); });
+    b.querySelector(".thumb").addEventListener("click", () => { if (b._long) { b._long = false; return; } openFromLibrary(p); });
     { let t = 0; const th = b.querySelector(".thumb");
       /* Haptic Touch: the card sinks while pressed, lifts when the menu comes, settles back with a spring */
       const up = () => { clearTimeout(t); b.classList.remove("pressing"); };
@@ -437,7 +453,7 @@ async function refreshLibrary(animate) {
       ["pointerup", "pointerleave", "pointercancel"].forEach(ev => th.addEventListener(ev, up));
       th.addEventListener("pointermove", e => { if (Math.abs(e.movementY) > 4 || Math.abs(e.movementX) > 4) up(); });
       th.addEventListener("contextmenu", e => { e.preventDefault(); openCardSheet(p, b); }); }
-    const k = b.querySelector(".key"); if (k) k.addEventListener("click", () => { openPiece(p, p.settings); setTimeout(() => S.view === "score" && openSheet("key"), 520); });
+    const k = b.querySelector(".key"); if (k) k.addEventListener("click", () => { openFromLibrary(p); setTimeout(() => S.view === "score" && openSheet("key"), 520); });
     const edit = (el, field, ph) => inlineEdit(el, { value: p[field] || "", placeholder: ph, onSave: v => renameInLibrary(p, field, v) });
     const tEl = b.querySelector(".t"), cEl = b.querySelector(".c");
     tEl.addEventListener("click", () => edit(tEl, "title", "Tytuł"));
@@ -451,22 +467,19 @@ async function refreshLibrary(animate) {
   $("#lib").hidden = !has; $("#lib-empty").hidden = has;
   $("#lib-count").textContent = has ? String(list.length) : "";      // what is shown (filter, search), not everything
   $("#lib-none").hidden = !(has && q && !list.length);
-  $("#lib-none").textContent = `Nic nie pasuje do „${q}”.`;
+  $("#lib-none").textContent = `Nic nie pasuje do „${$("#lib-search").value.trim()}”.`;
+  safariNotice(all);
 }
-/* rename from the library: the record is updated and its cover (which shows the title) redrawn */
+/* rename from the library: the newest record is read again (a save of that piece may have landed since the cards
+   were drawn), then its cover (which shows the title) is redrawn without touching the open piece */
 async function renameInLibrary(p, field, v) {
   if (field === "title" && !v) v = "Bez tytułu";
-  const rec = { ...p, [field]: v, updated: Date.now() };
-  try { await DB.put(rec); } catch { hud("Nie udało się zapisać."); return; }
+  let rec;
+  try { const cur = await DB.get(p.id); if (!cur) { refreshLibrary(); return; } rec = { ...cur, [field]: v, updated: Date.now() }; await DB.put(rec); }
+  catch (e) { console.warn(e); hud(saveErrorText(e), 4000); return; }
+  if (S.piece && S.piece.id === p.id) { S.piece[field] = v; updateTitles(); }
   refreshLibrary();
-  try {
-    const snap = { piece: S.piece, parts: S.parts, srcKey: S.srcKey, srcClef: S.srcClef, clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, loadedKey: S.loadedKey };
-    loadState(rec, rec.settings);
-    const thumb = await makeThumb();
-    Object.assign(S, snap); S.loadedKey = null;
-    await DB.put({ ...rec, thumb });
-    refreshLibrary();
-  } catch (e) { console.warn(e); }
+  try { const thumb = await makeThumb(thumbXml(rec)); await saveThumb(p.id, thumb); refreshLibrary(); } catch (e) { console.warn(e); }
 }
 $("#lib-search").addEventListener("input", refreshLibrary);
 $("#lib-sort").addEventListener("change", () => { store.set("sort", $("#lib-sort").value); refreshLibrary(); });
@@ -540,6 +553,9 @@ function ensureOnStaff() {
 }
 function openPiece(piece, settings) {
   stopPlayback();
+  if (saveTimer && S.piece) savePiece();          // the last edit of the piece on screen is saved (its record is taken now)
+  /* nothing of the previous piece's view carries over: "only this part", the correcting view, the input length */
+  S.only = null; S.keepBefore = null; S.editView = null; S.edTab = null; S.inLen = null;
   try { loadState(piece, settings); } catch (e) { hud(e.message || "Nie udało się otworzyć nut.", 4000); return; }
   fitPageToDevice();
   const refit = !!ensureOnStaff();
@@ -558,7 +574,7 @@ function openPiece(piece, settings) {
   $("#scroller").scrollTop = 0;
   if (S.view !== "score") go("score");
   render();
-  if (piece.id) DB.put({ ...recordFromState(), thumb: piece.thumb || null }).catch(() => {}); // remember "opened"
+  if (piece.id) DB.put({ ...recordFromState(), thumb: piece.thumb || null }).catch(e => console.warn(e)); // remember "opened"
   else if (piece.sourceType !== "example") savePiece();
 }
 function curKeyName() { return keyName(S.srcKey.fifths + intervalFifths(S.iv), S.srcKey.mode); }
@@ -593,28 +609,62 @@ function recordFromState() {
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
-let saveTimer = null;
+let saveTimer = null, saving = null;
+/* a card drawn before the last save of its piece landed shows an older record: open the saved one */
+async function openFromLibrary(p) {
+  if (saving) { await saving; p = (await DB.get(p.id).catch(() => null)) || p; }
+  openPiece(p, p.settings);
+}
 function autosave() { clearTimeout(saveTimer); saveTimer = setTimeout(savePiece, 500); }
+/* the record is taken before any wait: by the time the database answers another piece may be open */
 async function savePiece() {
-  clearTimeout(saveTimer);
-  if (!S.piece) return;
-  const rec = recordFromState();
-  try { await DB.put(rec); }
-  catch { hud("Brak miejsca na urządzeniu. Usuń niepotrzebne nuty.", 4000); return; }
-  S.piece.id = rec.id; S.piece.created = rec.created; S.piece.updated = rec.updated; S.dirty = false;
+  clearTimeout(saveTimer); saveTimer = null;
+  if (!S.piece) return false;
+  const piece = S.piece, rec = recordFromState(), job = putRecord(rec);
+  saving = job; job.finally(() => { if (saving === job) saving = null; });
+  if (!(await job)) return false;
+  piece.id = rec.id; piece.created = rec.created; piece.updated = rec.updated; if (S.piece === piece) S.dirty = false;
   if (!store.get("persisted")) { try { navigator.storage?.persist?.().then(ok => ok && store.set("persisted", "1")); } catch {} }
   if (!DB.ok) hud("Ta przeglądarka nie pozwala zapisywać. Nuty znikną po zamknięciu.", 4000);
+  return true;
+}
+async function putRecord(rec) {
+  try { await DB.put(rec); return true; }
+  catch (e) { console.warn("save", e); hud(saveErrorText(e), 4500); return false; }
+}
+/* the cover of a piece from its record, without leaving that piece in S: the music for it is prepared in one go
+   (nothing can run in between), the slow drawing works from that text */
+const thumbSrc = () => ({ xml: processedXml(), opts: a4Options({}, 1), key: curKeyName() });
+function thumbXml(rec) {
+  const keys = Object.keys(S), saved = { ...S };
+  try { loadState(rec, rec.settings); return thumbSrc(); }
+  finally { keys.forEach(k => (S[k] = saved[k])); Object.keys(S).forEach(k => { if (!(k in saved)) delete S[k]; }); S.loadedKey = null; }
+}
+/* only the cover changes: the newest record is read again, so a rename or a later save is never undone */
+async function saveThumb(id, thumb, more) {
+  try { const cur = await DB.get(id); if (!cur) return; await DB.put({ ...cur, ...more, thumb }); }      // deleted meanwhile: stays deleted
+  catch (e) { console.warn(e); }
 }
 async function leaveScore() {
   stopPlayback();
   if (!S.piece) return;
+  /* left while correcting (back arrow instead of ✓): the view the player chose goes back before saving */
+  if (S.editView) { Object.assign(S, S.editView); S.editView = null; S.editMode = false; S.loadedKey = null; }
   const needSave = S.piece.id || S.dirty;
-  if (S.piece.sourceType === "example" && !S.piece.id && !S.dirty) return;
-  await settle(); await idle();               // heavy work only after the screen has settled
-  if (S.thumbDirty && needSave) {
-    try { S.piece.thumb = await makeThumb(); S.thumbDirty = false; } catch (e) { console.warn(e); }
-  }
-  if (needSave) { await savePiece(); if (S.view === "home") refreshLibrary(); }
+  if (S.piece.sourceType === "example" && !S.piece.id && !S.dirty) { clearTimeout(saveTimer); saveTimer = null; return; }
+  if (!needSave) return;
+  const piece = S.piece, wantThumb = S.thumbDirty, rec = recordFromState();
+  if (!(await savePiece())) return;               // at once: an edit made just before leaving is kept
+  if (S.view === "home") refreshLibrary();
+  if (!wantThumb) return;
+  await settle(); await idle();                   // heavy drawing only after the screen has settled
+  try {
+    /* another piece may be open by now: the cover is made from the record taken when leaving */
+    const thumb = await makeThumb(S.piece === piece ? thumbSrc() : thumbXml({ ...rec, id: piece.id }));
+    if (S.piece === piece) { piece.thumb = thumb; S.thumbDirty = false; }
+    await saveThumb(piece.id, thumb);
+    if (S.view === "home") refreshLibrary();
+  } catch (e) { console.warn(e); }
 }
 
 /* ---------------- Rendering ---------------- */
@@ -863,8 +913,11 @@ function fitBar(doc, part, m, after) {
 }
 function pushUndo() {
   S.undo = S.undo || []; S.undo.push(S.piece.xml); if (S.undo.length > 60) S.undo.shift();
-  if (!S.piece.origXml) S.piece.origXml = S.undo[0];
+  if (!S.piece.origXml && fromPhoto()) S.piece.origXml = S.undo[0];      // the reading, before the first change
 }
+/* "Przywróć odczyt" exists only for music read from a photo (own melodies and files have no reading to go back to) */
+const fromPhoto = () => !!S.piece && (S.piece.sourceType === "device" || S.piece.sourceType === "ai");
+const canRestore = () => fromPhoto() && !!S.piece.origXml && S.piece.origXml !== S.piece.xml;
 function editNote(op) {
   if (op === "done") { setEditMode(false); return; }
   if (op.startsWith("len:") && !S.editSel) return;
@@ -1097,15 +1150,21 @@ function afterEdit() {
   S.piece.issues = [...barIssues(S.piece.xml), ...other].sort((a, b) => parseInt(a.slice(5), 10) - parseInt(b.slice(5), 10));
   S.keepSel = S.editSel; changed();
   $("#ed-undo").disabled = !(S.undo && S.undo.length);
-  $("#btn-restore").hidden = !S.piece.origXml;
+  $("#btn-restore").hidden = !canRestore();
   const nums = doubtfulBars(S.piece.issues);
   if (!$("#notice").hidden || nums.length) { $("#notice").hidden = !nums.length; if (nums.length) { $("#notice-title").textContent = `${nums.length} ${plural(nums.length, "takt", "takty", "taktów")} do sprawdzenia`; $("#notice-text").textContent = `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${nums.length > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.`; } }
 }
 $$("#editbar [data-ed]").forEach(b => b.addEventListener("click", () => editNote(b.dataset.ed)));
+/* asked first, and undoable: the corrections are one tap away from being gone */
 $("#btn-restore").addEventListener("click", () => {
-  if (!S.piece.origXml) return;
-  S.undo = []; S.piece.xml = S.piece.origXml; delete S.piece.origXml; S.editSel = null; selectNote(null);
-  S.piece.issues = barIssues(S.piece.xml); afterEdit(); closeSheet(); hud("Przywrócono odczyt");
+  if (!canRestore()) return;
+  closeSheetThen(() => askConfirm("Przywrócić odczyt ze zdjęcia?", "Twoje poprawki i dodane partie znikną. Możesz to cofnąć.", "Przywróć", () => {
+    if (!canRestore()) return;
+    const orig = S.piece.origXml, other = (S.piece.issues || []).filter(t => !/wartości rytmicznych/.test(t));
+    pushUndo(); S.editSel = null; selectNote(null);
+    S.piece.issues = [...barIssues(orig), ...other];
+    applyNewXml(orig, null); hudUndo("Przywrócono odczyt");
+  }));
 });
 
 /* tap a note: correct it; tap a bar elsewhere: it is selected and ▶ plays from there; tap again (or outside the bars) to clear */
@@ -1147,10 +1206,10 @@ async function showPeek(bar) {
 $("#peek-x").addEventListener("click", () => { $("#peek").hidden = true; });
 
 /* Thumbnail: top of page one, as the library cover */
-async function makeThumb() {
+async function makeThumb(src = thumbSrc()) {          // src from thumbSrc(): taken before any wait
   await engineReady;
-  tk.setOptions(a4Options({}, 1));
-  tk.loadData(processedXml());
+  tk.setOptions(src.opts);
+  tk.loadData(src.xml);
   const doc = new DOMParser().parseFromString(tk.renderToSVG(1), "image/svg+xml");
   const svg = doc.documentElement;
   enlargeTitle(svg, 1.9);
@@ -1946,7 +2005,7 @@ function buildPartForSheet() {
 }
 function buildMoreSheet() {
   syncLayout(); syncArrange();
-  $("#btn-restore").hidden = !(S.piece && S.piece.origXml);
+  $("#btn-restore").hidden = !canRestore();
   const P = $("#parts"); P.innerHTML = "";
   const isPiano = p => p.staves > 1 || PIANO_RE.test(p.name);
   const solo = S.parts.find(p => !isPiano(p));
@@ -2026,42 +2085,75 @@ $("#zoom-out").addEventListener("click", () => setZoom(zoomNow() - .1));
 [["#f-title", "title"], ["#f-composer", "composer"], ["#f-instrument", "instrument"]].forEach(([sel, k]) => {
   $(sel).addEventListener("change", e => { S.piece[k] = e.target.value.trim(); if (k === "title" && !S.piece.title) S.piece.title = "Bez tytułu"; changed(); if (k === "instrument" && openSheetId === "more") buildMoreSheet(); });
 });
-$("#btn-report").addEventListener("click", async () => {
+/* the photo of the notes goes along only when the person says so (it can show more than the music) */
+$("#btn-report").addEventListener("click", () => {
   const p = S.piece || {}, nums = doubtfulBars(p.issues);
   const text = [`Solo ${VERSION}${BUILD ? " · test " + BUILD : ""}: problem z utworem „${p.title || "Bez tytułu"}”.`,
     `Tonacja: ${curKeyName()}; klucz: ${CLEF_PL[curClef()] || ""}; ${cap(intervalPl(S.iv)) || "bez transpozycji"}; wielkość ${Math.round(S.zoom * 100)}%.`,
     nums.length ? `Takty do sprawdzenia: ${nums.join(", ")}.` : "", "Co jest nie tak:", ""].filter(Boolean).join("\n");
   const data = { title: "Solo: zgłoszenie", text };
-  try {
-    /* the original photo goes along only if the system share sheet can carry files; the person picks the app */
-    if (p.images && p.images[0] && navigator.canShare) {
-      const blob = await (await fetch(p.images[0])).blob(), file = new File([blob], "oryginal.jpg", { type: "image/jpeg" });
-      if (navigator.canShare({ files: [file] })) { await navigator.share({ ...data, files: [file] }); return; }
-    }
-    if (navigator.share) { await navigator.share(data); return; }
-  } catch (e) { if (e && e.name === "AbortError") return; }
-  location.href = "mailto:nniewinskame@gmail.com?subject=" + encodeURIComponent("Solo: zgłoszenie") + "&body=" + encodeURIComponent(text);
+  const send = async withPhoto => {
+    try {
+      /* the share call stays inside the tap: no waiting before it */
+      if (withPhoto && navigator.canShare) {
+        const file = new File([dataUrlBlob(p.images[0])], "oryginal.jpg", { type: "image/jpeg" });
+        if (navigator.canShare({ files: [file] })) { await navigator.share({ ...data, files: [file] }); return; }
+      }
+      if (navigator.share) { await navigator.share(data); return; }
+    } catch (e) { if (e && e.name === "AbortError") return; console.warn(e); }
+    location.href = "mailto:nniewinskame@gmail.com?subject=" + encodeURIComponent("Solo: zgłoszenie") + "&body=" + encodeURIComponent(text);
+  };
+  if (p.images && p.images[0] && navigator.canShare) askConfirm("Dołączyć zdjęcie nut?", "Zdjęcie pomaga znaleźć błąd odczytu. Wyślesz je tylko tam, gdzie wybierzesz.", "Dołącz zdjęcie", () => send(true), "Bez zdjęcia", () => send(false));
+  else send(false);
 });
-let delTarget = null;
-function askDelete(p, fromLibrary) {
-  delTarget = { id: p.id, fromLibrary };
-  $("#confirm-t").textContent = `Usunąć „${p.title || "Bez tytułu"}”?`;
-  $("#confirm-text").textContent = "Nuty i zdjęcie znikną z tego urządzenia.";
+/* one question sheet for every "are you sure": delete, restore the reading, attach the photo */
+let delTarget = null, confirmFn = null, confirmAlt = null;
+function askConfirm(title, text, yes, fn, alt, altFn) {
+  delTarget = null; confirmFn = fn; confirmAlt = altFn || null;
+  $("#confirm-t").textContent = title; $("#confirm-text").textContent = text; $("#confirm-yes").textContent = yes;
+  let b = $("#confirm-alt");
+  if (!b) { b = document.createElement("button"); b.id = "confirm-alt"; b.className = "btn tinted wide"; $("#confirm-yes").after(b);
+    b.addEventListener("click", () => { const f = confirmAlt; confirmFn = confirmAlt = null; closeSheet(); if (f) f(); }); }
+  b.textContent = alt || ""; b.hidden = !alt;
+  $("#confirm-yes").classList.toggle("danger", !alt); $("#confirm-yes").classList.toggle("primary", !!alt);   // a choice of two harmless ways is not red
   openSheet("confirm");
+}
+function askDelete(p, fromLibrary) {
+  askConfirm(`Usunąć „${p.title || "Bez tytułu"}”?`, "Nuty i zdjęcie znikną z tego urządzenia.", "Usuń", null);
+  delTarget = { id: p.id, fromLibrary };
 }
 $("#btn-delete").addEventListener("click", () => askDelete(S.piece, false));
 $("#confirm-yes").addEventListener("click", async () => {
+  if (confirmFn) { const f = confirmFn; confirmFn = confirmAlt = null; closeSheet(); f(); return; }     // in the same tap (share needs it)
   const t = delTarget || { id: S.piece && S.piece.id }; delTarget = null;
   if (!t.id) { closeSheet(); return; }
-  await DB.del(t.id);
-  if (t.fromLibrary) { closeSheetThen(() => { hud("Usunięto"); refreshLibrary(); }); return; }
-  S.piece = null; closeSheetThen(() => { hud("Usunięto"); go("home"); });
+  /* kept in memory for "Cofnij"; the piece also leaves its collections and the favourites */
+  let rec = null; try { rec = await DB.get(t.id); } catch (e) { console.warn(e); }
+  try { await DB.del(t.id); } catch (e) { console.warn(e); closeSheet(); hud("Nie udało się usunąć. Spróbuj jeszcze raz.", 3500); return; }
+  const inCols = cols().filter(c => c.items.includes(t.id)).map(c => c.id), wasFav = favs().includes(t.id);
+  saveCols(cols().map(c => ({ ...c, items: c.items.filter(x => x !== t.id) }))); saveFavs(favs().filter(x => x !== t.id));
+  const undo = rec && (async () => {
+    if (!(await putRecord(rec))) return;
+    saveCols(cols().map(c => inCols.includes(c.id) ? { ...c, items: [...new Set([...c.items, t.id])] } : c));
+    if (wasFav) saveFavs([...new Set([...favs(), t.id])]);
+    hud("Przywrócono", 1800); if (S.view === "home") refreshLibrary();
+  });
+  const done = () => { hudAct("Usunięto", "Cofnij", undo, 6000); refreshLibrary(); };
+  if (t.fromLibrary) { closeSheetThen(done); return; }
+  clearTimeout(saveTimer); saveTimer = null; S.piece = null; closeSheetThen(() => { done(); go("home"); });
 });
+/* a short message with one action ("Cofnij"); the action works once */
+function hudAct(msg, label, fn, ms = 4000) {
+  hud(msg, ms); if (!fn) return;
+  const h = $("#toast"), b = document.createElement("button"); b.className = "toast-act"; b.textContent = label;
+  b.addEventListener("click", () => { h.classList.remove("show"); b.remove(); fn(); }, { once: true });
+  h.appendChild(b);
+}
 /* a long press on a piece in the library: open, send, rename, delete */
 let cardPiece = null, cardEl = null;
 function openCardSheet(p, el) { cardPiece = p; cardEl = el; $("#sh-card-t").textContent = p.title || "Bez tytułu"; openSheet("card"); }
-$("#cd-open").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => openPiece(p, p.settings)); });
-$("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => { openPiece(p, p.settings); whenDrawn(() => openSheet("share")); }); });
+$("#cd-open").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => openFromLibrary(p)); });
+$("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => openSheet("share")); }); });
 $("#cd-rename").addEventListener("click", () => { const el = cardEl; closeSheetThen(() => { const t = el && el.querySelector(".t"); if (t) t.click(); }); });
 $("#cd-del").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => askDelete(p, true)); });
 
@@ -2848,9 +2940,7 @@ async function migrateExample() {
         composer: !p.composer || /beethoven|meow/i.test(p.composer) ? "Melodia ludowa" : p.composer, settings: /<beats>3<\/beats>/.test(p.xml) ? p.settings : { ...(p.settings || {}), iv: { d: 0, s: 0 }, preset: -1 }, thumb: null };
       if (rec.settings && rec.settings.preset === undefined) rec.settings.preset = -1;
       await DB.put(rec);
-      const snap = { piece: S.piece, parts: S.parts, srcKey: S.srcKey, srcClef: S.srcClef, clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm };
-      try { loadState(rec, rec.settings); rec.keyLabel = curKeyName(); rec.thumb = await makeThumb(); await DB.put(rec); } catch (e) { console.warn(e); }
-      Object.assign(S, snap); S.loadedKey = null;
+      try { const src = thumbXml(rec); await saveThumb(rec.id, await makeThumb(src), { keyLabel: src.key }); } catch (e) { console.warn(e); }
     }
     if (S.view === "home") refreshLibrary();
   } catch (e) { console.warn(e); }
@@ -2858,13 +2948,14 @@ async function migrateExample() {
 
 /* T21: files shared to Solo from another app wait in a cache; open them like picked files */
 async function openShared() {
-  if (!/[?&]shared=1/.test(location.search)) return;
+  const m = location.search.match(/[?&]shared=(1|err)/); if (!m) return;
   history.replaceState(history.state, "", location.pathname);
+  if (m[1] === "err") { setTimeout(() => hud("Nie udało się odebrać pliku. Spróbuj jeszcze raz albo zapisz go w Plikach.", 5000), 800); return; }
   try {
     const c = await caches.open("solo-shared"), keys = await c.keys(), files = [];
     for (const k of keys) { const r = await c.match(k); const b = await r.blob(); files.push(new File([b], decodeURIComponent(r.headers.get("x-name") || "plik"), { type: b.type })); await c.delete(k); }
-    if (files.length) handleFiles(files);
-  } catch (e) { console.warn(e); }
+    if (files.length) handleFiles(files); else hud("Nie udało się odebrać pliku.", 4000);
+  } catch (e) { console.warn(e); hud("Nie udało się odebrać pliku.", 4000); }
 }
 
 /* ---------------- Boot ---------------- */
@@ -2877,26 +2968,73 @@ async function openShared() {
   migrateExample(); openShared();
   show("home");
   if (!store.get("welcomed")) {
-    DB.all().then(all => { if (!all.length) $("#welcome").hidden = false; else store.set("welcomed", "1"); }).catch(() => { $("#welcome").hidden = false; });
+    DB.all().then(all => { if (!all.length) $("#welcome").hidden = false; else store.set("welcomed", "1"); }).catch(e => console.warn(e));   // unreadable is not "new here"
   }
-  if ("serviceWorker" in navigator && (location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))) {
-    // a new version takes over quietly: check when the app comes back to the screen, reload on the library screen
-    const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register("sw.js").then(reg => {
-      document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
-    }).catch(() => {});
-    let pendingReload = false;
-    const reloadIfIdle = () => { if (S.view === "home" && !openSheetId && !readCtl && !cam.open && !pending.length) location.reload(); else pendingReload = true; };
-    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController) reloadIfIdle(); });
-    // first visit on a host without isolation headers: once the worker is in charge, reload one time to get them
-    let coiTried = false; try { coiTried = !!sessionStorage.getItem("solo:coi"); } catch {}
-    if (!window.crossOriginIsolated && !coiTried) {
-      const go = () => { try { sessionStorage.setItem("solo:coi", "1"); } catch {} if (S.view === "home" && !openSheetId && !cam.open && !pending.length) location.reload(); };
-      if (navigator.serviceWorker.controller) go(); else navigator.serviceWorker.addEventListener("controllerchange", go, { once: true });
-    }
-    window.addEventListener("popstate", () => { if (pendingReload) setTimeout(reloadIfIdle, 600); });
-  }
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))) setupUpdates();
+  /* "Open with Solo" on a computer (manifest file_handlers) */
+  if ("launchQueue" in window) launchQueue.setConsumer(async lp => { try { const files = await Promise.all((lp.files || []).map(h => h.getFile())); if (files.length) handleFiles(files); } catch (e) { console.warn(e); } });
 })();
+
+/* A new version waits until the person says so ("Odśwież"), or until Solo is started again: it never reloads the
+   page in the middle of something. The check runs when Solo comes back to the screen (an iPhone app is resumed,
+   not restarted), at most every 30 minutes. */
+function setupUpdates() {
+  const sw = navigator.serviceWorker, bootAt = Date.now();
+  let reloading = false, lastCheck = 0;
+  const busy = () => S.view !== "home" || !!openSheetId || !!readCtl || cam.open || pending.length || [$("#onb"), $("#welcome"), $("#ownf")].some(el => el && !el.hidden);
+  const reload = async () => {
+    if (reloading) return; reloading = true;
+    try { if (saveTimer) await savePiece(); else if (saving) await saving; } catch (e) { console.warn(e); }      // the last edit first
+    location.reload();
+  };
+  const offer = w => {
+    if (!w || !sw.controller) return;          // the very first install needs no reload
+    /* just started and nothing touched yet: take the new version at once (a blink instead of a question) */
+    if (Date.now() - bootAt < 2500 && !busy()) { w.postMessage({ type: "SKIP_WAITING" }); return; }
+    const ask = () => { if (S.view === "home" && !reloading) hudAct("Jest nowa wersja Solo", "Odśwież", () => w.postMessage({ type: "SKIP_WAITING" }), 12000); };
+    ask(); offer.ask = ask;
+  };
+  sw.register("sw.js").then(reg => {
+    if (reg.waiting) offer(reg.waiting);
+    reg.addEventListener("updatefound", () => { const w = reg.installing; if (w) w.addEventListener("statechange", () => { if (w.state === "installed") offer(w); }); });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden || Date.now() - lastCheck < 30 * 60e3) return;
+      lastCheck = Date.now(); reg.update().catch(e => console.warn(e));
+    });
+  }).catch(e => console.warn(e));
+  const hadController = !!sw.controller;
+  sw.addEventListener("controllerchange", () => { if (hadController) reload(); });
+  /* the update question comes back each time the library is shown again */
+  window.addEventListener("popstate", () => { if (offer.ask) setTimeout(offer.ask, 700); });
+  // first visit on a host without isolation headers: once the worker is in charge, reload one time to get them,
+  // but never in the middle of the first questions or anything else
+  let coiTried = false; try { coiTried = !!sessionStorage.getItem("solo:coi"); } catch {}
+  if (!window.crossOriginIsolated && !coiTried) {
+    const once = () => {
+      if (busy()) { setTimeout(once, 3000); return; }
+      try { sessionStorage.setItem("solo:coi", "1"); } catch {}
+      reload();
+    };
+    if (sw.controller) once(); else sw.addEventListener("controllerchange", once, { once: true });
+  }
+}
+
+/* Safari in a tab (not the icon on the home screen) deletes a site's data after 7 days without a visit, and the
+   installed app has its own, separate storage: say so once in a while, with what to do */
+function safariNotice(all) {
+  const want = !isStandalone() && (isIOS() || /^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent))
+    && all.some(p => p.sourceType !== "example") && Date.now() - +store.get("safariLater", 0) > 3 * DAY;
+  let el = $("#safari-nudge");
+  if (!want) { if (el) el.hidden = true; return; }
+  if (!el) {
+    el = document.createElement("div"); el.className = "notice"; el.id = "safari-nudge";
+    el.innerHTML = `<svg class="i"><use href="#info"/></svg><div class="grow"><b>Dodaj Solo do ekranu początkowego</b><span>W karcie Safari nuty mogą zniknąć po 7 dniach bez otwierania. Zapisz kopię i wczytaj ją w Solo z ikony.</span></div><button class="link" id="safari-how">Jak?</button><button class="x" id="safari-x" aria-label="Później"><svg class="i"><use href="#x"/></svg></button>`;
+    $("#lib").insertBefore(el, $("#backup-nudge") || $("#cols"));
+    $("#safari-how").addEventListener("click", () => { go("settings"); setTimeout(() => { const st = $("#install-steps"); if (st) st.scrollIntoView({ behavior: "smooth", block: "center" }); }, 450); });
+    $("#safari-x").addEventListener("click", () => { store.set("safariLater", String(Date.now())); fadeOut(el, 180); });
+  }
+  el.hidden = false;
+}
 
 /* ---------------- a new melody: the basics first (benchmark: MuseScore, iReal Pro, Flat), then an empty staff ---------------- */
 const nm = { instr: null, time: "4/4", key: 0, bpm: 90, title: "" };
@@ -3172,7 +3310,7 @@ function renderCols(all) {
   const mine = cols();
   if (![...auto.map(a => a[0]), ...mine.map(c => c.id)].includes(libCol)) libCol = "all";
   box.innerHTML = auto.map(([id, name, ic]) => `<button class="cchip" role="tab" data-col="${id}" aria-selected="${libCol === id}">${ic ? icon(ic) : ""}<span>${name}</span></button>`).join("") +
-    mine.map(c => `<button class="cchip" role="tab" data-col="${c.id}" data-user aria-selected="${libCol === c.id}"><i class="cdot" style="background:${esc(c.color || "#8D8D8D")}"></i><span>${esc(c.name)}</span></button>`).join("") +
+    mine.map(c => `<button class="cchip" role="tab" data-col="${esc(c.id)}" data-user aria-selected="${libCol === c.id}"><i class="cdot" style="background:${esc(c.color || "#8D8D8D")}"></i><span>${esc(c.name)}</span></button>`).join("") +
     `<button class="cchip add" id="col-add" aria-label="Nowa kolekcja">${icon("plus")}</button>`;
 }
 (() => {
@@ -3204,8 +3342,11 @@ $("#col-save").addEventListener("click", () => {
 });
 $("#col-del").addEventListener("click", () => {
   const all = cols(), c = all.find(x => x.id === colTarget); if (!c) return;
+  const at = all.indexOf(c);
   saveCols(all.filter(x => x !== c)); if (libCol === c.id) { libCol = "all"; store.set("libCol", "all"); }
-  closeSheetThen(() => { hud("Usunięto kolekcję. Utwory zostały.", 2500); refreshLibrary(); });
+  /* the pieces stay; the collection itself (its name, colour and order) can come back */
+  const undo = () => { const now = cols(); if (now.some(x => x.id === c.id)) return; now.splice(Math.min(at, now.length), 0, c); saveCols(now); refreshLibrary(); };
+  closeSheetThen(() => { hudAct("Usunięto kolekcję. Utwory zostały.", "Cofnij", undo, 6000); refreshLibrary(); });
 });
 /* from a piece's long-press menu: ♥ and "Kolekcja" (tick the ones it belongs to) */
 function syncFavTile() { const on = cardPiece && favs().includes(cardPiece.id); $("#cd-fav").innerHTML = icon(on ? "heart-fill" : "heart") + `<span>Ulubione</span>`; $("#cd-fav").setAttribute("aria-pressed", String(!!on)); }
@@ -3216,7 +3357,7 @@ $("#cd-fav").addEventListener("click", () => {
 $("#cd-col").addEventListener("click", () => closeSheetThen(() => openSheet("addto")));
 function buildAddtoSheet() {
   const id = cardPiece && cardPiece.id, all = cols();
-  $("#addto-list").innerHTML = all.length ? all.map(c => `<label class="li"><i class="cdot" style="background:${esc(c.color || "#8D8D8D")}"></i><span class="grow"><b>${esc(c.name)}</b></span><input type="checkbox" class="switch" data-c="${c.id}" ${c.items.includes(id) ? "checked" : ""}></label>`).join("") : `<p class="note">Nie masz jeszcze kolekcji.</p>`;
+  $("#addto-list").innerHTML = all.length ? all.map(c => `<label class="li"><i class="cdot" style="background:${esc(c.color || "#8D8D8D")}"></i><span class="grow"><b>${esc(c.name)}</b></span><input type="checkbox" class="switch" data-c="${esc(c.id)}" ${c.items.includes(id) ? "checked" : ""}></label>`).join("") : `<p class="note">Nie masz jeszcze kolekcji.</p>`;
 }
 $("#addto-list").addEventListener("change", e => {
   const cid = e.target.dataset.c, id = cardPiece && cardPiece.id; if (!cid || !id) return;
