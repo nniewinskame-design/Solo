@@ -1,5 +1,5 @@
 /* Solo service worker: works offline after the first visit (photo reading still needs internet). */
-const CACHE = "solo-v19";
+const CACHE = "solo-v20";
 const SHELL = ["./", "index.html", "styles.css", "theme.js", "core.js", "motion.js", "app.js", "clefs.js", "manifest.webmanifest",
   "prywatnosc.html", "regulamin.html", "licencje.html", "legal.js",
   "fonts/fonts.css", "fonts/geist-latin.woff2", "fonts/geist-latinext.woff2",
@@ -7,7 +7,9 @@ const SHELL = ["./", "index.html", "styles.css", "theme.js", "core.js", "motion.
   "icons/favicon.svg", "icons/icon-192.png", "icons/apple-touch-icon.png",
   "vendor/verovio-toolkit-wasm.js", "vendor/jszip.min.js", "vendor/pdf.min.js", "vendor/pdf.worker.min.js"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
-self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+/* only Solo's own old app caches go: the reader's downloaded models (~150 MB, "homr-web-models")
+   and files shared to Solo must survive an update */
+self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => /^solo-v\d+$/.test(k) && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 /* Hosts that can't send headers (GitHub Pages) still get cross-origin isolation, which the
    on-device reader needs for its fast multi-threaded mode: the worker adds the headers itself. */
 function isolate(r) {
@@ -19,6 +21,20 @@ function isolate(r) {
   h.set("X-Content-Type-Options", "nosniff");
   return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
 }
+/* T21: files shared to Solo (e.g. a PDF attachment from Gmail): keep them, then open the app */
+self.addEventListener("fetch", e => {
+  const url = new URL(e.request.url);
+  if (e.request.method === "POST" && url.pathname.endsWith("/share-target")) {
+    e.respondWith((async () => {
+      try {
+        const fd = await e.request.formData(), files = fd.getAll("file").filter(f => f && f.size);
+        const c = await caches.open("solo-shared"); await Promise.all((await c.keys()).map(k => c.delete(k)));
+        await Promise.all(files.map((f, i) => c.put(new Request("shared/" + i), new Response(f, { headers: { "content-type": f.type || "application/octet-stream", "x-name": encodeURIComponent(f.name || "plik") } }))));
+      } catch (err) {}
+      return Response.redirect(new URL("./?shared=1", self.registration.scope).href, 303);
+    })());
+  }
+});
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;

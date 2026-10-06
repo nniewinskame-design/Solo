@@ -58,6 +58,7 @@
   <symbol id="download" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4M5 19.5h14"/></symbol>
   <symbol id="upload" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4M5 19.5h14"/></symbol>
   <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></symbol>
   <symbol id="warn" viewBox="0 0 24 24"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4.5"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></symbol>
 </svg>
 
@@ -82,6 +83,7 @@
         <h2 class="h-l">Twoje nuty <span class="count" id="lib-count"></span></h2>
         <div class="libtools">
           <button class="btn small tinted" data-act="blank"><svg class="i"><use href="#plus"/></svg><span>Pusta pięciolinia</span></button>
+          <button class="btn small tinted" data-sheet="tools"><svg class="i"><use href="#metronome"/></svg><span>Metronom i stroik</span></button>
           <label class="search"><svg class="i"><use href="#search"/></svg><input id="lib-search" type="search" placeholder="Szukaj" autocomplete="off" aria-label="Szukaj w nutach"></label>
           <label class="sort"><select id="lib-sort" aria-label="Kolejność"><option value="opened">Ostatnio grane</option><option value="title">Tytuł</option><option value="composer">Kompozytor</option><option value="created">Ostatnio dodane</option></select><svg class="i"><use href="#down"/></svg></label>
         </div>
@@ -295,6 +297,31 @@
   <button class="btn primary wide" id="btn-read"><svg class="i"><use href="#wand"/></svg><span>Odczytaj nuty</span></button>
 </div>
 
+<div class="sheet" id="sh-tools" role="dialog" aria-modal="true" aria-labelledby="sh-tools-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-tools-t">Metronom i stroik</h2><button class="done" data-close>Gotowe</button></div>
+  <h3 class="lbl first">Metronom</h3>
+  <div class="metro">
+    <div class="beats" id="m-beats" aria-hidden="true"></div>
+    <div class="metro-row">
+      <button class="pill round" id="m-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button>
+      <div class="metro-bpm"><b id="m-bpm">100</b><small>uderzeń na minutę</small></div>
+      <button class="pill round" id="m-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button>
+    </div>
+    <div class="seg" id="m-meter"><button data-b="2">2/4</button><button data-b="3">3/4</button><button data-b="4">4/4</button><button data-b="6">6/8</button></div>
+    <button class="btn primary wide" id="m-go"><svg class="i"><use href="#play"/></svg><span>Start</span></button>
+  </div>
+  <h3 class="lbl">Stroik</h3>
+  <div class="tuner">
+    <div class="tune-note" id="t-note">–</div>
+    <div class="tune-meter" aria-hidden="true"><i class="mark"></i><i class="needle" id="t-needle"></i></div>
+    <p class="tune-cents" id="t-cents">Zagraj jeden długi dźwięk</p>
+    <div class="seg" id="t-instr"><button data-tr="0">Puzon (C)</button><button data-tr="2">Instrument w B</button><button data-tr="-3">w Es</button><button data-tr="7">w F</button></div>
+    <p class="note">Stroik słucha przez mikrofon tylko na tym urządzeniu. Dźwięk nie jest nagrywany ani wysyłany. Telefon zapyta o zgodę.</p>
+    <button class="btn tinted wide" id="t-go"><svg class="i"><use href="#mic"/></svg><span>Włącz stroik</span></button>
+  </div>
+</div>
+
 <div class="sheet" id="sh-pdf" role="dialog" aria-modal="true" aria-labelledby="sh-pdf-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-pdf-t">Które strony?</h2><button class="done ghost" data-close>Anuluj</button></div>
@@ -359,6 +386,7 @@
   </div>
   <h3 class="lbl">Nuty</h3>
   <div class="list">
+    <button class="li tap" data-sheet="tools"><span class="ic"><svg class="i"><use href="#metronome"/></svg></span><span class="grow"><b>Metronom i stroik</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" data-sheet="orig" id="row-orig"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Zdjęcie oryginału</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
@@ -379,6 +407,8 @@
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-share-t">Udostępnij</h2><button class="done ghost" data-close>Anuluj</button></div>
   <div class="list">
+    <button class="li tap" data-act="send-pdf"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Wyślij PDF</b><small>E-mail, WhatsApp i inne</small></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" data-act="send-img"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Wyślij jako obraz</b><small>Pierwsza strona jako zdjęcie</small></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" data-act="print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" data-act="pdf"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Pobierz PDF</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" data-act="xml"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Plik MusicXML</b></span><svg class="i chev"><use href="#right"/></svg></button>

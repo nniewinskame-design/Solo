@@ -223,13 +223,14 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages })[name]?.();
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet })[name]?.();
   openSheetId = name;
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
   const f = el.querySelector(".done, button, input"); if (f && matchMedia("(pointer:fine)").matches) f.focus({ preventScroll: true });
 }
 function hideSheet(instant, keepScrim) {
+  if (openSheetId === "tools" && tuner.on) tunerStop();
   if (openSheetId === "pdf" && pickPdfPages.cancel) { const c = pickPdfPages.cancel; setTimeout(c, 0); }
   if (!openSheetId) return;
   const name = openSheetId, el = $("#sh-" + name);
@@ -345,6 +346,8 @@ document.addEventListener("click", e => {
     if (act === "camera") { if (a.id === "w-camera") store.set("welcomed", "1"); openCamera(); }
     if (act === "print") closeSheetThen(printScore);
     if (act === "pdf") closeSheetThen(savePdf);
+    if (act === "send-pdf") closeSheetThen(() => savePdf(true));
+    if (act === "send-img") closeSheetThen(sendImage);
     if (act === "xml") closeSheetThen(shareXml);
   }
 });
@@ -1004,7 +1007,7 @@ function buildPdf(images, w, h, title) {
   return new Blob(parts, { type: "application/pdf" });
 }
 let pdfBusy = false;
-async function savePdf() {
+async function savePdf(send) {
   if (!S.piece || pdfBusy) return;
   pdfBusy = true; stopPlayback();
   hud("Przygotowuję PDF…", 60000);
@@ -1027,12 +1030,28 @@ async function savePdf() {
     // iPhone and iPad: the share sheet (Save to Files, AirDrop…); everywhere else a normal download
     const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
     let shared = false;
-    if (apple && navigator.canShare && navigator.canShare({ files: [file] })) {
+    if ((apple || send) && navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], title }); shared = true; } catch (e) { if (e && e.name === "AbortError") shared = true; }
     }
     if (!shared) { download(name, blob, "application/pdf"); hud("Pobrano " + name, 3000); }
     else hud("Gotowe", 1200);
   } catch (e) { console.error(e); hud("Nie udało się zapisać PDF. Spróbuj jeszcze raz.", 4000); }
+  finally { pdfBusy = false; if (S.view === "score") render(); }
+}
+/* T20: the first page as a picture, for chats that show images better than PDFs */
+async function sendImage() {
+  if (!S.piece || pdfBusy) return;
+  pdfBusy = true; stopPlayback(); hud("Przygotowuję obraz…", 30000);
+  try {
+    await engineReady;
+    tk.setOptions(a4Options()); tk.loadData(processedXml());
+    const el = await pageCanvas(tk.renderToSVG(1)); enlargeTitle(el, 1.9);
+    const c = await rasterPage(el); S.loadedKey = null;
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.9));
+    const name = safeName(S.piece.title || "Nuty") + ".jpg", file = new File([blob], name, { type: "image/jpeg" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: S.piece.title }); hud("Gotowe", 1200); return; } catch (e) { if (e && e.name === "AbortError") return; } }
+    download(name, blob, "image/jpeg"); hud("Pobrano " + name, 3000);
+  } catch (e) { console.error(e); hud("Nie udało się przygotować obrazu.", 4000); }
   finally { pdfBusy = false; if (S.view === "score") render(); }
 }
 async function shareXml() {
@@ -1771,7 +1790,100 @@ const NEWS = { "3.7": ["Kilka pytań przed czytaniem: klucz, metrum i znaki przy
   "Bemole i krzyżyki odczytane ze zdjęcia są teraz widoczne w nutach.",
   "Dotknij taktu, a nad nutami pokaże się ta linia ze zdjęcia oryginału.",
   "Poprawianie nut: dotknij nuty i przesuń ją, zmień długość, dodaj znak, zamień na pauzę. Cofnij i Przywróć odczyt.",
-  "Pusta pięciolinia: napisz własną melodię."] };
+  "Pusta pięciolinia: napisz własną melodię.",
+  "Wyślij PDF lub obraz przez WhatsApp, e-mail i inne.",
+  "PDF z Gmaila: Udostępnij → Solo (gdy Solo jest zainstalowane).",
+  "Metronom i stroik."] };
+/* ---------------- T22 metronome, T23 tuner ---------------- */
+const metro = { on: false, bpm: 100, beats: 4, ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [] };
+function buildToolsSheet() {
+  if (!metro.on) { metro.bpm = S.piece && S.view === "score" ? curBpm() : (+store.get("metroBpm", 100) || 100); const t = S.piece && S.view === "score" ? (processedXml().match(/<beats>(\d+)<\/beats>/) || [])[1] : null; metro.beats = [2, 3, 4, 6].includes(+t) ? +t : (+store.get("metroBeats", 4) || 4); }
+  syncMetro(); syncTuner();
+}
+function syncMetro() {
+  $("#m-bpm").textContent = metro.bpm;
+  $$("#m-meter button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.b === metro.beats)));
+  $("#m-beats").innerHTML = Array.from({ length: metro.beats }, (_, i) => `<i class="${i === 0 ? "one" : ""}"></i>`).join("");
+  $("#m-go").innerHTML = `${icon(metro.on ? "stop" : "play")}<span>${metro.on ? "Stop" : "Start"}</span>`;
+}
+function metroClick(t, accent) {
+  const c = metro.ctx, o = c.createOscillator(), g = c.createGain();
+  o.frequency.value = accent ? 1500 : 1000; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(accent ? .9 : .55, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .06);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + .08);
+}
+function metroStart() {
+  const AC = window.AudioContext || window.webkitAudioContext; metro.ctx = metro.ctx || new AC();
+  metro.ctx.resume?.(); metro.on = true; metro.n = 0; metro.next = metro.ctx.currentTime + .08; metro.queue = [];
+  try { navigator.audioSession && (navigator.audioSession.type = "playback"); } catch {}
+  /* look ahead 120 ms, so the clicks stay exact even when the page is busy */
+  metro.timer = setInterval(() => {
+    while (metro.next < metro.ctx.currentTime + .12) {
+      const beat = metro.n % metro.beats; metroClick(metro.next, beat === 0); metro.queue.push({ t: metro.next, beat });
+      metro.next += (metro.beats === 6 ? 30 : 60) / metro.bpm; metro.n++;
+    }
+  }, 25);
+  const draw = () => {
+    if (!metro.on) return;
+    while (metro.queue.length && metro.queue[0].t <= metro.ctx.currentTime) { const q = metro.queue.shift(); $$("#m-beats i").forEach((d, i) => d.classList.toggle("on", i === q.beat)); }
+    metro.raf = requestAnimationFrame(draw);
+  };
+  metro.raf = requestAnimationFrame(draw); syncMetro();
+}
+function metroStop() { metro.on = false; clearInterval(metro.timer); cancelAnimationFrame(metro.raf); $$("#m-beats i").forEach(d => d.classList.remove("on")); syncMetro(); }
+$("#m-go").addEventListener("click", () => metro.on ? metroStop() : metroStart());
+const setMetroBpm = v => { metro.bpm = Math.max(30, Math.min(240, Math.round(v))); store.set("metroBpm", metro.bpm); syncMetro(); };
+$("#m-down").addEventListener("click", () => setMetroBpm(metro.bpm - (metro.bpm > 120 ? 4 : 2)));
+$("#m-up").addEventListener("click", () => setMetroBpm(metro.bpm + (metro.bpm >= 120 ? 4 : 2)));
+$$("#m-meter button").forEach(b => b.addEventListener("click", () => { metro.beats = +b.dataset.b; store.set("metroBeats", metro.beats); metro.n = 0; syncMetro(); }));
+
+const tuner = { on: false, stream: null, ctx: null, an: null, raf: 0, tr: +store.get("tunerTr", 0) || 0, buf: null };
+const NOTE_PL = ["C", "Cis", "D", "Es", "E", "F", "Fis", "G", "As", "A", "B", "H"];
+function syncTuner() {
+  $$("#t-instr button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tr === tuner.tr)));
+  $("#t-go").innerHTML = `${icon(tuner.on ? "stop" : "mic")}<span>${tuner.on ? "Wyłącz stroik" : "Włącz stroik"}</span>`;
+}
+/* pitch by autocorrelation: robust for brass and voice, on the device */
+function detectPitch(buf, sr) {
+  let rms = 0; for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / buf.length); if (rms < .01) return -1;
+  let a = 0, b = buf.length - 1; const th = .2; while (a < buf.length / 2 && Math.abs(buf[a]) < th) a++; while (b > buf.length / 2 && Math.abs(buf[b]) < th) b--;
+  const x = buf.slice(a, b), n = x.length, c = new Float32Array(n);
+  for (let lag = 0; lag < n; lag++) { let s = 0; for (let i = 0; i < n - lag; i++) s += x[i] * x[i + lag]; c[lag] = s; }
+  let d = 0; while (d < n - 1 && c[d] > c[d + 1]) d++;
+  let best = -1, bv = -1; for (let i = d; i < n; i++) if (c[i] > bv) { bv = c[i]; best = i; }
+  if (best <= 0 || best >= n - 1) return -1;
+  const y1 = c[best - 1], y2 = c[best], y3 = c[best + 1], aa = (y1 + y3 - 2 * y2) / 2, bb = (y3 - y1) / 2;
+  return sr / (aa ? best - bb / (2 * aa) : best);
+}
+async function tunerStart() {
+  try {
+    tuner.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch (e) { hud(e && e.name === "NotAllowedError" ? "Brak zgody na mikrofon. Możesz ją dać w ustawieniach przeglądarki." : "Nie udało się włączyć mikrofonu.", 4000); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; tuner.ctx = new AC(); await tuner.ctx.resume?.();
+  tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 2048; tuner.buf = new Float32Array(tuner.an.fftSize);
+  tuner.ctx.createMediaStreamSource(tuner.stream).connect(tuner.an); tuner.on = true; syncTuner();
+  const loop = () => {
+    if (!tuner.on) return;
+    tuner.an.getFloatTimeDomainData(tuner.buf);
+    const f = detectPitch(tuner.buf, tuner.ctx.sampleRate);
+    if (f > 30 && f < 2000) {
+      const m = 69 + 12 * Math.log2(f / 440), r = Math.round(m), cents = Math.round((m - r) * 100), shown = r + tuner.tr;
+      $("#t-note").textContent = NOTE_PL[((shown % 12) + 12) % 12];
+      $("#t-needle").style.transform = `translateX(${Math.max(-50, Math.min(50, cents)) * 1.6}px)`;
+      $("#t-cents").textContent = Math.abs(cents) <= 5 ? "Czysto" : cents < 0 ? `Za nisko o ${-cents} centów` : `Za wysoko o ${cents} centów`;
+      $(".tuner").classList.toggle("ok", Math.abs(cents) <= 5);
+    }
+    tuner.raf = requestAnimationFrame(loop);
+  };
+  tuner.raf = requestAnimationFrame(loop);
+}
+function tunerStop() {
+  tuner.on = false; cancelAnimationFrame(tuner.raf);
+  try { tuner.stream && tuner.stream.getTracks().forEach(t => t.stop()); } catch {} try { tuner.ctx && tuner.ctx.close(); } catch {}
+  tuner.stream = tuner.ctx = null; $(".tuner").classList.remove("ok"); $("#t-note").textContent = "–"; $("#t-cents").textContent = "Zagraj jeden długi dźwięk"; syncTuner();
+}
+$("#t-go").addEventListener("click", () => tuner.on ? tunerStop() : tunerStart());
+$$("#t-instr button").forEach(b => b.addEventListener("click", () => { tuner.tr = +b.dataset.tr; store.set("tunerTr", tuner.tr); syncTuner(); }));
+
 /* ---------------- Install (T9) ---------------- */
 let installEvt = null;
 const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -1811,6 +1923,17 @@ async function migrateExample() {
   } catch (e) { console.warn(e); }
 }
 
+/* T21: files shared to Solo from another app wait in a cache; open them like picked files */
+async function openShared() {
+  if (!/[?&]shared=1/.test(location.search)) return;
+  history.replaceState(history.state, "", location.pathname);
+  try {
+    const c = await caches.open("solo-shared"), keys = await c.keys(), files = [];
+    for (const k of keys) { const r = await c.match(k); const b = await r.blob(); files.push(new File([b], decodeURIComponent(r.headers.get("x-name") || "plik"), { type: b.type })); await c.delete(k); }
+    if (files.length) handleFiles(files);
+  } catch (e) { console.warn(e); }
+}
+
 /* ---------------- Boot ---------------- */
 (function boot() {
   if (location.hash.startsWith("#k=")) history.replaceState(null, "", location.pathname + location.search);   // old setup links
@@ -1818,7 +1941,7 @@ async function migrateExample() {
   const sort = store.get("sort", "opened"); if ([...$("#lib-sort").options].some(o => o.value === sort)) $("#lib-sort").value = sort;
   history.replaceState({ v: null }, "");
   setupHero(); measureGlyphs(); setPlayUi(false); drawPending();
-  migrateExample();
+  migrateExample(); openShared();
   show("home");
   if (!store.get("welcomed")) {
     DB.all().then(all => { if (!all.length) $("#welcome").hidden = false; else store.set("welcomed", "1"); }).catch(() => { $("#welcome").hidden = false; });

@@ -240,6 +240,22 @@ body.immersive .dock{transform:translate(-50%,140%);opacity:0;pointer-events:non
 body.editing .scroller{padding-bottom:calc(var(--dock-h,74px) + 120px + var(--safe-b))}
 #pages g.nsel,#pages g.nsel *{fill:#2F6FDB!important;stroke:#2F6FDB}
 
+.metro,.tuner{background:var(--fill);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.beats{display:flex;justify-content:center;gap:10px}
+.beats i{width:16px;height:16px;border-radius:50%;background:var(--fill-2);transition:transform 80ms ease,background-color 80ms ease}
+.beats i.on{background:var(--primary);transform:scale(1.25)}
+.beats i.on.one{background:#D9381E;transform:scale(1.45)}
+.metro-row{display:flex;align-items:center;justify-content:center;gap:18px}
+.metro-bpm{display:flex;flex-direction:column;align-items:center;min-width:110px}
+.metro-bpm b{font:700 44px/1 var(--sans);font-variant-numeric:tabular-nums}
+.metro-bpm small{color:var(--ink-2);font-size:13px}
+.tune-note{text-align:center;font:700 64px/1 var(--sans)}
+.tune-meter{position:relative;height:36px;border-radius:18px;background:linear-gradient(90deg,#f3c3b8,#cfeedd 42%,#cfeedd 58%,#f3c3b8)}
+.tune-meter .mark{position:absolute;left:50%;top:4px;bottom:4px;width:2px;margin-left:-1px;background:var(--ink-2)}
+.tune-meter .needle{position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;border-radius:2px;background:var(--ink);transition:transform 120ms ease}
+.tune-cents{text-align:center;color:var(--ink-2);margin:0}
+.tuner.ok .tune-note{color:#0B7A5E}
+
 /* ===== Lists / groups ===== */
 .lbl{font-size:13px;font-weight:600;color:var(--ink-2);margin:22px 4px 8px}
 .lbl.first{margin-top:6px}
