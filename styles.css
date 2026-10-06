@@ -1288,3 +1288,11 @@ body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 1
 .metro .beats>button.on[data-acc="1"]::before{background:var(--cherry)}
 #ed-undo span,#ed-redo span{display:none}   /* the two arrows speak for themselves; eight labelled tabs do not fit a phone */
 #ed-undo,#ed-redo{flex:0 0 44px}
+/* the score header: title between the round buttons, the details (composer · instrument · clef · key) on their own
+   centred line under it, full width, so they never stack word by word */
+#score .stitle{display:contents}
+#score #btn-back{grid-row:1;grid-column:1}
+#score .sbar-r{grid-row:1;grid-column:3}
+#score .stitle .a{grid-row:1;grid-column:2;text-align:center}
+#score #s-sub{grid-row:2;grid-column:1/-1;text-align:center;margin-top:-4px;white-space:normal;display:block;font-size:14px}
+#score .pstrip{grid-row:3;grid-column:1/-1}
