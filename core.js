@@ -125,8 +125,11 @@ function clefNameOf(clefEl) {
   if (sign === "C") return line === "4" ? "tenor" : line === "3" ? "alto" : "c" + line;
   return null;
 }
+/* a numbered part (Puzon II, Trombone 2): one rule everywhere */
+const ROMAN_RE = / (I|II|III|IV|V|VI|\d+)$/;
 const PIANO_RE = /piano|fortepian|klavier|pianoforte|^pf\.?$|^pno\.?$|klaw|keyboard|organ|organy|akompan|accomp|harf|harp|cembal/i;
-function analyseXml(xml) {
+/* pref: the part whose key is the piece's key (the melody); otherwise the first part that is not a piano */
+function analyseXml(xml, pref = null) {
   const doc = parseXml(xml);
   const root = doc.documentElement;
   if (root.tagName !== "score-partwise") throw new Error("Ten rodzaj pliku MusicXML (timewise) nie jest obsługiwany. Zapisz go w programie jeszcze raz jako zwykły MusicXML.");
@@ -135,32 +138,62 @@ function analyseXml(xml) {
   const parts = kids(root, "part").map(p => {
     const id = p.getAttribute("id");
     let staves = 1; const st = p.getElementsByTagName("staves")[0]; if (st) staves = parseInt(st.textContent, 10) || 1;
-    const clefEl = p.getElementsByTagName("clef")[0];
+    const clefEl = [...p.getElementsByTagName("clef")].find(c => (c.getAttribute("number") || "1") === "1");     // staff 1, not a piano's bass
     const trEl = p.getElementsByTagName("transpose")[0];
-    const transp = trEl ? parseInt(txt(trEl, "chromatic") || "0", 10) : 0;
+    const transp = trEl ? (parseInt(txt(trEl, "chromatic") || "0", 10) || 0) + 12 * (parseInt(txt(trEl, "octave-change") || "0", 10) || 0) : 0;   // sounding − written
     const name = names[id] || "Głos";
     const isPiano = staves > 1 || PIANO_RE.test(name);
     return { id, name, staves, keep: !isPiano, clef: clefNameOf(clefEl) || "treble", transp };
   });
   if (!parts.some(p => p.keep)) parts.forEach(p => (p.keep = true));
   let fifths = 0, mode = "major";
-  const firstKept = parts.find(p => p.keep);
+  const firstKept = parts.find(p => p.id === pref) || parts.find(p => p.keep);
   const pEl = firstKept && kids(root, "part").find(p => p.getAttribute("id") === firstKept.id);
   const keyEl = pEl && pEl.getElementsByTagName("key")[0];
-  if (keyEl) { fifths = parseInt(txt(keyEl, "fifths") || "0", 10) || 0; mode = txt(keyEl, "mode") === "minor" ? "minor" : "major"; }
+  if (keyEl) { fifths = parseInt(txt(keyEl, "fifths") || "0", 10) || 0; const md = txt(keyEl, "mode"); mode = md === "minor" || (!md && detectMode(pEl, fifths) === "minor") ? "minor" : "major"; }
   let title = txt(kid(root, "work") || root, "work-title") || txt(root, "movement-title");
-  if (!title) { const c = $$("credit credit-words", doc)[0]; if (c) title = c.textContent.trim(); }
+  if (!title) {         /* the credit marked as the title; a file without credit types: its first credit (old programs) */
+    const cr = kids(root, "credit"), typed = cr.filter(c => kid(c, "credit-type")), t = typed.find(c => txt(c, "credit-type") === "title");
+    const w = t ? kid(t, "credit-words") : !typed.length && cr[0] ? kid(cr[0], "credit-words") : null; if (w) title = w.textContent.trim();
+  }
   const ident = kid(root, "identification");
   const composer = ident ? (Array.from(ident.getElementsByTagName("creator")).find(c => c.getAttribute("type") === "composer")?.textContent.trim() || "") : "";
   return { parts, key: { fifths, mode }, title, composer };
 }
+/* the melody: the part the piece is for. Kept with the piece (settings.melody), so a part added above it in score
+   order (a flute over a trombone tune) never takes its place; otherwise the first part that is not a piano */
+function melodyId() {
+  if (!S.parts || !S.parts.length) return null;
+  if (S.melody && S.parts.some(p => p.id === S.melody)) return S.melody;
+  const solo = p => !(p.staves > 1 || PIANO_RE.test(p.name));
+  return (S.parts.find(p => p.keep && solo(p)) || S.parts.find(solo) || S.parts[0]).id;
+}
+/* the melody of a score just opened: the part the piece's instrument names (declared or by its name), else the first
+   part that is not a piano */
+function guessMelody(xml, parts, instrument) {
+  const solo = parts.filter(p => !(p.staves > 1 || PIANO_RE.test(p.name))); if (!solo.length) return parts[0] ? parts[0].id : null;
+  if (instrument && typeof declaredInstr === "function") {
+    const want = String(instrument).replace(ROMAN_RE, "").trim().toLowerCase(), sps = [...parseXml(xml).getElementsByTagName("score-part")];
+    const hit = solo.find(p => { const sp = sps.find(x => x.getAttribute("id") === p.id), d = sp && declaredInstr(sp); return (d && d.name.toLowerCase() === want) || p.name.replace(ROMAN_RE, "").trim().toLowerCase() === want; });
+    if (hit) return hit.id;
+  }
+  return solo[0].id;
+}
 function readingPartId() {
   const shown = S.parts.filter(p => p.keep);
   if (shown.length === 1) return shown[0].id;
+  const mel = melodyId(); if (shown.some(p => p.id === mel)) return mel;
   const m = shown.find(p => !(p.staves > 1 || PIANO_RE.test(p.name))) || shown[0];
   return m && m.id;
 }
+/* the score as it is drawn; the same piece and settings give the same text, so taps and bar lookups do not parse,
+   beam and serialise the whole score again */
 function processedXml() {
+  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody].join("\u0001");
+  if (processedXml.key === key) return processedXml.out;
+  const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
+}
+function processedXmlNow() {
   const doc = autoBeam(addAccidentals(parseXml(S.piece.xml)));
   const root = doc.documentElement;
   const keep = new Set(S.parts.filter(p => p.keep).map(p => p.id));
@@ -198,19 +231,19 @@ function processedXml() {
   /* the instrument in the corner only when one part is shown (in a score each staff carries its own name) */
   const shown = S.parts.filter(p => p.keep), single = shown.length === 1;
   let corner = "";
-  if (single && pl) { const sp = kids(pl, "score-part").find(x => x.getAttribute("id") === shown[0].id), nm = sp ? txt(sp, "part-name").trim() : ""; corner = / (I|II|III|IV)$/.test(nm) ? nm : (S.piece.instrument || nm); }
+  if (single && pl) { const sp = kids(pl, "score-part").find(x => x.getAttribute("id") === shown[0].id), nm = sp ? txt(sp, "part-name").trim() : ""; corner = ROMAN_RE.test(nm) ? nm : (S.piece.instrument || nm); }
   [[150, "left", corner], [1950, "right", S.piece.composer]].forEach(([x, j, t]) => {
     credit("\u00a0", x, 2800, j); credit("\u00a0", x, 2760, j); credit(t || "\u00a0", x, 2700, j);
   });
   // the solo part is named after the instrument in the header, so the score never says two different things
-  const soloInfo = S.parts.find(p => !(p.staves > 1 || PIANO_RE.test(p.name)));
+  const soloInfo = S.parts.find(p => p.id === melodyId() && !(p.staves > 1 || PIANO_RE.test(p.name)));
   if (pl && soloInfo && S.piece.instrument) {
     const sp = kids(pl, "score-part").find(x => x.getAttribute("id") === soloInfo.id);
     if (sp) {
       let pn = kid(sp, "part-name");
       if (!pn) { pn = doc.createElement("part-name"); sp.insertBefore(pn, sp.firstChild); }
       /* a numbered part (Puzon I, Puzon II) keeps its own name */
-      if (!/ (I|II|III|IV)$/.test(pn.textContent.trim())) pn.textContent = S.piece.instrument;
+      if (!ROMAN_RE.test(pn.textContent.trim())) pn.textContent = S.piece.instrument;
       ["part-abbreviation", "part-name-display", "part-abbreviation-display"].forEach(t => { const e = kid(sp, t); if (e) e.remove(); });
     }
   }
@@ -229,6 +262,8 @@ function processedXml() {
       if (S.readOct) [...p.getElementsByTagName("octave")].forEach(o => { o.textContent = String((parseInt(o.textContent, 10) || 0) + S.readOct); });
       if (!map) return;
       const clefs = Array.from(p.getElementsByTagName("clef"));
+      /* the part's own clef chosen again (a trombone in the bass clef): its clef changes (tenor passages) stay */
+      const own = clefs.find(c => (c.getAttribute("number") || "1") === "1"); if (own && clefNameOf(own) === S.clef) return;
       clefs.forEach(c => {
         const n = c.getAttribute("number"); if (n && n !== "1") return;
         let sign = kid(c, "sign"), line = kid(c, "line");
@@ -249,7 +284,7 @@ function processedXml() {
       }
     });
   }
-  if (S.under && typeof withChords === "function") { const first = S.parts.find(p => p.keep); withChords(doc, first && first.id, S.under, intervalFifths(S.iv)); }
+  if (S.under && typeof withChords === "function") { const first = S.parts.find(p => p.keep && p.id === melodyId()) || S.parts.find(p => p.keep); withChords(doc, first && first.id, S.under, intervalFifths(S.iv)); }
   return new XMLSerializer().serializeToString(doc);
 }
 
@@ -297,9 +332,14 @@ function splitHomrParts(doc) {
         const d = m.getElementsByTagName("divisions")[0]; if (d) div = parseFloat(d.textContent) || div;
         const bt = m.getElementsByTagName("beats")[0], bty = m.getElementsByTagName("beat-type")[0];
         if (bt) beats = parseInt(bt.textContent, 10) || beats; if (bty) beatType = parseInt(bty.textContent, 10) || beatType;
-        let voice = null, count = 0;
+        let voice = null, count = 0, last = null;
         [...m.children].forEach(ch => {
+          /* a hidden gap (<forward>) in the kept voice becomes a rest, so its later notes keep their place */
+          if (ch.tagName === "forward" && (txt(ch, "staff") || "1") === String(s) && (voice === null || (txt(ch, "voice") || last || voice) === voice)) {
+            const r = doc.createElement("note"); r.innerHTML = `<rest/><duration>${txt(ch, "duration")}</duration><voice>${voice || "1"}</voice>`; ch.replaceWith(r); count++; return;
+          }
           if (ch.tagName === "backup" || ch.tagName === "forward") { ch.remove(); return; }
+          if (ch.tagName === "note") last = txt(ch, "voice") || "1";
           if (ch.tagName === "direction") { const sf = txt(ch, "staff"); if (sf && sf !== String(s)) ch.remove(); else kids(ch, "staff").forEach(e => e.remove()); return; }
           if (ch.tagName !== "note") return;
           if ((txt(ch, "staff") || "1") !== String(s)) { ch.remove(); return; }
@@ -366,6 +406,50 @@ function keyAlter(fifths, step) {
   return 0;
 }
 function clefId(c) { const s = txt(c, "sign"), l = txt(c, "line"); return s === "C" ? "C" + (l || "3") : s; }
+/* how long a bar really is (in divisions): the furthest any voice reaches (<backup>/<forward> followed) */
+function barFill(m) {
+  let pos = 0, max = 0;
+  [...m.children].forEach(el => {
+    const d = parseFloat(txt(el, "duration")) || 0;
+    if (el.tagName === "backup") pos -= d; else if (el.tagName === "forward") pos += d;
+    else if (el.tagName === "note" && !kid(el, "chord") && !kid(el, "grace")) pos += d;
+    max = Math.max(max, pos);
+  });
+  return max;
+}
+/* bars of a part: divisions, full length and real length (a pickup or the bar that completes it is shorter, §12) */
+function barInfo(part) {
+  let div = 1, beats = 4, bt = 4; const ms = kids(part, "measure");
+  return ms.map((m, i) => {
+    kids(m, "attributes").forEach(a => {
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+    });
+    const full = div * 4 * beats / bt, f = barFill(m), whole = [...m.getElementsByTagName("rest")].some(r => r.getAttribute("measure") === "yes");
+    const len = !whole && f > 0 && f < full - 1e-6 && (i === 0 || i === ms.length - 1) ? f : full;
+    return { m, div, beats, bt, full, len, pickup: i === 0 && len < full };
+  });
+}
+/* note values for a length in quarters: one value when there is one (dotted too), else tied values that keep the beat
+   visible (5/4 = dotted half + half, 9/8 = dotted half + dotted quarter) */
+const NOTE_VAL = [[6, "whole", 1], [4, "whole", 0], [3, "half", 1], [2, "half", 0], [1.5, "quarter", 1], [1, "quarter", 0], [0.75, "eighth", 1], [0.5, "eighth", 0], [0.25, "16th", 0]];
+function noteValues(q) {
+  const one = NOTE_VAL.find(v => Math.abs(v[0] - q) < 1e-6); if (one) return [one];
+  const out = []; let left = q;
+  while (left > 1e-6) { const v = NOTE_VAL.find(x => x[0] <= left + 1e-6 && x[0] <= 3) || NOTE_VAL[NOTE_VAL.length - 1]; out.push(v); left -= v[0]; if (out.length > 16) break; }
+  return out;
+}
+/* major or minor when the file does not say (<mode> missing: homr, ready tunes, new melodies): a tune that ends on the
+   relative minor's tonic, or ends in its tonic triad and uses its raised leading tone, is minor */
+function detectMode(part, fifths) {
+  const pcs = [...part.getElementsByTagName("note")].filter(n => !kid(n, "chord") && !kid(n, "grace") && kid(n, "pitch")).map(n => { const p = kid(n, "pitch"); return ((LETTER_PC[txt(p, "step")] + (parseFloat(txt(p, "alter")) || 0)) % 12 + 12) % 12; });
+  if (!pcs.length) return "major";
+  const pc = l => { const p = lofToPitch(l); return ((LETTER_PC[p.letter] + p.alter) % 12 + 12) % 12; };
+  const last = pcs[pcs.length - 1], minT = pc(fifths + 3), majT = pc(fifths), lt = pc(fifths + 8);
+  if (last === minT) return "minor";
+  if (last === majT) return "major";
+  return pcs.filter(x => x === lt).length >= 2 && [minT, pc(fifths), pc(fifths + 4)].includes(last) ? "minor" : "major";
+}
 /* T33: the reader knows a note is E-flat but writes no accidental sign, so Verovio drew a plain E
    (this is what looked like "flats are not read"). Add the signs as they are printed: against the key,
    once per bar and line position. Safe to run on any score: notes that already have a sign are kept. */
@@ -384,13 +468,15 @@ function addAccidentals(doc) {
         const tiedIn = [...n.getElementsByTagName("tie")].some(t => t.getAttribute("type") === "stop") && !seen.has(key);
         const cur = state.has(key) ? state.get(key) : keyAlter(fifths, step);
         const first = !seen.has(key); seen.add(key);
-        state.set(key, alt); if (alt !== keyAlter(fifths, step)) altered.set(key, alt);
+        /* a note tied in over the barline carries its sign without a new one, but only itself: a later note on that
+           line in the bar is measured against the key again (Gould) */
+        if (!tiedIn) { state.set(key, alt); if (alt !== keyAlter(fifths, step)) altered.set(key, alt); }
         if (kid(n, "accidental") || tiedIn || !ACC_BY_ALTER[String(alt)]) return;
         let cautionary = false;
         if (alt === cur) { if (!(first && prevAltered.has(key) && prevAltered.get(key) !== alt)) return; cautionary = true; }
         const acc = doc.createElement("accidental"); acc.textContent = ACC_BY_ALTER[String(alt)]; if (cautionary) acc.setAttribute("cautionary", "yes");
-        const after = kids(n, "dot").pop() || kid(n, "type");
-        if (after) n.insertBefore(acc, after.nextSibling); else n.insertBefore(acc, kid(n, "notations") || kid(n, "stem") || null);
+        /* schema order: … type, dot, accidental, time-modification, stem, notehead, staff, beam, notations, lyric */
+        n.insertBefore(acc, ["time-modification", "stem", "notehead", "notehead-text", "staff", "beam", "notations", "lyric", "play", "listen"].map(t => kid(n, t)).find(Boolean) || null);
       });
       prevAltered = altered;
     });
@@ -410,6 +496,9 @@ function checkReading(xml, ans = {}) {
       });
       const mr = m.getElementsByTagName("multiple-rest")[0]; if (!mr) return;
       const n = parseInt(mr.textContent, 10) || 1; let after = m;
+      /* a file that already has the empty bars (MuseScore, Finale do) keeps them as they are */
+      const nx = kids(part, "measure"), at = nx.indexOf(m), follow = nx.slice(at + 1, at + n);
+      if (follow.length === n - 1 && follow.every(x => !x.getElementsByTagName("pitch").length)) return;
       for (let k = 1; k < n; k++) {
         const e = doc.createElement("measure");
         e.innerHTML = `<note><rest measure="yes"/><duration>${Math.round(dv * bts * 4 / btt)}</duration><voice>1</voice></note>`;
@@ -424,7 +513,8 @@ function checkReading(xml, ans = {}) {
     const len = t => (parseInt(txt(t, "beats"), 10) || 4) * 4 / (parseInt(txt(t, "beat-type"), 10) || 4);
     let want = null;
     if (ans.time) want = ans.time.split("/").map(Number);
-    else if (times.length > 1 && times.every(t => len(t) === len(times[0]))) {
+    /* a misread C / ¢ (4/4 among 2/2) is one metre; 3/4 against 6/8 is a real change (hemiola) and stays */
+    else if (times.length > 1 && times.every(t => ["4/4", "2/2"].includes(txt(t, "beats") + "/" + txt(t, "beat-type")))) {
       const four = times.find(t => txt(t, "beats") === "4" && txt(t, "beat-type") === "4");
       const t0 = four || times[0]; want = [parseInt(txt(t0, "beats"), 10), parseInt(txt(t0, "beat-type"), 10)];
     }
@@ -474,10 +564,9 @@ function checkReading(xml, ans = {}) {
         const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
         const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
       });
-      let sum = 0, whole = false;
+      let sum = barFill(m), whole = false;          // the longest voice (two voices: <backup>), not every note added up
       kids(m, "note").forEach(n => {
         if (kid(n, "chord") || kid(n, "grace")) return;
-        sum += parseFloat(txt(n, "duration")) || 0;
         const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true;
         const p = kid(n, "pitch");
         if (p) midis.push({ i, m: 12 * (parseInt(txt(p, "octave"), 10) + 1) + [0, 2, 4, 5, 7, 9, 11][STEP_I[txt(p, "step")]] + (parseFloat(txt(p, "alter")) || 0) });
@@ -517,215 +606,25 @@ function barIssues(xml) {
       const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
       const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
     });
-    let sum = 0, whole = false;
-    kids(m, "note").forEach(n => { if (kid(n, "chord") || kid(n, "grace")) return; sum += parseFloat(txt(n, "duration")) || 0; const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true; });
+    let sum = barFill(m), whole = false;          // the longest voice (two voices: <backup>)
+    kids(m, "note").forEach(n => { const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes") whole = true; });
     const full = div * beats * 4 / bt, pickup = (i === 0 || i === ms.length - 1) && sum < full;
     if (!whole && !m.getElementsByTagName("multiple-rest").length && sum > 0 && Math.abs(sum - full) > 0.01 && !pickup)
       out.push(`Takt ${i + 1}: ${sum > full ? "za dużo" : "za mało"} wartości rytmicznych`);
   });
   return out;
 }
-/* T19: an empty piece to write your own tune: bass clef (trombone), 4/4, C major, 8 empty bars */
+/* T19: an empty piece to write your own tune, in the instrument's clef (treble, bass, alto or tenor); a keyboard or
+   harp melody is one staff in the treble clef (the editor corrects single staves) */
 function blankXml(bars = 8, o = {}) {
   const beats = o.beats || 4, bt = o.beatType || 4, div = 4, cap = div * 4 * beats / bt, fifths = o.fifths || 0;
-  const clef = o.clef === "treble" ? "<sign>G</sign><line>2</line>" : "<sign>F</sign><line>4</line>";
+  const cx = { treble: ["G", 2], bass: ["F", 4], tenor: ["C", 4], alto: ["C", 3] }[o.clef] || ["G", 2], clef = `<sign>${cx[0]}</sign><line>${cx[1]}</line>`;
   const tempo = o.tempo ? `<direction placement="above"><direction-type><words></words></direction-type><sound tempo="${o.tempo}"/></direction>` : "";
   let m = "";
   for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>${div}</divisions><key><fifths>${fifths}</fifths></key><time><beats>${beats}</beats><beat-type>${bt}</beat-type></time><clef>${clef}</clef></attributes>${tempo}` : ""}<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice></note></measure>`;
   return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(o.title || "Moje nuty")}</work-title></work><part-list><score-part id="P1"><part-name>${xesc(o.part || "Głos solowy")}</part-name></score-part></part-list><part id="P1">${m}</part></score-partwise>`;
 }
 function doubtfulBars(issues) { return [...new Set((issues || []).map(t => parseInt((t.match(/Takt (\d+)/) || [])[1], 10)).filter(Boolean))]; }
-
-/* ---------------- AI JSON -> MusicXML ---------------- */
-const DIV = 24;
-const BASE = { "1": 96, "2": 48, "4": 24, "8": 12, "16": 6, "32": 3, "64": 1.5 };
-const TYPE = { "1": "whole", "2": "half", "4": "quarter", "8": "eighth", "16": "16th", "32": "32nd", "64": "64th" };
-const ACC_ALTER = { "#": 1, "b": -1, "n": 0, "x": 2, "##": 2, "bb": -2 };
-const ACC_NAME = { "#": "sharp", "b": "flat", "n": "natural", "x": "double-sharp", "##": "double-sharp", "bb": "flat-flat" };
-const CLEF_XML = { treble: ["G", 2], bass: ["F", 4], tenor: ["C", 4], alto: ["C", 3] };
-const DYNS = ["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "sf", "sfz", "sffz", "fp", "fz", "rf", "rfz", "sfp", "sfpp"];
-function keyAlter(fifths, step) {
-  if (fifths > 0) return "FCGDAEB".slice(0, fifths).includes(step) ? 1 : 0;
-  if (fifths < 0) return "BEADGCF".slice(0, -fifths).includes(step) ? -1 : 0;
-  return 0;
-}
-function parseTime(t) {
-  if (!t) return null;
-  t = String(t).trim();
-  if (t === "C" || t === "c") return { beats: 4, type: 4, symbol: "common" };
-  if (t === "C|" || t === "¢") return { beats: 2, type: 2, symbol: "cut" };
-  const m = t.match(/^(\d+)\s*\/\s*(\d+)$/); if (!m) return null;
-  return { beats: +m[1], type: +m[2] };
-}
-function noteDur(n) {
-  let b = BASE[String(n.d)] ?? 24;
-  let dur = b, add = b;
-  for (let i = 0; i < (n.dots || 0); i++) { add /= 2; dur += add; }
-  if (n.tup) dur = dur * 2 / 3;
-  return dur;
-}
-function aiToMusicXml(j) {
-  const issues = [];
-  let fifths = Number.isFinite(+j.key) ? +j.key : 0;
-  let time = parseTime(j.time) || { beats: 4, type: 4 };
-  let clef = CLEF_XML[j.clef] ? j.clef : "treble";
-  const measuresIn = Array.isArray(j.measures) ? j.measures : [];
-  // expand multirests
-  const ms = [];
-  measuresIn.forEach((m, i) => {
-    const r = parseInt(m.rest, 10);
-    if (r > 0 && (!m.notes || !m.notes.length)) {
-      for (let k = 0; k < r; k++) ms.push({ ...m, notes: [{ p: "R", d: "m" }], _multi: k === 0 ? r : 0, _multiEnd: k === r - 1 });
-    } else ms.push({ ...m });
-  });
-  let out = "";
-  let num = (ms[0] && ms[0].pickup) ? 0 : 1;
-  let prevTie = null; // {step, oct, alter}
-  // volta grouping
-  ms.forEach((m, i) => { m._voltaStart = m.volta && (!ms[i - 1] || ms[i - 1].volta !== m.volta); m._voltaEnd = m.volta && (!ms[i + 1] || ms[i + 1].volta !== m.volta); });
-  ms.forEach((m, mi) => {
-    let attrs = "";
-    if (mi === 0 || m.key !== undefined || m.time || m.clef || m._multi) {
-      let a = "";
-      if (mi === 0) a += `<divisions>${DIV}</divisions>`;
-      if (m.key !== undefined && Number.isFinite(+m.key)) fifths = +m.key;
-      if (mi === 0 || m.key !== undefined) a += `<key><fifths>${fifths}</fifths></key>`;
-      const nt = parseTime(m.time); if (nt) time = nt;
-      if (mi === 0 || nt) a += `<time${time.symbol ? ` symbol="${time.symbol}"` : ""}><beats>${time.beats}</beats><beat-type>${time.type}</beat-type></time>`;
-      if (m.clef && CLEF_XML[m.clef]) clef = m.clef;
-      if (mi === 0 || (m.clef && CLEF_XML[m.clef])) a += `<clef><sign>${CLEF_XML[clef][0]}</sign><line>${CLEF_XML[clef][1]}</line></clef>`;
-      if (m._multi > 1) a += `<measure-style><multiple-rest>${m._multi}</multiple-rest></measure-style>`;
-      if (a) attrs = `<attributes>${a}</attributes>`;
-    }
-    const mLen = time.beats * (96 / time.type);
-    let body = "";
-    // left barline
-    let left = "";
-    if (m.barline === "repeat-start" || m.barline === "repeat-both") left += `<bar-style>heavy-light</bar-style><repeat direction="forward"/>`;
-    if (m._voltaStart) left += `<ending number="${xesc(m.volta)}" type="start"/>`;
-    if (left) body += `<barline location="left">${left}</barline>`;
-    if (mi === 0 && (j.tempo || j.bpm)) {
-      const bpm = parseInt(j.bpm, 10);
-      body += `<direction placement="above"><direction-type><words font-weight="bold">${xesc(j.tempo || "")}</words></direction-type>${bpm > 0 ? `<sound tempo="${bpm}"/>` : ""}</direction>`;
-    }
-    const notes = Array.isArray(m.notes) ? m.notes : [];
-    // positions for beaming
-    const beatLen = (time.type === 8 && time.beats % 3 === 0) ? 36 : (time.type === 2 ? 24 : (time.type === 8 ? 12 : 96 / time.type * (time.type === 4 ? 1 : 1)));
-    let pos = 0, total = 0;
-    const meta = notes.map(n => { const isGrace = !!n.grace; const isRest = String(n.p || "").toUpperCase().startsWith("R"); const dur = n.d === "m" ? mLen : (isGrace ? 0 : noteDur(n)); const o = { n, isGrace, isRest, dur, pos }; pos += dur; return o; });
-    total = pos;
-    const offset = (m.pickup && mi === 0) ? Math.max(0, mLen - total) : 0;
-    // beams
-    let grp = [];
-    const flush = () => { if (grp.length > 1) { grp.forEach((o, i) => (o.beam = i === 0 ? "begin" : i === grp.length - 1 ? "end" : "continue")); } grp = []; };
-    meta.forEach(o => {
-      const bv = String(o.n.d);
-      const beamable = !o.isRest && !o.isGrace && ["8", "16", "32", "64"].includes(bv);
-      if (!beamable) { if (!o.isGrace) flush(); return; }
-      const beat = Math.floor((o.pos + offset) / beatLen + 1e-6);
-      if (grp.length && grp._beat !== beat) flush();
-      grp._beat = beat; grp.push(o);
-    });
-    flush();
-    // tuplet bracketing
-    let tupAcc = 0, tupMin = 0, inTup = false;
-    const accState = {};
-    meta.forEach((o, ni) => {
-      const n = o.n;
-      // directions
-      if (n.dyn) {
-        const dl = String(n.dyn).toLowerCase().trim();
-        if (DYNS.includes(dl)) body += `<direction placement="below"><direction-type><dynamics><${dl}/></dynamics></direction-type></direction>`;
-        else body += `<direction placement="below"><direction-type><words font-style="italic">${xesc(n.dyn)}</words></direction-type></direction>`;
-      }
-      if (n.wedge) {
-        const w = String(n.wedge).toLowerCase();
-        const t = w.startsWith("cr") ? "crescendo" : w.startsWith("d") ? "diminuendo" : "stop";
-        body += `<direction placement="below"><direction-type><wedge type="${t}"/></direction-type></direction>`;
-      }
-      if (n.txt) body += `<direction placement="above"><direction-type><words font-style="italic">${xesc(n.txt)}</words></direction-type></direction>`;
-      let x = "<note>";
-      if (o.isGrace) x += `<grace slash="yes"/>`;
-      let tieStop = false, step = "C", oct = 4, alter = 0, accName = "";
-      if (o.isRest) {
-        x += n.d === "m" ? `<rest measure="yes"/>` : `<rest/>`;
-      } else {
-        const mm = String(n.p || "").trim().match(/^([A-Ga-g])\s*([#bnx]{0,2})?\s*(-?\d)$/);
-        if (!mm) { issues.push(`Takt ${num}: nieczytelna nuta „${n.p}”`); x += `<rest/>`; o.isRest = true; }
-        else {
-          step = mm[1].toUpperCase(); oct = +mm[3];
-          let a = n.a !== undefined && n.a !== null && n.a !== "" ? String(n.a) : (mm[2] || "");
-          if (a === "♯") a = "#"; if (a === "♭") a = "b"; if (a === "♮") a = "n";
-          const k = step + oct;
-          if (prevTie && prevTie.step === step && prevTie.oct === oct) { alter = prevTie.alter; tieStop = true; if (a in ACC_ALTER) { alter = ACC_ALTER[a]; accName = ACC_NAME[a]; } }
-          else if (a in ACC_ALTER) { alter = ACC_ALTER[a]; accName = ACC_NAME[a]; }
-          else if (k in accState) alter = accState[k];
-          else alter = keyAlter(fifths, step);
-          if (a in ACC_ALTER) accState[k] = alter;
-          x += `<pitch><step>${step}</step>${alter ? `<alter>${alter}</alter>` : ""}<octave>${oct}</octave></pitch>`;
-        }
-      }
-      if (!o.isGrace) x += `<duration>${Math.round(o.dur * 1000) / 1000}</duration>`;
-      if (tieStop) x += `<tie type="stop"/>`;
-      if (n.tie && !o.isRest) x += `<tie type="start"/>`;
-      x += `<voice>1</voice>`;
-      if (n.d !== "m") x += `<type>${TYPE[String(n.d)] || "quarter"}</type>`;
-      for (let i = 0; i < (n.dots || 0); i++) x += `<dot/>`;
-      if (accName && !o.isRest) x += `<accidental>${accName}</accidental>`;
-      let tupNot = "";
-      if (n.tup && !o.isGrace) {
-        x += `<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>`;
-        const b = BASE[String(n.d)] ?? 24;
-        if (!inTup) { inTup = true; tupAcc = 0; tupMin = b; tupNot = `<tuplet type="start" bracket="${o.beam ? "no" : "yes"}"/>`; }
-        tupMin = Math.min(tupMin, b); tupAcc += o.dur;
-        const unit = 2 * tupMin;
-        const nextTup = meta[ni + 1] && meta[ni + 1].n.tup;
-        if (Math.abs(tupAcc / unit - Math.round(tupAcc / unit)) < 1e-6 && tupAcc > 0 || !nextTup) { tupNot += `<tuplet type="stop"/>`; inTup = false; }
-      } else if (inTup && !o.isGrace) { inTup = false; }
-      if (o.beam) x += `<beam number="1">${o.beam}</beam>`;
-      let nots = "";
-      if (tieStop) nots += `<tied type="stop"/>`;
-      if (n.tie && !o.isRest) nots += `<tied type="start"/>`;
-      const sl = String(n.slur || "");
-      if (sl.includes("stop") || sl === "end") nots += `<slur type="stop" number="1"/>`;
-      if (sl.includes("start")) nots += `<slur type="start" number="1"/>`;
-      nots += tupNot;
-      const art = Array.isArray(n.art) ? n.art.map(a => String(a).toLowerCase()) : [];
-      const artMap = { staccato: "staccato", accent: "accent", tenuto: "tenuto", marcato: "strong-accent", staccatissimo: "staccatissimo" };
-      const arts = art.filter(a => artMap[a]).map(a => `<${artMap[a]}${a === "marcato" ? ' type="up"' : ""}/>`).join("");
-      if (arts) nots += `<articulations>${arts}</articulations>`;
-      if (art.includes("fermata") || n.fermata) nots += `<fermata type="upright"/>`;
-      if (art.includes("trill")) nots += `<ornaments><trill-mark/></ornaments>`;
-      if (nots) x += `<notations>${nots}</notations>`;
-      x += "</note>";
-      body += x;
-      if (!o.isGrace) prevTie = (n.tie && !o.isRest) ? { step, oct, alter } : null;
-    });
-    // right barline
-    let right = "", style = "";
-    if (m.barline === "repeat-end" || m.barline === "repeat-both") style = "light-heavy";
-    else if (m.barline === "final" || (mi === ms.length - 1 && !m.barline)) style = "light-heavy";
-    else if (m.barline === "double") style = "light-light";
-    if (style) right += `<bar-style>${style}</bar-style>`;
-    if (m._voltaEnd) right += `<ending number="${xesc(m.volta)}" type="${(m.barline === "repeat-end" || m.barline === "repeat-both") ? "stop" : (String(m.volta) === "1" ? "stop" : "discontinue")}"/>`;
-    if (m.barline === "repeat-end" || m.barline === "repeat-both") right += `<repeat direction="backward"/>`;
-    if (right) body += `<barline location="right">${right}</barline>`;
-    // duration check
-    if (!(m.pickup && mi === 0) && !m._multi && !(m.rest > 0)) {
-      if (Math.abs(total - mLen) > 0.01 && notes.length) {
-        const isLast = mi === ms.length - 1;
-        if (!(isLast && total < mLen)) issues.push(`Takt ${num}: ${total > mLen ? "za dużo" : "za mało"} wartości rytmicznych`);
-      }
-    }
-    out += `<measure number="${num}"${(m.pickup && mi === 0) ? ' implicit="yes"' : ""}>${attrs}${body}</measure>`;
-    num++;
-  });
-  if (!ms.length) throw new Error("Nie znalazłem żadnych taktów na obrazku.");
-  const partName = j.instrument || "Głos solowy";
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(j.title || "")}</work-title></work><identification>${j.composer ? `<creator type="composer">${xesc(j.composer)}</creator>` : ""}</identification><part-list><score-part id="P1"><part-name>${xesc(partName)}</part-name></score-part></part-list><part id="P1">${out}</part></score-partwise>`;
-  (Array.isArray(j.unsure) ? j.unsure : []).forEach(u => issues.push(`Takt ${u}: odczyt niepewny`));
-  return { xml, issues };
-}
 
 /* ---------------- Example piece (public domain melody) ---------------- */
 /* "Wlazł kotek na płotek" (by meow, says the running joke): a folk tune with piano, so the piano can be hidden */
@@ -740,7 +639,7 @@ function exampleXml() {
                [["F3", 4, "pio", "begin"], ["D3", 4, "sen", "middle"], ["D3", 4, "ka", "end"]],
                [["C3", 8, "nie", "single"], ["E3", 8, "dłu", "begin"], ["C3", 2, "ga.", "end"]]];
   const harm = ["C", "G7", "C", "C", "G7", "C"];
-  const RH = { C: ["E3", "G4", "C5"], G7: ["D3", "F4", "B4"] }, LH = { C: "C3", G7: "G2" };
+  const RH = { C: ["E4", "G4", "C5"], G7: ["D4", "F4", "B4"] }, LH = { C: "C3", G7: "G2" };     // right hand in close position (§10)
   const dur = { 2: 48, 4: 24, 8: 12 }, typ = { 2: "half", 4: "quarter", 8: "eighth" };
   const pitch = p => { const m = p.match(/^([A-G])(b|#)?(\d)$/); const alt = m[2] === "b" ? -1 : m[2] === "#" ? 1 : 0;
     return `<pitch><step>${m[1]}</step>${alt ? `<alter>${alt}</alter>` : ""}<octave>${m[3]}</octave></pitch>`; };
@@ -937,11 +836,13 @@ function canvasToJpeg(srcCanvasOrImg, maxEdge, q) {
      for a lone 16th; chord notes are beamed through their first note */
 const BEAMABLE = { eighth: 1, "16th": 2, "32nd": 3, "64th": 4 };
 function beamPlan(beats, bt) {
-  const compound = bt === 8 && beats % 3 === 0 && beats > 3;
-  if (bt === 8 && beats <= 3) return { beat: beats * 0.5, compound: false, whole: true };          // 3/8, 2/8: one group (in quarters)
-  if (compound) return { beat: 1.5, compound: true };
+  /* x/16 beams like x/8 at half the size (12/16 in dotted eighths, 3/16 one group) */
+  const u = bt === 16 ? 0.5 : 1, b8 = bt === 8 || bt === 16, compound = b8 && beats % 3 === 0 && beats > 3;
+  if (b8 && beats <= 3) return { beat: beats * 0.5 * u, compound: false, whole: true };          // 3/8, 2/8: one group (in quarters)
+  if (compound) return { beat: 1.5 * u, compound: true };
   if (bt === 2) return { beat: 2 };
-  if (bt === 8) return { beat: 0.5, groups: beats === 7 ? [1, 1, 1.5] : beats === 5 ? [1, 1.5] : null };
+  /* 5/8 = 3+2, 7/8 = 2+2+3 (§2) */
+  if (b8) { const g = beats === 7 ? [1, 1, 1.5] : beats === 5 ? [1.5, 1] : null; return { beat: u, groups: g && g.map(x => x * u) }; }
   return { beat: 4 / bt };
 }
 function autoBeam(doc) {
@@ -1067,7 +968,7 @@ function attachTexts(xml, pages) {
       else if (c.kind === "rehearsal") d.innerHTML = `<direction-type><rehearsal>${xesc(c.text)}</rehearsal></direction-type>`;
       else if (c.kind === "tempo") d.innerHTML = `<direction-type><words font-weight="bold">${xesc(c.text)}</words></direction-type><sound tempo="${c.bpm}"/>`;
       else d.innerHTML = `<direction-type><words${/^(allegr|andant|moderat|adagi|largo|lento|presto|vivac|grave|tempo|wesoł|wolno|umiarkowan|szybk|spokojn|marsz)/i.test(c.text) ? ' font-weight="bold"' : ' font-style="italic"'}>${xesc(c.text)}</words></direction-type>`;
-      m.insertBefore(d, target); added++;
+      m.insertBefore(d, target || kids(m, "barline").find(b => (b.getAttribute("location") || "right") === "right") || null); added++;     // never after the closing barline
     }));
     return added ? new XMLSerializer().serializeToString(doc) : xml;
   } catch (e) { console.warn(e); return xml; }
@@ -1085,13 +986,13 @@ const READY_TUNES = {
     bars: "F#4:4 F#4:4 G4:4 A4:4|A4:4 G4:4 F#4:4 E4:4|D4:4 D4:4 E4:4 F#4:4|F#4:6 E4:2 E4:8|F#4:4 F#4:4 G4:4 A4:4|A4:4 G4:4 F#4:4 E4:4|D4:4 D4:4 E4:4 F#4:4|E4:6 D4:2 D4:8" }
 };
 function readyTuneXml(id) {
-  const t = READY_TUNES[id], typ = { 2: "eighth", 3: "eighth", 4: "quarter", 6: "quarter", 8: "half", 12: "half", 16: "whole" };
+  const t = READY_TUNES[id], typ = { 1: "16th", 2: "eighth", 3: "eighth", 4: "quarter", 6: "quarter", 8: "half", 12: "half", 16: "whole" }, n = t.bars.split("|").length;
   let s = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(t.title)}</work-title></work><identification><creator type="composer">${xesc(t.composer)}</creator></identification><part-list><score-part id="P1"><part-name>Melodia</part-name></score-part></part-list><part id="P1">`;
   t.bars.split("|").forEach((b, i) => {
     s += `<measure number="${i + 1}">` + (i ? "" : `<attributes><divisions>4</divisions><key><fifths>${t.fifths}</fifths></key><time><beats>${t.time[0]}</beats><beat-type>${t.time[1]}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><direction placement="above"><direction-type><words></words></direction-type><sound tempo="${t.tempo}"/></direction>`);
     b.trim().split(/\s+/).forEach(tok => { const [p, d] = tok.split(":"), m = p.match(/^([A-G])(#|b)?(\d)$/), dd = +d;
       s += `<note><pitch><step>${m[1]}</step>${m[2] ? `<alter>${m[2] === "#" ? 1 : -1}</alter>` : ""}<octave>${m[3]}</octave></pitch><duration>${dd}</duration><voice>1</voice><type>${typ[dd]}</type>${[3, 6, 12].includes(dd) ? "<dot/>" : ""}</note>`; });
-    s += `</measure>`;
+    s += (i === n - 1 ? `<barline location="right"><bar-style>light-heavy</bar-style></barline>` : "") + `</measure>`;
   });
   return s + `</part></score-partwise>`;
 }

@@ -16,10 +16,14 @@ const INSTRUMENTS = [
   { id: "kornet", name: "Kornet B", clef: "treble", tr: 2, lo: 52, hi: 82, comf: [55, 74], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
   { id: "flugelhorn", name: "Flugelhorn B", clef: "treble", tr: 2, lo: 52, hi: 79, comf: [55, 72], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
   { id: "waltornia", name: "Waltornia F", clef: "treble", tr: 7, lo: 35, hi: 77, comf: [48, 67], clefs: ["treble", "bass"], voice: "brass", group: "Dęte blaszane" },
-  { id: "sakshorn-a", name: "Sakshorn altowy Es", clef: "treble", tr: 9, lo: 43, hi: 74, comf: [48, 67], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "sakshorn-a", name: "Sakshorn altowy Es", clef: "treble", tr: 9, lo: 45, hi: 74, comf: [48, 67], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },   // lowest written F♯3 sounds A2
   { id: "sakshorn-t", name: "Sakshorn tenorowy B", clef: "treble", tr: 14, lo: 40, hi: 72, comf: [43, 63], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
-  { id: "eufonium", name: "Eufonium", clef: "bass", tr: 0, lo: 40, hi: 74, comf: [43, 65], clefs: ["bass", "tenor", "treble"], voice: "brass", group: "Dęte blaszane" },
+  /* euphonium and baritone: at concert pitch in the bass (and tenor) clef, or in B♭ a ninth up in the treble clef
+     (brass band and many Polish band parts); a treble part is never at concert pitch */
+  { id: "eufonium", name: "Eufonium", clef: "bass", tr: 0, lo: 40, hi: 74, comf: [43, 65], clefs: ["bass", "tenor"], voice: "brass", group: "Dęte blaszane" },
+  { id: "eufonium-b", name: "Eufonium B (klucz wiolinowy)", clef: "treble", tr: 14, lo: 40, hi: 74, comf: [43, 65], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
   { id: "baryton", name: "Baryton B", clef: "treble", tr: 14, lo: 40, hi: 72, comf: [43, 63], clefs: ["treble"], voice: "brass", group: "Dęte blaszane" },
+  { id: "baryton-c", name: "Baryton (klucz basowy)", clef: "bass", tr: 0, lo: 40, hi: 72, comf: [43, 63], clefs: ["bass", "tenor"], voice: "brass", group: "Dęte blaszane" },
   { id: "tuba", name: "Tuba", clef: "bass", tr: 0, lo: 26, hi: 65, comf: [32, 51], clefs: ["bass"], voice: "brass", group: "Dęte blaszane" },
   { id: "suzafon", name: "Suzafon", clef: "bass", tr: 0, lo: 28, hi: 62, comf: [32, 51], clefs: ["bass"], voice: "brass", group: "Dęte blaszane" },
   /* Dęte drewniane */
@@ -68,11 +72,13 @@ const INSTRUMENTS = [
 ];
 const INSTR_GROUPS = ["Dęte blaszane", "Dęte drewniane", "Smyczkowe", "Klawiszowe", "Szarpane", "Perkusyjne", "Głos"];
 /* the instrument picker (benchmark: MuseScore, StaffPad, Dorico, BandLab): search, "yours" first, then families */
+const recentInstr = () => { try { const r = JSON.parse(store.get("recentInstr", "[]")); return Array.isArray(r) ? r : []; } catch { return []; } };
 function instrPicker(box, { selected = [], multi = false, onPick }) {
-  const p = profile(), mine = [...new Set([...(p.instruments || []), ...JSON.parse(store.get("recentInstr", "[]"))])].filter(id => INSTRUMENTS.some(i => i.id === id)).slice(0, 8);
+  const p = profile(), mine = [...new Set([...(p.instruments || []), ...recentInstr()])].filter(id => INSTRUMENTS.some(i => i.id === id)).slice(0, 8);
   const chip = i => `<button class="ichip" data-i="${i.id}" aria-pressed="${selected.includes(i.id)}">${esc(i.name)}</button>`;
   const draw = q => {
-    const f = fold((q || "").trim()), hit = i => !f || fold(i.name).includes(f);          // "trabka" finds "Trąbka"
+    /* without Polish letters too ("trabka", "altowka"), and by other names ("skrzydłówka", "cello") */
+    const f = plainName(q).trim(), alias = f.length > 2 ? instrFromName(f) : null, hit = i => !f || plainName(i.name).includes(f) || alias === i;
     let h = "";
     if (!f && mine.length) h += `<h3 class="lbl">Twoje</h3><div class="ichips">${mine.map(id => chip(instrById(id))).join("")}</div>`;
     INSTR_GROUPS.forEach(g => { const list = INSTRUMENTS.filter(i => i.group === g && hit(i)); if (list.length) h += `<h3 class="lbl">${g}</h3><div class="ichips">${list.map(chip).join("")}</div>`; });
@@ -87,15 +93,42 @@ function instrPicker(box, { selected = [], multi = false, onPick }) {
   });
   draw("");
 }
-function rememberInstr(id) { const r = JSON.parse(store.get("recentInstr", "[]")).filter(x => x !== id); r.unshift(id); store.set("recentInstr", JSON.stringify(r.slice(0, 6))); }
-const instrById = id => INSTRUMENTS.find(i => i.id === id) || INSTRUMENTS[0];
+function rememberInstr(id) { const r = recentInstr().filter(x => x !== id); r.unshift(id); store.set("recentInstr", JSON.stringify(r.slice(0, 6))); }
+const instrById = id => INSTRUMENTS.find(i => i.id === id) || INSTRUMENTS[0];      // an unknown id (a removed instrument): the trombone
 /* the range a pupil plays comfortably (sounding MIDI): from the tables, otherwise the middle 70% of the full range */
 const comfOf = i => i.comf || [Math.round(i.lo + (i.hi - i.lo) * 0.15), Math.round(i.hi - (i.hi - i.lo) * 0.15)];
 const clefsOf = i => i.clefs || [i.clef];
+/* an instrument from a part's name in Polish, English, Italian or German (MuseScore, Finale, a scan): "Trumpet in B♭",
+   "Klarnet B 1", "Violoncello"; the more specific names first. null when the name says nothing. */
+const plainName = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l").replace(/♭/g, "b").replace(/♯/g, "#");
+const NAME_ALIASES = [
+  [/bass\s*trombone|puzon\s*bas|bassposaune|trombone\s*basso/, "puzon-b"], [/alto\s*trombone|puzon\s*alt|altposaune/, "puzon-alt"], [/trombon|puzon|posaune/, "puzon"],
+  [/trumpet\s*in\s*c\b|trabka\s*c\b|tromba\s*in\s*do|trompete\s*in\s*c\b/, "trabka-c"], [/trumpet|trabk|tromba|trompet/, "trabka"],
+  [/cornet|kornet/, "kornet"], [/flugel|flicorn|skrzydlowk/, "flugelhorn"], [/english\s*horn|cor\s*anglais|corno\s*inglese|rozek|englischhorn/, "rozek"],
+  [/alto\s*horn|tenor\s*horn|sakshorn\s*alt|althorn/, "sakshorn-a"], [/sakshorn\s*ten/, "sakshorn-t"], [/bari(tone)?\s*sax|saksofon\s*baryt|baritonsax/, "sax-b"],
+  [/euphon|eufon/, "eufonium"], [/bariton|baryton/, "baryton"], [/sousaphon|suzafon/, "suzafon"], [/tuba/, "tuba"],
+  [/horn|waltorn|corno|\bcor\b/, "waltornia"], [/alto\s*flute|flet\s*alt|altflote|flauto\s*contralto/, "flet-a"], [/piccolo|ottavino|pikolo/, "piccolo"],
+  [/recorder|flet\s*prosty|blockflote|flauto\s*dolce/, "flet-p"], [/flute|flet|flauto|flote/, "flet"], [/oboe|oboj/, "oboj"],
+  [/bass\s*clarinet|klarnet\s*bas|bassklarinette|clarinetto\s*basso/, "klarnet-bas"], [/(clarinet|klarnet|klarinette|clarinetto)\s*(in\s*)?(eb|es|mi\s*b)\b/, "klarnet-es"],
+  [/(clarinet|klarnet|klarinette|clarinetto)\s*(in\s*)?(a|la)\b/, "klarnet-a"], [/clarinet|klarnet|klarinette/, "klarnet"],
+  [/contra\s*bassoon|kontrafagot|contrafagott|kontrafagott/, "kontrafagot"], [/bassoon|fagot/, "fagot"],
+  [/soprano\s*sax|saksofon\s*sopran|sopransax/, "sax-s"], [/tenor\s*sax|saksofon\s*tenor|tenorsax/, "sax-t"], [/sax|saks/, "sax-a"],
+  [/violin|skrzyp|violino|geige/, "skrzypce"], [/viola|altowk|bratsche/, "altowka"], [/cello|wiolonczel/, "wiolonczela"],
+  [/bass\s*guitar|electric\s*bass|gitara\s*bas|e-bass/, "gitara-bas"], [/double\s*bass|contrabass|kontrabas|string\s*bass|contrabbasso/, "kontrabas"],
+  [/guitar|gitar/, "gitara"], [/ukulele/, "ukulele"], [/mandolin/, "mandolina"], [/harp|harf|arpa|harfe/, "harfa"],
+  [/glockenspiel|dzwonk|bells|campanelli/, "dzwonki"], [/xylophon|ksylofon/, "ksylofon"], [/marimba/, "marimba"], [/vibraphon|wibrafon/, "wibrafon"],
+  [/accordion|akordeon|akkordeon/, "akordeon"], [/organ|organy|orgel|organo/, "organy"], [/keyboard/, "keyboard"], [/piano|fortepian|klavier/, "fortepian"],
+  [/soprano|sopran/, "sopran"], [/^(alto|alt)( \d| i+)?$/, "alt"], [/^tenor( \d| i+)?$/, "tenor"], [/^(bass|bas|basso)( \d| i+)?$/, "bas"]
+];
+function instrFromName(name) {
+  const n = plainName(name).trim(); if (!n) return null;
+  const exact = INSTRUMENTS.find(i => plainName(i.name) === n.replace(/ (i|ii|iii|iv|v|vi|\d)$/, "")); if (exact) return exact;
+  const a = NAME_ALIASES.find(([re]) => re.test(n)); return a ? instrById(a[1]) : null;
+}
 const PROFILE_DEFAULT = { instruments: ["puzon"], main: "puzon", reading: "written", role: "", a4: 440, done: false };
 function profile() {
   let p = null; try { p = JSON.parse(store.get("profile", "null")); } catch {}
-  return { ...PROFILE_DEFAULT, ...(p || {}) };
+  const out = { ...PROFILE_DEFAULT, ...(p || {}) }; out.instruments = [...out.instruments]; return out;       // never the default's own list
 }
 function saveProfile(p) { const prev = profile(); if (!store.set("profile", JSON.stringify(p))) hud("Nie udało się zapisać ustawień. Pamięć urządzenia może być pełna.", 4000); applyProfile(prev); }
 /* the written note of C for a transposing instrument, within an octave (piccolo, guitar: none; E♭ clarinet: A) */
@@ -137,8 +170,8 @@ function onbGo(d) {
   while (s > 0 && s < ONB_STEPS.length - 1 && onbSkipStep(ONB_STEPS[s])) s += d;
   onb.step = Math.max(0, Math.min(ONB_STEPS.length - 1, s)); renderOnb();
 }
-function finishOnb() {
-  const p = { ...onb.p, done: true };             // "Pomiń" keeps what was already chosen
+function finishOnb(skipped) {
+  const p = { ...onb.p, done: true };          // "Pomiń" keeps what was already answered
   if (!p.instruments.includes(p.main)) p.main = p.instruments[0] || "puzon";
   saveProfile(p); store.set("welcomed", "1");
   fadeOut($("#onb"), 220);
@@ -186,13 +219,7 @@ function renderOnb() {
 $("#onb-body").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   const p = onb.p;
-  if (b.dataset.instr && false) {
-    const id = b.dataset.instr, i = p.instruments.indexOf(id);
-    if (i >= 0) p.instruments.splice(i, 1); else p.instruments.push(id);
-    if (!p.instruments.includes(p.main)) p.main = p.instruments[0] || "puzon";
-    if (p.instruments.length === 1) p.main = p.instruments[0];
-    renderOnb(); return;
-  }
+
   if (b.dataset.main) { p.main = b.dataset.main; renderOnb(); return; }
   if (b.dataset.read) { p.reading = b.dataset.read; renderOnb(); return; }
   if (b.dataset.role) { p.role = b.dataset.role; renderOnb(); return; }
