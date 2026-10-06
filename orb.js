@@ -6,7 +6,7 @@
    the page or the canvas is hidden, drops to ~24 fps after 10 s of silence. Reduced motion: a still disc with a
    ring whose opacity shows the level.
 
-   const orb = createOrb(canvas, { hue: "sky", drift: "x" });
+   const orb = createOrb(canvas, { hue: "sky", drift: "x", hollow: true });   hollow: text sits inside
    orb.setLevel(0..1)   input loudness (raw; smoothed here: fast attack, soft release)
    orb.setTune(cents|null)  null keeps the last lean and lets it relax
    orb.setState("idle" | "listening" | "ok" | "far")
@@ -59,6 +59,7 @@ function createOrb(canvas, opt = {}) {
   /* gradients in unit space (radius 1 around 0,0); the transform scales them to the orb */
   function body(c, a0, a1, ox, oy) {
     const gr = g.createRadialGradient(ox, oy, 0, 0, 0, 1.12);
+    if (opt.hollow) { gr.addColorStop(0, rgba(c, a0)); gr.addColorStop(0.55, rgba(c, a0 + (a1 - a0) * 0.35)); gr.addColorStop(0.86, rgba(c, a1)); gr.addColorStop(1, rgba(c, a1 * 0.35)); return gr; }   // a soft rim
     gr.addColorStop(0, rgba(c, a0)); gr.addColorStop(0.7, rgba(c, (a0 + a1) / 2)); gr.addColorStop(1, rgba(c, a1)); return gr;
   }
   function build() {
@@ -67,21 +68,24 @@ function createOrb(canvas, opt = {}) {
     const halo = g.createRadialGradient(0, 0, 0, 0, 0, 1);
     halo.addColorStop(0, rgba(A, st.dark ? 0.42 : 0.30)); halo.addColorStop(0.45, rgba(A, st.dark ? 0.16 : 0.12)); halo.addColorStop(1, rgba(A, 0));
     const core = g.createRadialGradient(-0.32, -0.38, 0, -0.2, -0.25, 0.9);
-    core.addColorStop(0, `rgba(255,255,255,${st.dark ? 0.55 : 0.9})`); core.addColorStop(1, "rgba(255,255,255,0)");
+    /* hollow (text inside, the tuner): a light centre and a saturated rim, so the note name stays readable */
+    const hol = !!opt.hollow;
+    core.addColorStop(0, `rgba(255,255,255,${hol ? (st.dark ? 0.08 : 0.5) : st.dark ? 0.55 : 0.9})`); core.addColorStop(1, "rgba(255,255,255,0)");
     st.grads = {
       halo, core,
-      a: body(A, 0.95, 0.55, 0.1, 0.15), b: body(B, 0.85, 0.0, -0.1, -0.1),
-      lime: body(L, 0.95, 0.5, 0.1, 0.15), ok: body(G, 0.95, 0.55, 0.1, 0.15),
-      flat: body(F, 0.9, 0.2, 0, 0), sharp: body(S, 0.9, 0.2, 0, 0),
+      a: hol ? body(A, 0.14, 0.9, 0, 0) : body(A, 0.95, 0.55, 0.1, 0.15), b: hol ? body(B, 0, 0.6, 0, 0) : body(B, 0.85, 0.0, -0.1, -0.1),
+      lime: body(L, 0.95, 0.5, 0.1, 0.15), ok: hol ? body(G, 0.16, 0.95, 0, 0) : body(G, 0.95, 0.55, 0.1, 0.15),
+      flat: hol ? body(F, 0.08, 0.8, 0, 0) : body(F, 0.9, 0.2, 0, 0), sharp: hol ? body(S, 0.08, 0.8, 0, 0) : body(S, 0.9, 0.2, 0, 0),
       ringOk: rgba(G, 1), ringLvl: rgba(A, 1), disc: rgba(A, 1)
     };
   }
 
   /* ---- size ---- */
   function size() {
-    const r = canvas.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
-    st.w = r.width; st.h = r.height; st.dpr = dpr;
-    const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
+    /* layout size (not the bounding box: an entrance scale must not shrink the backing store) */
+    const cw = canvas.clientWidth, ch = canvas.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+    st.w = cw; st.h = ch; st.dpr = dpr;
+    const W = Math.max(1, Math.round(cw * dpr)), H = Math.max(1, Math.round(ch * dpr));
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
     wake();
   }
@@ -89,7 +93,7 @@ function createOrb(canvas, opt = {}) {
   /* ---- the blob: a closed curve through N points, quadratic Béziers through the midpoints ---- */
   function blob(j, t, amp, spd) {
     const p2 = PH[j * 3], p3 = PH[j * 3 + 1], p5 = PH[j * 3 + 2];
-    const A2 = 0.025 + 0.06 * amp, A3 = 0.015 + 0.05 * amp, A5 = 0.004 + 0.035 * amp;
+    const A2 = 0.022 + 0.04 * amp, A3 = 0.012 + 0.032 * amp, A5 = 0.003 + 0.022 * amp;      // a little calmer than §4.5: tidy, not wobbly
     const w2 = (0.6 + spd) * t, w3 = (0.9 + spd) * t * (j === 1 ? -1 : 1), w5 = (1.4 + spd) * t;
     for (let i = 0; i < N; i++) {
       const a = i / N * Math.PI * 2;
@@ -166,7 +170,7 @@ function createOrb(canvas, opt = {}) {
     g.globalCompositeOperation = "source-over";
     /* the "locked" ring */
     if (st.ring > 0.02) {
-      const rr = R * s * (1 + 0.16 * st.ring);
+      const rr = R * s * (1 + 0.12 * st.ring);
       g.setTransform(d, 0, 0, d, 0, 0); g.globalAlpha = Math.max(0, Math.min(1, st.ring));
       g.strokeStyle = G.ringOk; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, rr, 0, Math.PI * 2); g.stroke();
     }
