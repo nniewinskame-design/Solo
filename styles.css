@@ -1297,3 +1297,8 @@ body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 1
 #score #s-sub{grid-row:2;grid-column:1/-1;text-align:center;margin-top:-4px;white-space:normal;display:block;font-size:14px}
 #score .pstrip{grid-row:3;grid-column:1/-1}
 .tabbar .slide{margin:0}   /* an older ".tabbar i"-style margin pushed the pill 12 px down */
+/* every inline note glyph (♩ =) at text size; one stepper look for tempo: − value + */
+svg.q{width:8px;height:17px;fill:currentColor;vertical-align:-2px;flex:none}
+.li.stepper{gap:12px;justify-content:space-between}
+.li.stepper .step-val{display:flex;align-items:center;justify-content:center;gap:6px;font:650 22px var(--display);font-variant-numeric:tabular-nums}
+.li.stepper .step-val svg.q{width:10px;height:21px}
