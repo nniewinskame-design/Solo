@@ -693,7 +693,9 @@ $("#notice-x").addEventListener("click", () => fadeOut($("#notice"), 180));
 function recordFromState() {
   const now = Date.now();
   return {
-    id: S.piece.id || ("p" + now.toString(36) + Math.random().toString(36).slice(2, 7)),
+    /* the id is given at once, before the first save finishes: a second save meanwhile (the thumbnail, the clef fitted
+       to the instrument) wrote the same new piece again under its own new id, so it appeared twice (Nat, 7 Oct) */
+    id: S.piece.id || (S.piece.id = "p" + now.toString(36) + Math.random().toString(36).slice(2, 7)),
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, trShift: S.piece.trShift || 0, partRoles: S.piece.partRoles || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
@@ -3590,7 +3592,7 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Twoje brzmienia są w zakładce Ja: plus dodaje nowe. Nagrywanie i stroik z kulą, która słucha.",
   "Odsłuch nuty przy edycji gra jak w zapisie: tonacja, długość, dynamika, instrument.",
   "Mikrofon włącza się dopiero, gdy go potrzebujesz, i gaśnie po wyjściu ze stroika.",
-  "Naprawione: po pętli i dotknięciu strony znikały przyciski.",
+  "Naprawione: po pętli i dotknięciu strony znikały przyciski. Nowy utwór nie zapisuje się już dwa razy.",
   "Klucz każdej partii i tonację całego utworu zmieniasz w edycji (Takt). W „⋯” zostały tylko widok i udostępnianie.",
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
