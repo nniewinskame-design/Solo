@@ -812,14 +812,14 @@ function selectNote(sel) {
   } else $("#ed-info").innerHTML = `<b>Pauza</b> · ${len || "cały takt"} · takt ${sel.bar}`;
 }
 /* the sound of a note when it is placed or changed */
-let previewCtx = null;
 function previewNote(n) {
   const p = n && kid(n, "pitch"); if (!p) return;
   try {
-    const AC = window.AudioContext || window.webkitAudioContext; previewCtx = previewCtx || new AC(); previewCtx.resume?.();
-    const g = previewCtx.createGain(); g.gain.value = 0.16; g.connect(previewCtx.destination);
-    const t = previewCtx.currentTime + 0.02; voiceForPart(S.editSel && S.editSel.pid)(previewCtx, g, 440 * Math.pow(2, (midiOf(p) - partTr(S.editSel && S.editSel.pid) - 69) / 12), t, t + 0.4);
-  } catch {}
+    const ctx = fxCtx(), pid = S.editSel && S.editSel.pid;                // the shared context (suspended when quiet)
+    const g = ctx.createGain(); g.gain.value = 0.16; g.connect(ctx.destination);
+    const t = ctx.currentTime + 0.02; voiceForPart(pid)(ctx, g, (tuner.a4 || 440) * Math.pow(2, (midiOf(p) - partTr(pid) - 69) / 12), t, t + 0.4);
+    setTimeout(() => { try { g.disconnect(); } catch {} }, 1200);
+  } catch (e) { console.warn(e); }
 }
 /* which written note a height on the staff means: the five lines of the tapped staff give the steps */
 function pitchAtY(staff, y, part, m) {
@@ -2783,7 +2783,20 @@ const NEWS = { "3.9": ["Nuty według zasad zapisu: ósemki i szesnastki łączon
   "Mój dźwięk: nagraj jeden długi dźwięk swojego instrumentu, a Solo zagra nuty Twoim brzmieniem.",
   "Samouczek: 5 krótkich kroków (Ustawienia → Pomoc)."] };
 /* ---------------- T22 metronome, T23 tuner ---------------- */
-const metro = { on: false, bpm: 100, beats: 4, ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [] };
+const metro = { on: false, bpm: 100, beats: 4, ctx: null, next: 0, n: 0, timer: 0, raf: 0, queue: [], acc: null, dots: [], taps: [], ramp: null };
+/* accents: one flag per beat (the first beat by default); tapping a dot changes it */
+function metroAcc() {
+  if (!metro.acc || metro.acc.length !== metro.beats) {
+    const s = store.get("metroAcc" + metro.beats, "");
+    metro.acc = Array.from({ length: metro.beats }, (_, i) => s.length === metro.beats ? s[i] === "1" : i === 0);
+  }
+  return metro.acc;
+}
+/* the Italian tempo word for a tempo (shown under the number) */
+function tempoName(bpm) {
+  return bpm < 40 ? "Grave" : bpm < 60 ? "Largo" : bpm < 66 ? "Larghetto" : bpm < 76 ? "Adagio" : bpm < 108 ? "Andante" :
+    bpm < 120 ? "Moderato" : bpm < 156 ? "Allegro" : bpm < 176 ? "Vivace" : bpm < 200 ? "Presto" : "Prestissimo";
+}
 function buildToolsSheet() {
   if (S.view !== "metrov") $("#metro-sheet-host").appendChild($("#metro-ui"));
   if (!metro.on) { metro.bpm = S.piece && S.view === "score" ? curBpm() : (+store.get("metroBpm", 100) || 100); const t = S.piece && S.view === "score" ? (processedXml().match(/<beats>(\d+)<\/beats>/) || [])[1] : null; metro.beats = [2, 3, 4, 6].includes(+t) ? +t : (+store.get("metroBeats", 4) || 4); }
@@ -2791,39 +2804,85 @@ function buildToolsSheet() {
 }
 function syncMetro() {
   $("#m-bpm").textContent = metro.bpm;
+  const nm = $("#m-name"); if (nm) nm.textContent = tempoName(metro.bpm);
   $$("#m-meter button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.b === metro.beats)));
-  $("#m-beats").innerHTML = Array.from({ length: metro.beats }, (_, i) => `<i class="${i === 0 ? "one" : ""}"></i>`).join("");
+  const acc = metroAcc();
+  $("#m-beats").innerHTML = acc.map((a, i) => `<button type="button" class="${i === 0 ? "one" : ""}" data-i="${i}" data-acc="${a ? 1 : 0}" aria-pressed="${a}" aria-label="Akcent na ${i + 1}"></button>`).join("");
+  metro.dots = $$("#m-beats > *");
   $("#m-go").innerHTML = `${icon(metro.on ? "stop" : "play")}<span>${metro.on ? "Stop" : "Start"}</span>`;
 }
+$("#m-beats").addEventListener("click", e => {
+  const b = e.target.closest("[data-i]"); if (!b) return;
+  const acc = metroAcc(), i = +b.dataset.i; acc[i] = !acc[i];
+  store.set("metroAcc" + metro.beats, acc.map(a => (a ? "1" : "0")).join(""));
+  b.dataset.acc = acc[i] ? "1" : "0"; b.setAttribute("aria-pressed", String(acc[i]));
+});
 function metroClick(t, accent) {
   const c = metro.ctx, o = c.createOscillator(), g = c.createGain();
   o.frequency.value = accent ? 1500 : 1000; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(accent ? .9 : .55, t + .002); g.gain.exponentialRampToValueAtTime(.001, t + .06);
   o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + .08);
 }
+const metroBeatLen = () => (metro.beats === 6 ? 30 : 60) / metro.bpm;
+/* look ahead 120 ms, so the clicks stay exact even when the page is busy. When the page was held up (a phone call,
+   a long task), the missed clicks are skipped: the next one comes on its beat, never a burst of them. */
+function metroTick() {
+  const c = metro.ctx; if (!metro.on || !c) return;
+  if (c.state !== "running") {             // a call or Siri interrupted the sound: try again twice a second
+    const t = performance.now(); if (t - (metro.retry || 0) > 500) { metro.retry = t; const r = c.resume?.(); if (r) r.catch(() => {}); }
+    return;
+  }
+  const now = c.currentTime, len = metroBeatLen();
+  if (metro.next < now) { const skip = Math.ceil((now - metro.next) / len); metro.next += skip * len; metro.n += skip; }
+  while (metro.next < now + .12) {
+    const beat = metro.n % metro.beats, acc = metroAcc();
+    if (beat === 0 && metro.ramp && metro.n > 0) metroRampBar();
+    metroClick(metro.next, !!acc[beat]); metro.queue.push({ t: metro.next, beat });
+    metro.next += metroBeatLen(); metro.n++;
+  }
+}
 function metroStart() {
-  const AC = window.AudioContext || window.webkitAudioContext; metro.ctx = metro.ctx || new AC();
-  metro.ctx.resume?.(); metro.on = true; metro.n = 0; metro.next = metro.ctx.currentTime + .08; metro.queue = [];
-  try { navigator.audioSession && !tuner.on && (navigator.audioSession.type = "playback"); } catch {}
-  /* look ahead 120 ms, so the clicks stay exact even when the page is busy */
-  metro.timer = setInterval(() => {
-    while (metro.next < metro.ctx.currentTime + .12) {
-      const beat = metro.n % metro.beats; metroClick(metro.next, beat === 0); metro.queue.push({ t: metro.next, beat });
-      metro.next += (metro.beats === 6 ? 30 : 60) / metro.bpm; metro.n++;
-    }
-  }, 25);
+  if (playState || pb.preparing) stopPlayback(true);                 // never two clicks at two tempi
+  unlockAudio();
+  metro.ctx = fxCtx(); clearTimeout(fx.idle);
+  metro.on = true; metro.n = 0; metro.next = metro.ctx.currentTime + .08; metro.queue = [];
+  metro.timer = setInterval(metroTick, 25);
   const draw = () => {
     if (!metro.on) return;
-    while (metro.queue.length && metro.queue[0].t <= metro.ctx.currentTime) { const q = metro.queue.shift(); $$("#m-beats i").forEach((d, i) => d.classList.toggle("on", i === q.beat)); }
+    let q = null; while (metro.queue.length && metro.queue[0].t <= metro.ctx.currentTime) q = metro.queue.shift();
+    if (q) metro.dots.forEach((d, i) => d.classList.toggle("on", i === q.beat));
     metro.raf = requestAnimationFrame(draw);
   };
   metro.raf = requestAnimationFrame(draw); syncMetro();
+  keepAwake();
 }
-function metroStop() { metro.on = false; clearInterval(metro.timer); cancelAnimationFrame(metro.raf); $$("#m-beats i").forEach(d => d.classList.remove("on")); syncMetro(); }
+function metroStop() {
+  metro.on = false; clearInterval(metro.timer); cancelAnimationFrame(metro.raf); metro.queue = [];
+  metro.dots.forEach(d => d.classList.remove("on")); syncMetro(); fxIdle();
+  if (!playState && !tuner.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
+}
 $("#m-go").addEventListener("click", () => metro.on ? metroStop() : metroStart());
 const setMetroBpm = v => { metro.bpm = Math.max(30, Math.min(240, Math.round(v))); store.set("metroBpm", metro.bpm); syncMetro(); };
 $("#m-down").addEventListener("click", () => setMetroBpm(metro.bpm - (metro.bpm > 120 ? 4 : 2)));
 $("#m-up").addEventListener("click", () => setMetroBpm(metro.bpm + (metro.bpm >= 120 ? 4 : 2)));
-$$("#m-meter button").forEach(b => b.addEventListener("click", () => { metro.beats = +b.dataset.b; store.set("metroBeats", metro.beats); metro.n = 0; syncMetro(); }));
+$$("#m-meter button").forEach(b => b.addEventListener("click", () => { metro.beats = +b.dataset.b; store.set("metroBeats", metro.beats); metro.n = 0; metro.acc = null; syncMetro(); }));
+/* tap tempo: the average of the last 4 taps; a pause of 2 s starts again */
+function tapTempo(now = performance.now()) {
+  const t = metro.taps; if (t.length && now - t[t.length - 1] > 2000) t.length = 0;
+  t.push(now); if (t.length > 4) t.shift();
+  if (t.length < 2) return null;
+  const bpm = 60000 / ((t[t.length - 1] - t[0]) / (t.length - 1));
+  setMetroBpm(metro.beats === 6 ? bpm / 2 : bpm); return metro.bpm;
+}
+{ const tap = $("#m-tap"); if (tap) tap.addEventListener("pointerdown", e => { e.preventDefault(); tapTempo(); navigator.vibrate?.(6); }); }
+/* the metronome speeds up by itself (Pro Metronome's "Automator"): metroRamp({ to: 120, step: 4, bars: 4 }) adds
+   4 BPM every 4 bars up to 120; metroRamp(null) stops it. Logic only, for the lead's controls. */
+function metroRamp(o) { metro.ramp = o ? { to: Math.min(240, o.to || 120), step: o.step || 4, bars: o.bars || 4, bar: 0 } : null; return metro.ramp; }
+function metroRampBar() {
+  const r = metro.ramp; r.bar++;
+  if (r.bar % r.bars === 0 && metro.bpm < r.to) setMetroBpm(Math.min(r.to, metro.bpm + r.step));
+}
+/* the screen locks or another app comes up: the metronome stops (timers there run late and would stutter) */
+document.addEventListener("visibilitychange", () => { if (document.hidden && metro.on) metroStop(); });
 
 /* T23 tuner, rebuilt after the benchmark (TonalEnergy, Pano, Cleartune, Peterson): it listens ~30 times a second
    (McLeod pitch method), a note is shown only after 3 readings agree, cents are smoothed, the dot glides at 60 fps,
@@ -2904,7 +2963,20 @@ function releaseMic() {
   clearTimeout(micKeep.timer);
   micKeep.timer = setTimeout(() => { if (tuner.on || (typeof of !== "undefined" && of.stream)) return; try { micKeep.stream && micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; micDone(); }, 180000);
 }
-document.addEventListener("visibilitychange", () => { if (document.hidden && !tuner.on && !(typeof of !== "undefined" && of.stream) && micKeep.stream) { try { micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; } });
+/* leaving the app turns the microphone off at once (no red indicator, no battery): the tuner stops ("Włącz stroik"
+   brings it back), a guided recording pauses and listens again on return; the audio session is given back */
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    if (tuner.on || tuner.starting) tunerStop();
+    if (typeof of !== "undefined" && of.stream) { of.resumeOnShow = of.state === "listen"; stopListening(); }
+    clearTimeout(micKeep.timer);
+    if (micKeep.stream) { try { micKeep.stream.getTracks().forEach(t => t.stop()); } catch {} micKeep.stream = null; }
+    micDone();
+  } else if (typeof of !== "undefined" && of.resumeOnShow) {
+    of.resumeOnShow = false;
+    if (of.state === "listen" && !$("#ownf").hidden) startListening().then(ok => { if (ok && of.state === "listen") { cancelAnimationFrame(of.raf); of.raf = requestAnimationFrame(listenLoop); } });
+  }
+});
 async function openMic() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("Ta przeglądarka nie daje dostępu do mikrofonu."), { name: "NoMic" });
   /* iPhone: playback sets the audio session to "playback" (music with the silent switch on), and in that mode iOS
@@ -2915,8 +2987,12 @@ async function openMic() {
   clearTimeout(micKeep.timer);
   let stream = micKeep.stream && micKeep.stream.getAudioTracks().some(t => t.readyState === "live") ? micKeep.stream : null;
   if (!stream) {
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
-    catch (e) { if (e && e.name === "OverconstrainedError") stream = await navigator.mediaDevices.getUserMedia({ audio: true }); else throw e; }
+    /* two quick taps during the permission prompt share one request (no second, never-closed microphone) */
+    micKeep.pending = micKeep.pending || (async () => {
+      try { return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }); }
+      catch (e) { if (e && e.name === "OverconstrainedError") return await navigator.mediaDevices.getUserMedia({ audio: true }); throw e; }
+    })();
+    try { stream = await micKeep.pending; } finally { micKeep.pending = null; }
     micKeep.stream = stream;
   }
   const AC = window.AudioContext || window.webkitAudioContext, rate = stream.getAudioTracks()[0]?.getSettings?.().sampleRate;
@@ -2933,9 +3009,13 @@ function micError(e) {
     (e && e.message) || "Nie udało się włączyć mikrofonu.";
 }
 async function tunerStart() {
+  if (tuner.on || tuner.starting) return;                          // a second tap while the phone asks: one microphone
+  const gen = tuner.gen = (tuner.gen || 0) + 1; tuner.starting = true;
   $("#t-hz").textContent = "Włączam mikrofon…";
   let m; try { m = await openMic(); }
-  catch (e) { $("#t-hz").textContent = micError(e); return; }      // said once, under the needle
+  catch (e) { tuner.starting = false; if (gen === tuner.gen) $("#t-hz").textContent = micError(e); return; }      // said once, under the needle
+  tuner.starting = false;
+  if (gen !== tuner.gen) { try { m.ctx.close(); } catch {} releaseMic(); micDone(); return; }      // stopped while starting
   tuner.stream = m.stream; tuner.ctx = m.ctx;
   tuner.an = tuner.ctx.createAnalyser(); tuner.an.fftSize = 4096; tuner.buf = new Float32Array(tuner.an.fftSize);
   m.src.connect(tuner.an);
@@ -2995,6 +3075,7 @@ function drawTrace(t) {
   g.stroke();
 }
 function tunerStop() {
+  tuner.gen = (tuner.gen || 0) + 1; tuner.starting = false;
   tuner.on = false; cancelAnimationFrame(tuner.raf);
   try { tuner.ctx && tuner.ctx.close(); } catch {} releaseMic();
   tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; $("#tuner2").dataset.st = "off"; micDone();
@@ -3002,7 +3083,7 @@ function tunerStop() {
   $("#t-dot").style.transform = ""; tuner.x = 0; drawTrace(performance.now()); syncTuner();
   if (!playState && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
 }
-$("#t-go").addEventListener("click", () => tuner.on ? tunerStop() : tunerStart());
+$("#t-go").addEventListener("click", () => (tuner.on || tuner.starting) ? tunerStop() : tunerStart());
 $("#tuner2").addEventListener("click", e => { if (tuner.on && tuner.ctx && tuner.ctx.state !== "running" && !e.target.closest("#t-go")) tuner.ctx.resume(); });
 $$("#t-tol button").forEach(b => b.addEventListener("click", () => { tuner.tol = +b.dataset.tol; store.set("tunerTol", tuner.tol); syncTuner(); }));
 const setA4 = v => { tuner.a4 = Math.max(430, Math.min(450, v)); store.set("tunerA4", tuner.a4); syncTuner(); };

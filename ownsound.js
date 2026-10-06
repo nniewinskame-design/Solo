@@ -108,9 +108,14 @@ function openOwnFlow() {
 async function closeOwnFlow() { stopListening(); cancelAnimationFrame(of.raf); fadeOut($("#ownf"), 220); syncOwn(); }
 $("#ownf-x").addEventListener("click", closeOwnFlow);
 $("#ownf-body").addEventListener("click", () => { if (of.ctx && of.ctx.state !== "running") of.ctx.resume(); });
-async function startListening() {
-  if (of.stream) return true;
+/* a second tap while the phone asks for the microphone waits for the same answer (no second context left open) */
+function startListening() {
+  if (of.stream) return Promise.resolve(true);
+  return (of.starting = of.starting || openListening().finally(() => { of.starting = null; }));
+}
+async function openListening() {
   let m; try { m = await openMic(); } catch (e) { hud(micError(e), 4500); return false; }
+  if ($("#ownf").hidden) { try { m.ctx.close(); } catch {} releaseMic(); micDone(); return false; }      // closed meanwhile
   of.stream = m.stream; of.ctx = m.ctx; const src0 = m.src;
   of.sr = of.ctx.sampleRate; of.ring = new Float32Array(Math.ceil(of.sr * 4)); of.rp = 0;
   const src = src0, proc = of.ctx.createScriptProcessor(2048, 1, 1), mute = of.ctx.createGain(); mute.gain.value = 0;
@@ -221,16 +226,20 @@ function renderOwn() {
   }
 }
 /* listening back: one note, or a major scale over the recorded notes */
+/* the shared audio context (fxCtx in app.js), not a new one per tap: iOS allows only a few */
+function hearOut() {
+  const ctx = fxCtx(), out = ctx.createGain(); out.gain.value = 0.5; out.connect(ctx.destination); return { ctx, out };
+}
 function hearSample(smp) {
-  const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), out = ctx.createGain(); out.gain.value = 0.5; out.connect(ctx.destination);
+  const { ctx, out } = hearOut();
   samplerNote([smp], ctx, out, 440 * Math.pow(2, (Math.round(smp.midi) - 69) / 12), ctx.currentTime + 0.05, ctx.currentTime + 1.2);
-  setTimeout(() => ctx.close(), 1800);
+  setTimeout(() => { try { out.disconnect(); } catch {} }, 1800);
 }
 function playScale(list) {
   if (!list || !list.length) return;
-  const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), out = ctx.createGain(); out.gain.value = 0.5; out.connect(ctx.destination);
+  const { ctx, out } = hearOut();
   const lo = Math.round(Math.min(...list.map(x => x.midi))), steps = [0, 2, 4, 5, 7, 9, 11, 12], t0 = ctx.currentTime + 0.1;
   steps.forEach((s, i) => samplerNote(list, ctx, out, 440 * Math.pow(2, (lo + 5 + s - 69) / 12), t0 + i * 0.42, t0 + i * 0.42 + 0.38));
-  setTimeout(() => ctx.close(), 4500);
+  setTimeout(() => { try { out.disconnect(); } catch {} }, 4500);
 }
 syncOwn();
