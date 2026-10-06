@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "3.9";
+const VERSION = "4.0";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -3064,7 +3064,14 @@ $("#in-backup").addEventListener("change", async e => {
   syncSettings(); if (prefs && typeof renderProfile === "function") renderProfile();
 });
 
-const NEWS = { "3.9": ["Nuty według zasad zapisu: ósemki łączone belkami według metrum, pauzy pokazują miary, znaki przypominające w następnym takcie.",
+const NEWS = { "4.0": ["Nowy wygląd: papier, atrament i mosiądz. Większe litery i przyciski, wyraźniejsze kolory.",
+  "Na telefonie nuty są duże i czytelne; strona A4 zostaje do wyboru i do druku.",
+  "Metronom ze stukaniem tempa i akcentami. Stroik z wielką nutą.",
+  "Tonacje molowe z właściwymi akordami. Przedtakt wyrównany we wszystkich partiach.",
+  "Partie dla instrumentów transponujących brzmią poprawnie, także po eksporcie.",
+  "Ponów w poprawianiu nut. Przywróć odczyt pyta i można go cofnąć.",
+  "Bezpieczniejsze zapisywanie na iPhonie i pełniejsza kopia zapasowa."],
+  "3.9": ["Nuty według zasad zapisu: ósemki łączone belkami według metrum, pauzy pokazują miary, znaki przypominające w następnym takcie.",
   "Drugi i trzeci głos według zasad prowadzenia głosów i akordów fortepianu.",
   "Klucz i oktawa dobrane tak, żeby nuty mieściły się na pięciolinii.",
   "Gotowe melodie, kanon, trio z trzech instrumentów, zmiana instrumentu partii i oktawy."] };

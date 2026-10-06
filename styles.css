@@ -1286,3 +1286,5 @@ body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 1
 .metro .beats>button[data-acc="1"]::before{box-shadow:inset 0 0 0 3px var(--cherry)}
 .metro .beats>button.on::before{background:var(--brass);transform:scale(1.25)}
 .metro .beats>button.on[data-acc="1"]::before{background:var(--cherry)}
+#ed-undo span,#ed-redo span{display:none}   /* the two arrows speak for themselves; eight labelled tabs do not fit a phone */
+#ed-undo,#ed-redo{flex:0 0 44px}
