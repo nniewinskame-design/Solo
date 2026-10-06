@@ -97,6 +97,7 @@
   <symbol id="fermata" viewBox="0 0 24 24"><path d="M3.5 16a8.5 8.5 0 0 1 17 0"/><circle cx="12" cy="14.5" r="1.6" fill="currentColor" stroke="none"/></symbol>
   <symbol id="slur" viewBox="0 0 24 24"><path d="M3 15c4-7 14-7 18 0"/></symbol>
   <symbol id="marks" viewBox="0 0 24 24"><path d="M14.5 4.5c-2 0-2.6 1.4-3 3.5L9.5 19c-.4 2-1.2 2.5-2.5 2.5M8 10h6"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></symbol>
   <symbol id="warn" viewBox="0 0 24 24"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4.5"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></symbol>
 </svg>
 
@@ -662,10 +663,10 @@
   <div class="tiles three first">
     <button class="tile" id="pp-only"><svg class="i"><use href="#eye"/></svg><span>Tylko ta</span></button>
     <button class="tile" id="pp-mute" aria-pressed="false"><svg class="i"><use href="#mute"/></svg><span>Wycisz</span></button>
-    <button class="tile" id="pp-instr"><svg class="i"><use href="#trombone"/></svg><span>Instrument</span></button>
+    <button class="tile" id="pp-instr" aria-label="Zmień instrument, te same nuty"><svg class="i"><use href="#swap"/></svg><span>Zmień</span></button>
     <button class="tile" id="pp-up"><svg class="i"><use href="#octave"/></svg><span>Wyżej</span></button>
     <button class="tile" id="pp-down"><svg class="i"><use href="#octave-down"/></svg><span>Niżej</span></button>
-    <button class="tile" id="pp-change" aria-label="Ułóż tę partię na nowo"><svg class="i"><use href="#swap"/></svg><span>Na nowo</span></button>
+    <button class="tile" id="pp-change" aria-label="Instrument: strój, unisono, drugi głos, bas"><svg class="i"><use href="#sliders"/></svg><span>Instrument</span></button>
     <button class="tile" id="pp-print"><svg class="i"><use href="#print"/></svg><span>Drukuj</span></button>
     <button class="tile" id="pp-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
     <button class="tile danger" id="pp-del"><svg class="i"><use href="#trash"/></svg><span>Usuń</span></button>
@@ -710,6 +711,7 @@
   <div class="tiles first">
     <button class="tile" id="cd-open"><svg class="i"><use href="#music"/></svg><span>Otwórz</span></button>
     <button class="tile" id="cd-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
+    <button class="tile" id="cd-dup"><svg class="i"><use href="#copy"/></svg><span>Duplikuj</span></button>
     <button class="tile" id="cd-rename"><svg class="i"><use href="#pencil"/></svg><span>Nazwa</span></button>
     <button class="tile" id="cd-fav"><svg class="i"><use href="#heart"/></svg><span>Ulubione</span></button>
     <button class="tile" id="cd-col"><svg class="i"><use href="#stack"/></svg><span>Kolekcja</span></button>

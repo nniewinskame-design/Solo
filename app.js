@@ -2566,6 +2566,16 @@ $("#cd-open").addEventListener("click", () => { const p = cardPiece; closeSheetT
 $("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => openSheet("share")); }); });
 $("#cd-rename").addEventListener("click", () => { const el = cardEl, p = cardPiece; closeSheetThen(() => { const t = el && el.querySelector(".t"); if (t) inlineEdit(t, { value: p.title || "", placeholder: "Tytuł", onSave: v => renameInLibrary(p, "title", v) }); }); });
 $("#cd-del").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => askDelete(p, true)); });
+/* a full copy (notes, parts, photos, settings) under the next free title: "Etiuda 2" */
+$("#cd-dup").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => duplicatePiece(p)); });
+async function duplicatePiece(p) {
+  try {
+    const src = (await DB.get(p.id)) || p, all = await DB.all(), names = new Set(all.map(x => x.title));
+    const base = (src.title || "Bez tytułu").replace(/ \d+$/, ""); let k = 2, title = `${base} ${k}`; while (names.has(title)) title = `${base} ${++k}`;
+    const now = Date.now(), rec = { ...src, id: "p" + now.toString(36) + Math.random().toString(36).slice(2, 7), title, created: now, updated: now, opened: now };
+    await DB.put(rec); refreshLibrary(); hud(`Kopia: ${title}`, 2500);
+  } catch (e) { console.warn(e); hud(saveErrorText(e), 4000); }
+}
 
 /* ---------------- Original photo ---------------- */
 function buildOrigSheet() {

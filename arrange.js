@@ -194,7 +194,7 @@ const PART_CLEF = { bass: "<sign>F</sign><line>4</line>", treble: "<sign>G</sign
 function octaveFor(ps, instr, idx, maxOct = 4, info = {}) {
   const [cl, ch] = comfOf(instr), t = trIv(instr.tr), n = Math.max(1, ps.length); let best = Infinity, oct = Math.min(0, maxOct);
   info.outR = 1;
-  for (let o = -4; o <= maxOct; o++) {
+  for (let o = -4; o <= Math.min(4, maxOct); o++) {            // never more than 4 octaves either way (and never an endless loop)
     const outR = ps.filter(x => x + 12 * o < instr.lo || x + 12 * o > instr.hi).length / n, outC = ps.filter(x => x + 12 * o < cl || x + 12 * o > ch).length / n;
     const led = idx ? Math.min(...clefsOf(instr).map(c => ledgerCost(idx.map(i => i + 7 * o + t.d), c))) : 0;
     const cost = outR * 40 + outC * 4 + led + Math.abs(o) * 0.15;
@@ -241,7 +241,7 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
     if (third && interval === 0) { voiceMax = 0; placedVoice = true; }
     const vpart = kids(parseXml(vone).documentElement, "part")[0], vp = partPitches(vpart);
     const tops = melL.map((m, i) => third && v2Midi && v2Midi.length === melL.length ? Math.min(m, v2Midi[i]) : m);
-    if (vp.length === tops.length && !placedVoice) {
+    if (vp.length && vp.length === tops.length && !placedVoice) {       // an empty melody has nothing to fit
       voiceMax = Math.floor(Math.min(...vp.map((x, i) => (tops[i] - x) / 12)));
       const info = {}; octaveFor(vp.map(x => x - srcTr), instr, partIdx(vpart).map(i => i - (trIv(srcTr)).d), voiceMax, info);
       if (info.outR > 0) { if (interval === 0) { vone = gen(false, true); voiceMax = 0; placedVoice = true; } else { vone = gen(true); voiceMax = 4; } }
