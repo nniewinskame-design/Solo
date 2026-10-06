@@ -3351,9 +3351,9 @@ function replacePart(xml, oldId, newId) {
    Chips under the search; a piece can be in several; automatic ones: Ulubione, Ostatnie, Moje, Ze zdjęć. */
 const COL_COLORS = ["#E5484D", "#F76B15", "#FFC53D", "#30A46C", "#12A594", "#0090FF", "#6E56CF", "#D6409F", "#8D8D8D", "#A18072", "#3E63DD", "#29A383"];
 const cols = () => { try { return JSON.parse(store.get("cols", "[]")) || []; } catch { return []; } };
-const saveCols = c => store.set("cols", JSON.stringify(c));
+const saveCols = c => store.set("cols", JSON.stringify(c)) || hud("Nie udało się zapisać kolekcji. Pamięć urządzenia może być pełna.", 4000);
 const favs = () => { try { return JSON.parse(store.get("favs", "[]")) || []; } catch { return []; } };
-const saveFavs = f => store.set("favs", JSON.stringify(f));
+const saveFavs = f => store.set("favs", JSON.stringify(f)) || hud("Nie udało się zapisać ulubionych. Pamięć urządzenia może być pełna.", 4000);
 let libCol = store.get("libCol", "all");
 function inCol(p, all) {
   if (libCol === "all") return true;
