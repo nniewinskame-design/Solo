@@ -320,8 +320,8 @@
   <div class="grab"></div>
   <div class="list addlist first">
     <button class="li tap" data-act="camera"><span class="ic"><svg class="i"><use href="#camera"/></svg></span><span class="grow"><b>Zrób zdjęcie</b></span></button>
-    <label class="li tap" for="in-gallery"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Z galerii</b></span></label>
-    <label class="li tap" for="in-files"><span class="ic"><svg class="i"><use href="#file"/></svg></span><span class="grow"><b>Z pliku</b><small>Pliki, iCloud, Dysk Google, Dropbox</small></span></label>
+    <label class="li tap" for="in-gallery" tabindex="0" role="button"><span class="ic"><svg class="i"><use href="#image"/></svg></span><span class="grow"><b>Z galerii</b></span></label>
+    <label class="li tap" for="in-files" tabindex="0" role="button"><span class="ic"><svg class="i"><use href="#file"/></svg></span><span class="grow"><b>Z pliku</b><small>Pliki, iCloud, Dysk Google, Dropbox</small></span></label>
     <button class="li tap" data-act="blank"><span class="ic"><svg class="i"><use href="#pencil"/></svg></span><span class="grow"><b>Nowa melodia</b></span></button>
   </div>
   <h3 class="lbl">Gotowe melodie</h3>
@@ -363,7 +363,7 @@
       <p class="w-lead">Zrób zdjęcie nut albo otwórz plik, a&nbsp;Solo zapisze melodię w&nbsp;dowolnym kluczu i&nbsp;tonacji.</p>
       <div class="w-acts">
         <button class="btn ink wide" data-act="camera" id="w-camera"><svg class="i"><use href="#camera"/></svg><span>Zrób zdjęcie nut</span></button>
-        <label class="btn line" for="in-files"><svg class="i"><use href="#file"/></svg><span>Z pliku</span></label>
+        <label class="btn line" for="in-files" tabindex="0" role="button"><svg class="i"><use href="#file"/></svg><span>Z pliku</span></label>
         <button class="btn ghost" data-act="example" id="w-example">Pokaż przykład</button>
       </div>
     </div>
@@ -387,7 +387,7 @@
     <button class="btn cream" id="cam-retry">Spróbuj jeszcze raz</button>
   </div>
   <div class="cam-bar">
-    <label class="cam-btn" for="in-files" id="cam-gallery" aria-label="Wybierz z galerii"><svg class="i"><use href="#image"/></svg></label>
+    <label class="cam-btn" for="in-gallery" id="cam-gallery" aria-label="Wybierz z galerii" tabindex="0" role="button"><svg class="i"><use href="#image"/></svg></label>
     <button class="shutter" id="cam-shot" aria-label="Zrób zdjęcie" disabled><i></i></button>
     <span class="cam-btn ghost" aria-hidden="true"></span>
   </div>
@@ -403,9 +403,9 @@
     <p class="sub" id="read-sub">Zwykle trwa to od pół minuty do dwóch minut.</p>
     <div class="pbar" id="read-bar"><i></i></div>
     <div class="checks">
-      <div class="ck" id="ck1"><span class="d"><svg class="i"><use href="#check"/></svg></span><span id="ck1-t">Zdjęcie wysłane</span></div>
-      <div class="ck" id="ck2"><span class="d"><svg class="i"><use href="#check"/></svg></span><span id="ck2-t">Rozpoznawanie zapisu</span></div>
-      <div class="ck" id="ck3"><span class="d"><svg class="i"><use href="#check"/></svg></span><span id="ck3-t">Przepisywanie taktów</span></div>
+      <div class="ck" id="ck1"><span class="d"><svg class="i"><use href="#check"/></svg></span><span id="ck1-t">Przygotowanie</span></div>
+      <div class="ck" id="ck2"><span class="d"><svg class="i"><use href="#check"/></svg></span><span id="ck2-t">Szukanie pięciolinii</span></div>
+      <div class="ck" id="ck3"><span class="d"><svg class="i"><use href="#check"/></svg></span><span id="ck3-t">Odczytywanie nut</span></div>
     </div>
   </div>
 </section>
@@ -423,13 +423,14 @@
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-pages-t">Nowe nuty</h2><button class="done ghost" data-close>Anuluj</button></div>
   <div class="thumbs" id="pending"></div>
+  <p class="note" id="crop-hint" hidden>Dotknij strony, żeby obciąć jej górę lub dół.</p>
   <p class="note" id="first-model" hidden>Pierwszy odczyt pobierze ok. 150 MB. Najlepiej przez Wi-Fi.</p>
   <p class="note" id="slow-read" hidden>Ta przeglądarka czyta nuty wolniej (bez przyspieszenia grafiki), może to potrwać kilka minut. Szybciej będzie w Chrome lub Safari.</p>
   <details class="ask" id="ask">
     <summary>Kilka pytań <small>(nieobowiązkowe, poprawiają odczyt)</small></summary>
     <label class="ask-row" for="ask-clef"><span>Klucz w nutach</span><select id="ask-clef"><option value="">Nie wiem</option><option value="F">Basowy w całym utworze</option><option value="G">Wiolinowy w całym utworze</option><option value="C4">Tenorowy w całym utworze</option><option value="C3">Altowy w całym utworze</option></select></label>
-    <label class="ask-row" for="ask-time"><span>Metrum</span><select id="ask-time"><option value="">Nie wiem</option><option value="4/4">4/4</option><option value="2/2">2/2</option><option value="3/4">3/4</option><option value="2/4">2/4</option><option value="6/8">6/8</option><option value="3/8">3/8</option></select></label>
-    <label class="ask-row" for="ask-key"><span>Znaki przy kluczu</span><select id="ask-key"><option value="">Nie wiem</option><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option></select></label>
+    <label class="ask-row" for="ask-time"><span>Metrum</span><select id="ask-time"><option value="">Nie wiem</option><option value="4/4">4/4 (C)</option><option value="2/2">2/2 (¢)</option><option value="3/4">3/4</option><option value="2/4">2/4</option><option value="6/8">6/8</option><option value="3/8">3/8</option><option value="9/8">9/8</option><option value="12/8">12/8</option></select></label>
+    <label class="ask-row" for="ask-key"><span>Znaki przy kluczu</span><select id="ask-key"><option value="">Nie wiem</option><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label>
   </details>
   <p class="err" id="read-error" hidden></p>
   <button class="btn primary wide" id="btn-read"><svg class="i"><use href="#wand"/></svg><span>Odczytaj nuty</span></button>
@@ -485,6 +486,20 @@
     <label class="li" for="own-use"><span class="grow"><b>Graj moim dźwiękiem</b></span><input type="checkbox" id="own-use" class="switch"></label>
   </div>
   </div></div>
+</div>
+
+<div class="sheet" id="sh-crop" role="dialog" aria-modal="true" aria-labelledby="sh-crop-t" hidden>
+  <div class="grab"></div>
+  <div class="shead"><h2 class="h-m" id="sh-crop-t">Przytnij stronę</h2><button class="done" id="crop-done">Gotowe</button></div>
+  <p class="note">Przesuń górną i dolną krawędź tak, żeby zostały tylko nuty z tej strony.</p>
+  <div id="crop-box" style="position:relative;margin:8px auto;width:fit-content;max-width:100%;touch-action:none;user-select:none;-webkit-user-select:none;cursor:ns-resize">
+    <img id="crop-img" alt="" draggable="false" style="display:block;max-width:100%;max-height:56vh">
+    <i id="crop-cut-t" style="position:absolute;left:0;right:0;top:0;height:0;background:rgba(20,20,20,.6)"></i>
+    <i id="crop-cut-b" style="position:absolute;left:0;right:0;bottom:0;height:0;background:rgba(20,20,20,.6)"></i>
+    <span id="crop-top" role="slider" tabindex="0" aria-label="Górna krawędź" aria-valuemin="0" aria-valuemax="90" aria-valuenow="0" style="position:absolute;left:0;right:0;top:0;height:32px;margin-top:-16px;background:linear-gradient(transparent 14px,var(--cobalt,#2a62e8) 14px,var(--cobalt,#2a62e8) 18px,transparent 18px)"></span>
+    <span id="crop-bot" role="slider" tabindex="0" aria-label="Dolna krawędź" aria-valuemin="0" aria-valuemax="90" aria-valuenow="0" style="position:absolute;left:0;right:0;bottom:0;height:32px;margin-bottom:-16px;background:linear-gradient(transparent 14px,var(--cobalt,#2a62e8) 14px,var(--cobalt,#2a62e8) 18px,transparent 18px)"></span>
+  </div>
+  <button class="btn line wide" id="crop-all" type="button">Cała strona</button>
 </div>
 
 <div class="sheet" id="sh-pdf" role="dialog" aria-modal="true" aria-labelledby="sh-pdf-t" hidden>
@@ -686,7 +701,7 @@
     <div class="step"><b>Android</b><span>Otwórz załącznik w poczcie → <svg class="i"><use href="#share"/></svg> Udostępnij → Solo</span></div>
     <div class="step"><b>iPhone</b><span>Przytrzymaj załącznik → Zachowaj w Plikach → tu: Z pliku</span></div>
   </div>
-  <label class="btn primary wide" for="in-files"><svg class="i"><use href="#file"/></svg><span>Z pliku</span></label>
+  <label class="btn primary wide" for="in-files" tabindex="0" role="button"><svg class="i"><use href="#file"/></svg><span>Z pliku</span></label>
 </div>
 
 <div class="sheet" id="sh-card" role="dialog" aria-modal="true" aria-labelledby="sh-card-t" hidden>

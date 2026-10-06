@@ -2564,6 +2564,9 @@ function buildOrigSheet() {
   $("#orig-imgs").innerHTML = (S.piece.images || []).map((src, i) => `<img src="${esc(src)}" alt="Oryginał, strona ${i + 1}">`).join("");
 }
 /* ---------------- New music: files, photos, reading ---------------- */
+/* A page waiting to be read: the photo for the reader (a Blob, not a 3 MB data URL), its size, a smaller copy kept
+   with the piece, an optional top/bottom cut, and once read, its result. A result is kept when a later page fails,
+   so "Czytaj dalej" reads only what is left (B-15). */
 let pending = [];
 const MAX_PAGES = 12;
 const isXmlFile = f => /\.(musicxml|xml|mxl)$/i.test(f.name) || /musicxml/.test(f.type);
@@ -2585,61 +2588,108 @@ async function openXmlFile(f) {
       const cont = zip.file("META-INF/container.xml");
       if (cont) { const m = (await cont.async("string")).match(/full-path="([^"]+)"/); if (m) path = m[1]; }
       if (!path) path = Object.keys(zip.files).find(n => /\.(xml|musicxml)$/i.test(n) && !n.startsWith("META-INF"));
-      if (!path) throw new Error("W tym pliku nie ma nut.");
+      if (!path || !zip.file(path)) throw new Error("W tym pliku nie ma nut.");
       xml = await zip.file(path).async("string");
     } else xml = await f.text();
-    openPiece({ xml, sourceType: "file", title: "", composer: null });
+    if (!/<(score-partwise|score-timewise)\b/.test(xml)) throw new Error("W tym pliku nie ma nut.");
+    /* the same file opened again: the piece already in the library, not a copy (B-80) */
+    const same = (await DB.all().catch(() => [])).find(p => p.xml === xml);
+    if (same) { await openFromLibrary(same); hud("Ten utwór już masz w bibliotece."); return; }
+    /* no title in the file: its name ("Hay Burner.musicxml" → "Hay Burner"), H3 */
+    const named = /<(work-title|movement-title)>\s*[^<\s]/.test(xml);
+    const title = named ? "" : f.name.replace(/\.(musicxml|xml|mxl)$/i, "").replace(/[_]+/g, " ").trim();
+    openPiece({ xml, sourceType: "file", title, composer: null });
   } catch (err) { console.error(err); hud(err.message || "Nie udało się otworzyć pliku.", 4000); }
+}
+const newPageId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+async function makePage(src) {
+  const { blob, W, H } = await canvasToJpegBlob(src, 2400, 0.9);
+  return { id: newPageId(), big: blob, W, H, keep: canvasToJpeg(src, 1600, 0.82), crop: null, res: null };
+}
+/* PlayScore's advice, without a live camera: a dark photo, or one half much darker than the other (a shadow of the
+   phone or a hand), reads worse; say so when the page is added */
+function lightHint(src) {
+  try {
+    const w = 24, h = 32, c = document.createElement("canvas"); c.width = w; c.height = h;
+    const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(src, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data; c.width = c.height = 0;
+    const lum = []; for (let i = 0; i < d.length; i += 4) lum.push(0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]);
+    const avg = f => { let s = 0, k = 0; lum.forEach((v, i) => { if (f(i % w, Math.floor(i / w))) { s += v; k++; } }); return k ? s / k : 0; };
+    if (avg(() => true) < 90) return "Zdjęcie jest ciemne. Lepiej zrobić je przy dobrym świetle.";
+    const halves = [avg(x => x < w / 2), avg(x => x >= w / 2), avg((x, y) => y < h / 2), avg((x, y) => y >= h / 2)];
+    if (Math.max(...halves) - Math.min(...halves) > 55) return "Na zdjęciu jest cień. Lepiej zrobić je przy równym świetle.";
+  } catch (e) { console.warn(e); }
+  return "";
 }
 async function addPages(files) {
   $("#read-error").hidden = true;
+  let hint = "";
   for (const f of files) {
     if (pending.length >= MAX_PAGES) { hud(`Najwyżej ${MAX_PAGES} stron naraz`); break; }
     try {
       if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
         const pdf = await pdfjsLib.getDocument({ data: await f.arrayBuffer(), isEvalSupported: false }).promise;
-        const pick = pdf.numPages > 1 ? await pickPdfPages(pdf) : [1];
-        for (const i of pick) {
-          if (pending.length >= MAX_PAGES) { hud(`Najwyżej ${MAX_PAGES} stron naraz`); break; }
-          pending.push(await renderPdfPage(pdf, i));
-        }
+        try {
+          const pick = pdf.numPages > 1 ? await pickPdfPages(pdf, MAX_PAGES - pending.length) : [1];
+          for (const i of pick) {
+            if (pending.length >= MAX_PAGES) { hud(`Najwyżej ${MAX_PAGES} stron naraz`); break; }
+            pending.push(await renderPdfPage(pdf, i));
+          }
+        } finally { pdf.destroy().catch(e => console.warn(e)); }
       } else if (f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|gif|bmp)$/i.test(f.name)) {
         const url = URL.createObjectURL(f);
         try {
           const img = await loadImage(url).catch(() => { throw new Error("Tego formatu zdjęcia nie da się otworzyć. Zrób zrzut ekranu albo zapisz zdjęcie jako JPG."); });
-          pending.push({ big: canvasToJpeg(img, 2400, 0.9), keep: canvasToJpeg(img, 1600, 0.82) });
+          pending.push(await makePage(img));
+          hint = hint || lightHint(img);
         } finally { URL.revokeObjectURL(url); }
       } else throw new Error("Solo otwiera zdjęcia, PDF i pliki MusicXML.");
     } catch (e) { console.error(e); hud(e.message || "Nie udało się otworzyć pliku.", 4000); }
   }
   drawPending();
+  if (hint) hud(hint, 5000);
 }
 async function renderPdfPage(pdf, i, edge = 2400) {
   const page = await pdf.getPage(i), vp0 = page.getViewport({ scale: 1 });
   const vp = page.getViewport({ scale: edge / Math.max(vp0.width, vp0.height) });
   const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
-  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
-  await page.render({ canvasContext: g, viewport: vp }).promise;
-  return edge < 1000 ? c.toDataURL("image/jpeg", .7) : { big: canvasToJpeg(c, 2400, 0.9), keep: canvasToJpeg(c, 1600, 0.82) };
+  try {
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: g, viewport: vp }).promise;
+    return edge < 1000 ? c.toDataURL("image/jpeg", .7) : await makePage(c);
+  } finally { c.width = c.height = 0; try { page.cleanup(); } catch (e) { console.warn(e); } }      // canvas memory back at once (R21)
 }
-/* a PDF with several pages: show them all small and let the user tick the ones to read (T13) */
-function pickPdfPages(pdf) {
+/* a PDF with several pages: show them all small and let the user tick the ones to read (T13). Thumbnails are drawn
+   one at a time as they scroll into view (a 30-page PDF no longer renders 30 pages at once), and no more pages can
+   be ticked than still fit (B-22). */
+function pickPdfPages(pdf, cap = MAX_PAGES) {
   return new Promise(resolve => {
     const box = $("#pdf-pages"), chosen = new Set();
     box.innerHTML = ""; $("#pdf-count").textContent = `${pdf.numPages} ${plural(pdf.numPages, "strona", "strony", "stron")}`;
     const sync = () => { $("#pdf-add").disabled = !chosen.size; $("#pdf-add span").textContent = chosen.size ? `Dodaj ${chosen.size} ${plural(chosen.size, "stronę", "strony", "stron")}` : "Wybierz strony"; };
+    const full = () => hud(`Można dodać najwyżej ${cap} ${plural(cap, "stronę", "strony", "stron")}`);
+    let queue = Promise.resolve(), closed = false;
+    const thumb = (b, i) => { queue = queue.then(() => closed ? null : renderPdfPage(pdf, i, 300).then(u => { const im = new Image(); im.src = u; im.alt = ""; b.prepend(im); }).catch(e => console.warn(e))); };
+    const io = "IntersectionObserver" in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); thumb(e.target, +e.target.dataset.page); } }), { rootMargin: "300px" }) : null;
     for (let i = 1; i <= pdf.numPages; i++) {
-      const b = document.createElement("button"); b.setAttribute("aria-pressed", "false"); b.setAttribute("aria-label", `Strona ${i}`);
+      const b = document.createElement("button"); b.setAttribute("aria-pressed", "false"); b.setAttribute("aria-label", `Strona ${i}`); b.dataset.page = String(i);
       b.innerHTML = `<span>${i}</span>`;
-      b.addEventListener("click", () => { const on = !chosen.has(i); on ? chosen.add(i) : chosen.delete(i); b.setAttribute("aria-pressed", String(on)); sync(); });
+      b.addEventListener("click", () => {
+        const on = !chosen.has(i); if (on && chosen.size >= cap) { full(); return; }
+        on ? chosen.add(i) : chosen.delete(i); b.setAttribute("aria-pressed", String(on)); sync();
+      });
       box.appendChild(b);
-      renderPdfPage(pdf, i, 300).then(u => { const im = new Image(); im.src = u; im.alt = ""; b.prepend(im); }).catch(() => {});
+      if (io) io.observe(b); else thumb(b, i);
     }
     sync();
-    const done = list => { $("#pdf-add").onclick = null; pickPdfPages.cancel = null; resolve(list); };
+    const done = list => { closed = true; if (io) io.disconnect(); $("#pdf-add").onclick = null; pickPdfPages.cancel = null; resolve(list); };
     $("#pdf-add").onclick = () => { const list = [...chosen].sort((a, b) => a - b); done(list); closeSheet(); };
-    $("#pdf-all").onclick = () => { for (let i = 1; i <= pdf.numPages; i++) chosen.add(i); $$("#pdf-pages button").forEach(b => b.setAttribute("aria-pressed", "true")); sync(); };
+    $("#pdf-all").onclick = () => {
+      chosen.clear(); for (let i = 1; i <= Math.min(pdf.numPages, cap); i++) chosen.add(i);
+      $$("#pdf-pages button").forEach(b => b.setAttribute("aria-pressed", String(chosen.has(+b.dataset.page)))); sync();
+      if (pdf.numPages > cap) full();
+    };
     pickPdfPages.cancel = () => done([]);
     openSheet("pdf");
   });
@@ -2647,9 +2697,13 @@ function pickPdfPages(pdf) {
 function drawPending() {
   const t = $("#pending"); t.innerHTML = "";
   pending.forEach((p, i) => {
-    const f = document.createElement("figure");
-    f.innerHTML = `<img src="${p.keep}" alt="Strona ${i + 1}"><figcaption>${i + 1}</figcaption><button class="del" aria-label="Usuń stronę ${i + 1}">${icon("x")}</button>`;
-    f.querySelector(".del").addEventListener("click", () => { pending.splice(i, 1); drawPending(); if (!pending.length) closeSheet(); });
+    const f = document.createElement("figure"); if (p.res) f.classList.add("done");
+    f.innerHTML = `<img src="${p.keep}" alt="Strona ${i + 1}${p.res ? ", odczytana" : ""}. Dotknij, żeby przyciąć." role="button" tabindex="0"><figcaption>${p.res ? "✓ " : ""}${i + 1}</figcaption><button class="del" aria-label="Usuń stronę ${i + 1}">${icon("x")}</button>`;
+    const im = f.querySelector("img");
+    if (p.crop) im.style.clipPath = `inset(${(p.crop.t * 100).toFixed(1)}% 0 ${(p.crop.b * 100).toFixed(1)}% 0)`;
+    im.addEventListener("click", () => openCrop(p));
+    im.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openCrop(p); } });
+    f.querySelector(".del").addEventListener("click", () => { const k = pending.indexOf(p); if (k >= 0) pending.splice(k, 1); $("#read-error").hidden = true; drawPending(); if (!pending.length) closeSheet(); });
     t.appendChild(f);
   });
   if (pending.length && pending.length < MAX_PAGES) {
@@ -2658,8 +2712,117 @@ function drawPending() {
     t.appendChild(f);
   }
   $("#btn-read").disabled = !pending.length;
+  $("#btn-read span").textContent = pending.some(p => p.res) && pending.some(p => !p.res) ? "Czytaj dalej" : "Odczytaj nuty";
+  $("#crop-hint").hidden = !pending.length;
+  savePendingSoon();
 }
 ["#in-camera", "#in-files", "#in-gallery"].forEach(sel => $(sel).addEventListener("change", e => { const fs = Array.from(e.target.files); e.target.value = ""; handleFiles(fs); }));
+/* the "Z galerii" and "Z pliku" rows are labels of hidden inputs: reachable with Tab, opened with Enter or Space (K15) */
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const l = e.target && e.target.closest ? e.target.closest("label[for][tabindex]") : null; if (!l) return;
+  const inp = document.getElementById(l.htmlFor); if (!inp || inp.type !== "file") return;
+  e.preventDefault(); inp.click();
+});
+
+/* ---- Pages wait in the browser's cache until they are read: closing Solo or a crash loses nothing (B-15) ---- */
+const PENDING_CACHE = "solo-pending";
+let pendingSaveT = 0, pendingSaving = Promise.resolve(), pendingRestored = false;
+function savePendingSoon() { if (!pendingRestored) return; clearTimeout(pendingSaveT); pendingSaveT = setTimeout(() => { pendingSaving = pendingSaving.then(savePending); }, 400); }
+async function savePending() {
+  if (!("caches" in window)) return;
+  try {
+    if (!pending.length) { await caches.delete(PENDING_CACHE); return; }
+    const c = await caches.open(PENDING_CACHE), have = await c.keys(), idOf = k => k.url.split("/pending/")[1];
+    for (const k of have) { const id = idOf(k); if (id && id !== "list" && !pending.some(p => p.id === id)) await c.delete(k); }
+    for (const p of pending) if (!have.some(k => idOf(k) === p.id)) await c.put(new Request("pending/" + p.id), new Response(p.big, { headers: { "content-type": "image/jpeg" } }));
+    const list = pending.map(({ id, W, H, keep, crop, res }) => ({ id, W, H, keep, crop, res }));
+    await c.put(new Request("pending/list"), new Response(JSON.stringify(list), { headers: { "content-type": "application/json" } }));
+  } catch (e) { console.warn("pending pages not kept", e); }
+}
+async function restorePending() {
+  try { await restorePending1(); } finally { pendingRestored = true; if (pending.length) savePendingSoon(); }
+}
+async function restorePending1() {
+  try {
+    if (!("caches" in window) || !(await caches.has(PENDING_CACHE))) return;
+    const c = await caches.open(PENDING_CACHE), r = await c.match("pending/list"); if (!r) return;
+    const list = await r.json(), got = [];
+    for (const p of list) { const b = await c.match("pending/" + p.id); if (b && p.keep) got.push({ ...p, big: await b.blob() }); }
+    if (!got.length) { await caches.delete(PENDING_CACHE); return; }
+    pending = [...got, ...pending.filter(p => !got.some(g => g.id === p.id))].slice(0, MAX_PAGES); drawPending();
+    const n = got.length;
+    hudAct(`${n} ${plural(n, "strona czeka", "strony czekają", "stron czeka")} na odczyt`, "Pokaż", () => { hideWelcome(); if (S.view !== "home") go("home"); if (openSheetId !== "pages") openSheet("pages"); }, 8000);
+  } catch (e) { console.warn(e); }
+}
+
+/* ---- Cutting off the top and bottom of a page (the next page's staves, a title, a hand), K10 ----
+   The cut is painted white on the photo for the reader, so the size and every position on it stay as they were. */
+let cropPage = null, cropT = 0, cropB = 0;
+const CROP_MIN = 0.1;                        // at least a tenth of the page stays
+function openCrop(p) {
+  if (!pending.includes(p)) return;
+  cropPage = p; cropT = p.crop ? p.crop.t : 0; cropB = p.crop ? p.crop.b : 0;
+  $("#crop-img").src = p.keep; $("#sh-crop-t").textContent = `Przytnij stronę ${pending.indexOf(p) + 1}`;
+  drawCrop(); openSheet("crop");
+}
+function drawCrop() {
+  const pc = v => (v * 100).toFixed(2) + "%";
+  $("#crop-cut-t").style.height = pc(cropT); $("#crop-cut-b").style.height = pc(cropB);
+  $("#crop-top").style.top = pc(cropT); $("#crop-bot").style.bottom = pc(cropB);
+  $("#crop-top").setAttribute("aria-valuenow", String(Math.round(cropT * 100)));
+  $("#crop-bot").setAttribute("aria-valuenow", String(Math.round(cropB * 100)));
+}
+function setCrop(edge, v) {
+  v = Math.max(0, Math.min(1 - CROP_MIN - (edge === "t" ? cropB : cropT), v));
+  if (edge === "t") cropT = v; else cropB = v;
+  drawCrop();
+}
+(function cropDrag() {
+  const box = $("#crop-box"); let edge = null, pid = null;
+  box.addEventListener("touchstart", e => e.stopPropagation(), { passive: true });     // not the sheet's pull-to-close
+  box.addEventListener("pointerdown", e => {
+    const r = box.getBoundingClientRect(), y = (e.clientY - r.top) / r.height;
+    edge = e.target.id === "crop-top" ? "t" : e.target.id === "crop-bot" ? "b" : Math.abs(y - cropT) <= Math.abs(1 - cropB - y) ? "t" : "b";
+    pid = e.pointerId; box.setPointerCapture(pid); e.preventDefault();
+    setCrop(edge, edge === "t" ? y : 1 - y);
+  });
+  box.addEventListener("pointermove", e => {
+    if (e.pointerId !== pid) return;
+    const r = box.getBoundingClientRect(), y = (e.clientY - r.top) / r.height;
+    setCrop(edge, edge === "t" ? y : 1 - y);
+  });
+  const end = e => { if (e.pointerId === pid) { pid = null; edge = null; } };
+  box.addEventListener("pointerup", end); box.addEventListener("pointercancel", end);
+  [["#crop-top", "t"], ["#crop-bot", "b"]].forEach(([sel, ed]) => $(sel).addEventListener("keydown", e => {
+    const step = e.shiftKey ? 0.1 : 0.02, dir = { ArrowDown: 1, ArrowUp: -1 }[e.key]; if (!dir) return;
+    e.preventDefault(); setCrop(ed, (ed === "t" ? cropT : cropB) + (ed === "t" ? dir : -dir) * step);
+  }));
+  $("#crop-all").addEventListener("click", () => { cropT = cropB = 0; drawCrop(); });
+  $("#crop-done").addEventListener("click", () => {
+    const p = cropPage; cropPage = null;
+    if (p && pending.includes(p)) {
+      const crop = cropT > 0.005 || cropB > 0.005 ? { t: cropT, b: cropB } : null;
+      if (JSON.stringify(crop) !== JSON.stringify(p.crop)) { p.crop = crop; p.res = null; }      // a new cut is read again
+      drawPending();
+    }
+    openSheet("pages");
+  });
+})();
+/* the photo the reader gets: the page with its cut-off bands painted white */
+async function pageBlob(p) {
+  if (!p.crop) return p.big;
+  const url = URL.createObjectURL(p.big);
+  try {
+    const im = await loadImage(url), c = document.createElement("canvas"); c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const g = c.getContext("2d"); g.drawImage(im, 0, 0); g.fillStyle = "#fff";
+    const t = Math.round(p.crop.t * c.height), b = Math.round(p.crop.b * c.height);
+    g.fillRect(0, 0, c.width, t); g.fillRect(0, c.height - b, c.width, b);
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.9)); c.width = c.height = 0;
+    if (!blob) throw new Error("Za mało pamięci na to zdjęcie. Zamknij inne karty i spróbuj jeszcze raz.");
+    return blob;
+  } finally { URL.revokeObjectURL(url); }
+}
 
 /* ---- Camera ---- */
 const cam = { open: false, stream: null, track: null, busy: false, torch: false };
@@ -2690,9 +2853,21 @@ async function startStream() {
     if (caps.focusMode && caps.focusMode.includes("continuous")) cam.track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
     $("#cam-torch").hidden = !caps.torch; cam.torch = false; $("#cam-torch").setAttribute("aria-pressed", "false");
     $("#cam-shot").disabled = false;
+    watchLight();
   } catch (e) { console.warn(e); if (cam.open) camMessage(e); }
 }
+/* PlayScore's live hint: too dark or a shadow across the page reads badly, so the tip says so while aiming */
+const CAM_TIP = "Cała strona w kadrze, prosto z góry";
+function watchLight() {
+  clearInterval(cam.lightT);
+  cam.lightT = setInterval(() => {
+    if (!cam.stream || !camVideo.videoWidth) return;
+    const hint = lightHint(camVideo);
+    $("#cam-tip").textContent = hint ? hint.replace("Zdjęcie jest ciemne. Lepiej zrobić je", "Za ciemno. Lepiej").replace("Na zdjęciu jest cień. Lepiej zrobić je", "Cień na kartce. Lepiej") : CAM_TIP;
+  }, 1200);
+}
 function stopStream() {
+  clearInterval(cam.lightT); $("#cam-tip").textContent = CAM_TIP;
   if (cam.stream) cam.stream.getTracks().forEach(t => t.stop());
   cam.stream = cam.track = null; camVideo.srcObject = null;
 }
@@ -2767,20 +2942,22 @@ function bar(frac) {               // determinate when we know how far along we 
 }
 async function startReading() {
   if (openSheetId) { closeSheetThen(startReading); return; }
-  const pages = pending.slice(); if (!pages.length) return;
+  const pages = pending.slice(); if (!pages.length || readCtl) return;
   readCtl = new AbortController();
-  $("#read-img").src = pages[0].keep;
+  $("#read-img").src = (pages.find(p => !p.res) || pages[0]).keep;
   $("#read-pages").textContent = pages.length > 1 ? `${pages.length} ${plural(pages.length, "strona", "strony", "stron")}` : "";
   $("#ck1-t").textContent = "Przygotowanie";
   $("#ck2-t").textContent = "Szukanie pięciolinii";
   $("#ck3-t").textContent = "Odczytywanie nut";
   ck("ck1", "now"); ck("ck2", null); ck("ck3", null); bar(null);
   presentCover($("#reading"));
-  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) { console.warn(e); }
   try {
-    const piece = await readOnDevice(pages, readCtl.signal);
+    const piece = await readOnDevice(pages, readCtl.signal), skipped = piece.skipped; delete piece.skipped;
     ck("ck1", "ok"); ck("ck2", "ok"); ck("ck3", "ok"); bar(1);
     pending = []; drawPending();
+    /* the answers belonged to these notes: the next piece starts from "Nie wiem" (B-16) */
+    ["clef", "time", "key"].forEach(k => store.del("ask-" + k));
     dismissCover($("#reading"));
     openPiece(piece);
     if (!piece.issues.length) {
@@ -2788,47 +2965,138 @@ async function startReading() {
       $("#notice-text").textContent = "Dynamika (p, f…) i napisy, np. tempo, nie są odczytywane.";
       $("#notice").hidden = false;
     }
-    hud("Gotowe");
+    hud(skipped.length ? `Gotowe. Pominięto ${plural(skipped.length, "stronę", "strony", "strony")} bez nut: ${skipped.join(", ")}` : "Gotowe", skipped.length ? 5000 : 2400);
   } catch (e) {
     dismissCover($("#reading"));
+    drawPending();                                   // pages read so far are marked and kept
     if (e.name !== "AbortError") {
       const m = e.message || "";
-      const el = $("#read-error"); el.textContent = /^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]/.test(m) && /[ąćęłńóśźż]|Nie |Na /.test(m) ? m : "Nie udało się odczytać nut. Spróbuj jeszcze raz.";
-      el.hidden = false; console.warn(e);
+      showReadError(/^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]/.test(m) && /[ąćęłńóśźż]|Nie |Na /.test(m) ? m : "Nie udało się odczytać nut. Spróbuj jeszcze raz.", e.page);
+      console.warn(e);
     }
     openSheet("pages");
   } finally {
     readCtl = null;
-    try { await wakeLock?.release(); } catch {} wakeLock = null;
+    try { await wakeLock?.release(); } catch (e) { console.warn(e); } wakeLock = null;
   }
+}
+/* a page that failed: the others stay read; "Pomiń stronę n" leaves it out, "Czytaj dalej" tries it again */
+function showReadError(msg, page) {
+  const el = $("#read-error"); el.textContent = msg;
+  if (page && pending.length > 1 && pending.includes(page)) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "link";
+    b.textContent = `Pomiń stronę ${pending.indexOf(page) + 1}`;
+    b.addEventListener("click", () => {
+      const k = pending.indexOf(page); if (k >= 0) pending.splice(k, 1);
+      el.hidden = true; drawPending();
+      if (pending.length && pending.every(p => p.res)) startReading();      // nothing left to read: put it together
+    });
+    el.append(" ", b);
+  }
+  el.hidden = false;
 }
 
 function preparePages() {
   $("#first-model").hidden = !!store.get("modelReady");
-  $("#slow-read").hidden = !!navigator.gpu || store.get("homrPrefer") === "webgpu-ok";
+  $("#slow-read").hidden = !!navigator.gpu && readerBackend() === "webgpu";
   ["clef", "time", "key"].forEach(k => { $("#ask-" + k).value = store.get("ask-" + k, ""); });
   $("#ask").open = ["clef", "time", "key"].some(k => store.get("ask-" + k, ""));
 }
 ["clef", "time", "key"].forEach(k => $("#ask-" + k).addEventListener("change", e => store.set("ask-" + k, e.target.value)));
 const readAnswers = () => ({ clef: $("#ask-clef").value, time: $("#ask-time").value, key: $("#ask-key").value });
-function dataUrlToBlob(u) {
-  const [head, data] = u.split(","), type = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
-  const bin = atob(data), arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type });
+
+/* ---- Reading on the device: homr (open-source optical music recognition), free and offline ----
+   The engine runs in a worker. Solo never waits on it forever: a page with no progress for 150 s is stopped,
+   and an engine that was cancelled, stopped, lost or failed (a wasm out-of-memory on a phone) is terminated and
+   started afresh, so one bad page never blocks the next read (R1, R2). */
+const abortError = () => { const e = new Error("cancelled"); e.name = "AbortError"; return e; };
+const STALL_MS = 150000;
+let recognizer = null, recognizerP = null;
+/* WebGPU unless it gave wrong results here: then the CPU, for 30 days, then WebGPU gets another chance (R7) */
+function readerBackend() {
+  const p = store.get("homrPrefer", "webgpu");
+  if (p !== "wasm-threads" && p !== "wasm") return "webgpu";
+  const at = +store.get("homrPreferAt", 0);
+  if (!at) { store.set("homrPreferAt", String(Date.now())); return p; }
+  if (navigator.gpu && Date.now() - at > 30 * 864e5) { store.del("homrPrefer"); store.del("homrPreferAt"); return "webgpu"; }
+  return p;
 }
-/* ---- Reading on the device: homr (open-source optical music recognition), free and offline ---- */
-let recognizer = null;
-async function getRecognizer(prefer) {
-  if (recognizer && !prefer) return recognizer;
-  if (recognizer) { try { await recognizer.dispose(); } catch {} recognizer = null; }
-  prefer = prefer || store.get("homrPrefer", "webgpu");
+/* a promise that gives up when the read is cancelled (the first model download is 150 MB: "Anuluj" works there too, H1) */
+function untilAborted(p, signal, onAbort) {
+  if (!signal) return p;
+  return new Promise((res, rej) => {
+    const ab = () => { onAbort(); rej(abortError()); };
+    if (signal.aborted) { ab(); return; }
+    signal.addEventListener("abort", ab, { once: true });
+    p.then(v => { signal.removeEventListener("abort", ab); if (signal.aborted) { if (v && v.dispose) v.dispose().catch(e => console.warn(e)); return; } res(v); },
+      e => { signal.removeEventListener("abort", ab); rej(e); });
+  });
+}
+async function startRecognizer(prefer, signal) {
   if (typeof Worker === "undefined") throw new Error("Ta przeglądarka nie potrafi czytać nut na urządzeniu. Zaktualizuj przeglądarkę albo otwórz Solo w Chrome lub Safari.");
   const mod = await import("./homr/homr.js");
   const abs = p => new URL(p, location.href).href;
-  recognizer = await mod.createRecognizer({ baseUrl: abs("homr/models/"), wasmPaths: abs("homr/ort/"), prefer,
-    createWorker: () => new Worker(abs("homr/worker.js"), { type: "module" }) });
-  return recognizer;
+  let w = null;
+  const term = () => { try { if (w) w.terminate(); } catch (e) { console.warn(e); } };
+  const r = await untilAborted(mod.createRecognizer({ baseUrl: abs("homr/models/"), wasmPaths: abs("homr/ort/"), prefer,
+    createWorker: () => (w = new Worker(abs("homr/worker.js"), { type: "module" })) }), signal, term);
+  r.prefer = prefer;
+  r.kill = () => { term(); r.dispose().catch(e => console.warn(e)); };    // at once: a hung worker never answers "close"
+  return r;
+}
+/* one engine at a time; two calls at once share it (R32) */
+function getRecognizer(prefer, signal) {
+  prefer = prefer || readerBackend();
+  if (recognizer && recognizer.prefer === prefer) return Promise.resolve(recognizer);
+  if (recognizerP && recognizerP.prefer === prefer) return recognizerP;
+  dropRecognizer();
+  const p = (async () => {
+    try { return await startRecognizer(prefer, signal); }
+    catch (e) {
+      if (e.name === "AbortError") throw e;
+      console.warn(e);
+      /* no shared memory or no WebGPU device after all: the plain single-threaded engine, once (R13) */
+      if (prefer !== "wasm") { try { const r = await startRecognizer("wasm", signal); r.prefer = prefer; return r; } catch (e2) { if (e2.name === "AbortError") throw e2; console.warn(e2); } }
+      throw new Error(/memory|wasm|WebAssembly/i.test(e.message || "") ? HOMR_ERR.worker_lost : "Nie udało się uruchomić odczytu na tym urządzeniu. Odśwież stronę i spróbuj jeszcze raz.");
+    }
+  })();
+  p.prefer = prefer; recognizerP = p;
+  p.then(r => { if (recognizerP === p) { recognizer = r; recognizerP = null; } else r.kill(); }, () => { if (recognizerP === p) recognizerP = null; });
+  return p;
+}
+function dropRecognizer() {
+  const r = recognizer; recognizer = null; recognizerP = null;
+  if (r) r.kill();
+}
+/* the reader's own files (worker 11 MB, runtime 28 MB) are fetched first, with progress, so the engine's start
+   never includes a slow download (R6) and "Anuluj" works during it; once here they come from the cache */
+const READER_FILES = ["homr/worker.js", "homr/ort/ort-wasm-simd-threaded.jsep.mjs", "homr/ort/ort-wasm-simd-threaded.jsep.wasm"];
+let readerFetched = false;
+async function prefetchReader(signal) {
+  if (readerFetched) return;
+  const need = [];
+  for (const u of READER_FILES.map(p => new URL(p, location.href).href)) {
+    let hit = null; try { hit = "caches" in window ? await caches.match(u) : null; } catch (e) { console.warn(e); }
+    if (!hit) need.push(u);
+  }
+  if (need.length) {
+    let got = 0, total = 0;
+    const show = () => { const t = Math.max(total, got); $("#ck1-t").textContent = `Pobieranie czytnika: ${Math.round(got / 1048576)} z ${Math.round(t / 1048576) || "?"} MB`; if (total) bar(got / t); };
+    let res;
+    try { res = await Promise.all(need.map(u => fetch(u, { signal }))); }
+    catch (e) { if (e.name === "AbortError") throw abortError(); throw new Error("Nie udało się pobrać czytnika nut. Sprawdź internet i spróbuj jeszcze raz."); }
+    if (res.some(r => !r.ok)) throw new Error("Nie udało się pobrać czytnika nut. Odśwież stronę i spróbuj jeszcze raz.");
+    res.forEach(r => { total += +r.headers.get("content-length") || 0; });
+    try {
+      await Promise.all(res.map(async r => {
+        const rd = r.body && r.body.getReader ? r.body.getReader() : null;
+        if (!rd) { got += (await r.arrayBuffer()).byteLength; show(); return; }
+        for (;;) { const { done, value } = await rd.read(); if (done) break; got += value.length; show(); }
+      }));
+    } catch (e) { if (signal.aborted) throw abortError(); throw new Error("Nie udało się pobrać czytnika nut. Sprawdź internet i spróbuj jeszcze raz."); }
+    $("#ck1-t").textContent = "Przygotowanie"; bar(null);
+  }
+  readerFetched = true;
 }
 const HOMR_ERR = {
   not_music: "Na zdjęciu nie widać pięciolinii. Zrób zdjęcie z bliska, prosto nad kartką i przy dobrym świetle.",
@@ -2839,47 +3107,112 @@ const HOMR_ERR = {
   timeout: "Odczyt trwał za długo. Spróbuj jeszcze raz.",
   busy: "Trwa już inny odczyt. Poczekaj chwilę."
 };
-async function readOnDevice(pages, signal) {
-  let rec = await getRecognizer().catch(e => { recognizer = null; throw new Error(e && /memory|wasm|WebAssembly/i.test(e.message) ? HOMR_ERR.worker_lost : "Nie udało się uruchomić odczytu na tym urządzeniu. Odśwież stronę i spróbuj jeszcze raz."); });
-  const xmls = [], lines = [], texts = [];
-  for (let i = 0; i < pages.length; i++) {
-    const pre = pages.length > 1 ? `Strona ${i + 1} z ${pages.length}: ` : "";
-    const blob = dataUrlToBlob(pages[i].big);
-    const progress = ({ stage, done, total }) => {
-      if (stage === "models") {
-        ck("ck1", "now");
-        if (total > 1e6 && done < total) { $("#ck1-t").textContent = `Pobieranie modelu: ${Math.round(done / 1048576)} z ${Math.round(total / 1048576)} MB`; bar(done / total); }
-      } else if (stage === "segment" || stage === "detect" || stage === "dewarp") {
-        ck("ck1", "ok"); $("#ck1-t").textContent = "Przygotowanie"; ck("ck2", "now"); $("#ck2-t").textContent = pre + "Szukanie pięciolinii"; bar(null);
-      } else if (stage === "staff") {
-        ck("ck2", "ok"); ck("ck3", "now"); $("#ck3-t").textContent = `${pre}Odczytywanie nut: pięciolinia ${Math.min(done + 1, total)} z ${total}`; bar(total ? (i + done / total) / pages.length : null);
-      } else if (stage === "ocr") { ck("ck3", "now"); $("#ck3-t").textContent = `${pre}Odczytywanie napisów (tempo, określenia)`; bar(total ? done / total : null); }
-      else if (stage === "xml") { ck("ck3", "now"); }
-    };
-    /* the reader also reads the text above each staff: tempo, rit., a tempo, rehearsal letters (see attachTexts) */
-    let r = await rec.recognizePage(blob, { ocr: true, signal, onProgress: progress });
-    // some graphics chips give WebGPU results that are wrong rather than slow: retry once on the CPU
-    if (!r.ok && rec.backend === "webgpu" && (r.error === "not_music" || r.error === "engine_failed" || r.error === "worker_lost")) {
-      rec = await getRecognizer("wasm-threads");
-      r = await rec.recognizePage(blob, { ocr: true, signal, onProgress: progress });
-      if (r.ok) store.set("homrPrefer", "wasm-threads");
-    }
-    if (!r.ok) {
-      if (r.error === "cancelled") { const e = new Error("cancelled"); e.name = "AbortError"; throw e; }
-      if (r.error === "worker_lost") recognizer = null;
-      throw new Error((pages.length > 1 ? `Strona ${i + 1}: ` : "") + (HOMR_ERR[r.error] || HOMR_ERR.engine_failed));
-    }
-    xmls.push(r.musicXml); texts.push({ page: i, staves: r.staves || [], texts: r.texts || [] });
-    try {      /* T16: where each line sits on the photo, to show it next to the bar later */
-      const im = await loadImage(pages[i].big);
-      (r.staves || []).slice().sort((a, b) => a.index - b.index).forEach(s => lines.push({ page: i, cx: s.cx, cy: s.cy, w: s.w, h: s.h, W: im.naturalWidth, H: im.naturalHeight }));
-    } catch {}
+/* what went wrong, in words that fit the cause (R22, B-20) */
+function readErrText(code, log, ctx) {
+  const mem = /memory|Aborted\(|allocat|RangeError|OOM/i.test(log);
+  if (code === "worker_lost" || (code === "engine_failed" && mem)) {
+    if (ctx.hidden) return "Odczyt przerwał się, bo Solo było w tle. Zostaw Solo na ekranie i spróbuj jeszcze raz.";
+    if (!mem && /did not load|import|fetch|404|protocol|could not be read/i.test(log)) return "Nie udało się uruchomić odczytu. Odśwież stronę i spróbuj jeszcze raz.";
+    return HOMR_ERR.worker_lost;
   }
+  if (code === "timeout" && ctx.stage === "models") return "Pobieranie modelu się zatrzymało. Sprawdź internet i spróbuj jeszcze raz.";
+  return HOMR_ERR[code] || HOMR_ERR.engine_failed;
+}
+/* the extra CPU models (about 110 MB) are not fetched over mobile data without asking (R7) */
+const metered = () => { const c = navigator.connection; return !!c && (!!c.saveData || c.type === "cellular"); };
+/* one page, with a watchdog: no progress for STALL_MS stops it as "timeout" */
+function recognizeWatched(rec, blob, signal, onProgress) {
+  const ctl = new AbortController(); let dog = 0;
+  const pet = () => { clearTimeout(dog); dog = setTimeout(() => ctl.abort(Object.assign(new Error("no progress"), { name: "TimeoutError" })), STALL_MS); };
+  const stop = () => ctl.abort(signal.reason);
+  if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
+  pet();
+  return rec.recognizePage(blob, { ocr: true, signal: ctl.signal, onProgress: p => { pet(); onProgress(p); } })
+    .finally(() => { clearTimeout(dog); signal.removeEventListener("abort", stop); });
+}
+async function readPage(pg, i, n, signal, ctx) {
+  const pre = n > 1 ? `Strona ${i + 1} z ${n}: ` : "";
+  const fail = msg => { const e = new Error((n > 1 ? `Strona ${i + 1}: ` : "") + msg); e.page = pg; return e; };
+  let lastUi = 0;
+  const progress = ({ stage, done, total }) => {
+    ctx.stage = stage;
+    if (stage === "models") {
+      const now = Date.now(); if (now - lastUi < 100 && done < total) return; lastUi = now;      // at most 10 a second (R15)
+      ck("ck1", "now");
+      if (total > 1e6 && done < total) { $("#ck1-t").textContent = `${store.get("modelReady") ? "Wczytywanie" : "Pobieranie"} modelu: ${Math.round(done / 1048576)} z ${Math.round(total / 1048576)} MB`; bar(done / total); }
+    } else if (stage === "segment" || stage === "detect" || stage === "dewarp") {
+      ck("ck1", "ok"); $("#ck1-t").textContent = "Przygotowanie"; ck("ck2", "now"); $("#ck2-t").textContent = pre + "Szukanie pięciolinii"; bar(null);
+    } else if (stage === "staff") {
+      $("#ck1-t").textContent = "Przygotowanie"; ck("ck2", "ok"); ck("ck3", "now"); $("#ck3-t").textContent = `${pre}Odczytywanie nut: pięciolinia ${Math.min(done + 1, total)} z ${total}`; bar(total ? (i + done / total) / n : null);
+    } else if (stage === "ocr") { $("#ck1-t").textContent = "Przygotowanie"; ck("ck3", "now"); $("#ck3-t").textContent = `${pre}Odczytywanie napisów (tempo, określenia)`; bar(total ? done / total : null); }
+    else if (stage === "xml") { ck("ck3", "now"); }
+  };
+  const blob = await pageBlob(pg);
+  let again = 0;
+  for (;;) {
+    const rec = await getRecognizer(ctx.prefer, signal);
+    /* the reader also reads the text above each staff: tempo, rit., a tempo, rehearsal letters (see attachTexts) */
+    const r = await recognizeWatched(rec, blob, signal, progress);
+    if (r.ok) {
+      if (rec.backend === "webgpu") store.set("homrGpuOk", "1");
+      if (ctx.prefer) { store.set("homrPrefer", ctx.prefer); store.set("homrPreferAt", String(Date.now())); }
+      const xml = r.musicXml || "";
+      return { xml, staves: r.staves || [], texts: r.texts || [], empty: !/<note\b/.test(xml) };
+    }
+    if (r.error === "cancelled") { dropRecognizer(); throw abortError(); }        // the worker may still be busy: a new one next time
+    const log = String(r.log || "");
+    if (r.error !== "not_music" && r.error !== "bad_input") dropRecognizer();     // stuck, lost or failed: never used again
+    /* some graphics chips give WebGPU results that are wrong rather than slow: the CPU, once. A "no staves" from a
+       WebGPU that has read well here before is believed. */
+    const gpuDoubt = rec.backend === "webgpu" && !ctx.prefer && r.error === "not_music" && !store.get("homrGpuOk");
+    /* several pages: a cover is the likelier cause; the CPU only if no page reads on WebGPU (readOnDevice) */
+    if (gpuDoubt && n > 1 && !ctx.retryDoubts) return { xml: "", staves: [], texts: [], empty: true, gpuDoubt: true };
+    if (rec.backend === "webgpu" && !ctx.prefer && (r.error === "engine_failed" || gpuDoubt)) {
+      if (metered()) throw fail("Na tym urządzeniu odczyt potrzebuje jeszcze ok. 110 MB. Połącz się z Wi-Fi i spróbuj jeszcze raz.");
+      ctx.prefer = "wasm-threads"; continue;
+    }
+    /* a failed engine (often out of memory after several pages) gets one more go, started afresh */
+    if ((r.error === "engine_failed" || r.error === "worker_lost" || r.error === "busy") && again++ < 1) continue;
+    if (r.error === "not_music" && n > 1) return { xml: "", staves: [], texts: [], empty: true };    // a cover or a page of text (B-14)
+    throw fail(readErrText(r.error, log, ctx));
+  }
+}
+async function readOnDevice(pages, signal) {
+  const ctx = { prefer: null, hidden: document.hidden, stage: "", retryDoubts: false };
+  const onVis = () => { if (document.hidden) ctx.hidden = true; };
+  document.addEventListener("visibilitychange", onVis);
+  try {
+    await prefetchReader(signal);
+    let fresh = 0;
+    for (let i = 0; i < pages.length; i++) {
+      const pg = pages[i]; if (pg.res) continue;
+      /* phones: a new engine every 4 pages gives its memory back (all models stay loaded otherwise, R8) */
+      if (fresh >= 4 && hasNativeCamera()) { dropRecognizer(); fresh = 0; }
+      $("#read-img").src = pg.keep;
+      pg.res = await readPage(pg, i, pages.length, signal, ctx); fresh++;
+      savePendingSoon();
+      /* every page so far "without staves" on a WebGPU that never read well here: try them again on the CPU */
+      if (i === pages.length - 1 && !ctx.retryDoubts && pages.every(p => p.res && p.res.empty) && pages.some(p => p.res.gpuDoubt) && !store.get("homrGpuOk")) {
+        ctx.retryDoubts = true; pages.forEach(p => { if (p.res.gpuDoubt) p.res = null; }); i = -1;
+      }
+    }
+  } finally { document.removeEventListener("visibilitychange", onVis); }
   store.set("modelReady", "1");
+  const used = pages.filter(p => p.res && !p.res.empty), skipped = pages.map((p, i) => p.res && p.res.empty ? i + 1 : 0).filter(Boolean);
+  if (!used.length) { const e = new Error(HOMR_ERR.not_music); if (pages.length === 1) e.page = pages[0]; throw e; }
+  const lines = [], texts = [];
+  used.forEach((p, k) => {
+    texts.push({ page: k, staves: p.res.staves, texts: p.res.texts });
+    /* T16: where each line sits on the photo, to show it next to the bar later */
+    p.res.staves.slice().sort((a, b) => a.index - b.index).forEach(s => lines.push({ page: k, cx: s.cx, cy: s.cy, w: s.w, h: s.h, W: p.W, H: p.H }));
+  });
   const names = new Set((await DB.all().catch(() => [])).map(p => p.title));
-  let title = "Nowe nuty", n = 2; while (names.has(title)) title = "Nowe nuty " + n++;
-  const checked = checkReading(attachTexts(homrToSolo(xmls, title), texts), readAnswers());
-  return { title, composer: "", xml: checked.xml, sourceType: "device", images: pages.map(p => p.keep), lines, aiJson: null, issues: checked.issues, instrument: "" };
+  let title = "Nowe nuty", k = 2; while (names.has(title)) title = "Nowe nuty " + k++;
+  const checked = checkReading(attachTexts(homrToSolo(used.map(p => p.res.xml), title), texts), readAnswers());
+  /* the instrument from the profile (not "Instrument" with nothing chosen), unless it is a keyboard (B-17) */
+  const ins = mainInstr();
+  return { title, composer: "", xml: checked.xml, sourceType: "device", images: used.map(p => p.keep), lines, aiJson: null, issues: checked.issues,
+    instrument: ins && !PIANO_RE.test(ins.name) ? ins.name : "", skipped };
 }
 $("#btn-cancel-read").addEventListener("click", () => readCtl && readCtl.abort());
 
@@ -3524,7 +3857,7 @@ async function openShared() {
   const sort = store.get("sort", "opened"); if ([...$("#lib-sort").options].some(o => o.value === sort)) $("#lib-sort").value = sort;
   history.replaceState({ v: null }, "");
   setupHero(); measureGlyphs(); setPlayUi(false); drawPending();
-  migrateExample(); openShared();
+  migrateExample(); restorePending().finally(openShared);          // pages left unread last time first, then a shared file
   show("home");
   if (!store.get("welcomed")) {
     DB.all().then(all => { if (!all.length) $("#welcome").hidden = false; else store.set("welcomed", "1"); }).catch(e => console.warn(e));   // unreadable is not "new here"
