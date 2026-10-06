@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.0";
+const VERSION = "4.1";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -3701,7 +3701,13 @@ $("#in-backup").addEventListener("change", async e => {
   syncSettings(); if (prefs && typeof renderProfile === "function") renderProfile();
 });
 
-const NEWS = { "4.0": ["Nowy, jasny wygląd, ekran startowy i nowa ikona Solo.",
+const NEWS = { "4.1": ["Zmiana metrum sama przestawia nuty do nowych taktów (z łukami przez kreskę taktową).",
+  "Metrum ustawiasz kropkami uderzeń i wartością nuty, wszędzie tak samo; w metronomie suwak tempa i nazwy temp.",
+  "Edycja: zakładka Utwór (tonacja, klucz z ikonką, metrum, takty), Anuluj obok Gotowe, panel przyklejony do dołu ekranu.",
+  "Dolne paski na całą szerokość ekranu, mniej powiadomień.",
+  "Dodawanie kolejnej strony: aparat, galeria albo plik. Pomoc w odczycie jako proste przyciski.",
+  "Odczyt na telefonie z małą pamięcią próbuje ponownie w trybie oszczędnym."],
+  "4.0": ["Nowy, jasny wygląd, ekran startowy i nowa ikona Solo.",
   "Nuty jako strona A4, cztery takty w linii.",
   "Edytuj i Gotowe, cofnij i ponów na górze. Edycja zaczyna się od Taktu: metrum, klucz każdej partii, tonacja utworu.",
   "Dowolne metrum (np. 5/4, 7/8, 3+2+2/8) w nowej melodii, w edycji i w metronomie. Po zmianie metrum nuty same przechodzą do nowych taktów.",
