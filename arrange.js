@@ -363,7 +363,8 @@ function chordVoiceXml(xml, partId, nth = 1) {
 const SCALE_ST = [0, 2, 4, 5, 7, 9, 11];
 const idxMidi = (idx, fifths) => { const st = STEP_N[((idx % 7) + 7) % 7]; return 12 * (Math.floor(idx / 7) + 1) + SCALE_ST[STEP_I[st]] + keyAlter(fifths, st); };
 function strongOnsets(beats, bt) {
-  if (bt === 8 && beats % 3 === 0 && beats > 3) return [0, 1.5 * Math.floor(beats / 6) * 2].filter((v, i, a) => a.indexOf(v) === i);  // 6/8: 1 and 4
+  /* compound metres: a beat is a dotted quarter; 6/8 → 1 and 4, 12/8 → 1 and 7, 9/8 → 1 only */
+  if (bt === 8 && beats % 3 === 0 && beats > 3) return beats % 6 === 0 ? [0, 1.5 * beats / 6] : [0];
   if (beats === 4 && bt === 4) return [0, 2];
   if (bt === 2 && beats === 2) return [0, 2];
   return [0];

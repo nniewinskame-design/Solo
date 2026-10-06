@@ -867,11 +867,13 @@ function canvasToJpeg(srcCanvasOrImg, maxEdge, q) {
      for a lone 16th; chord notes are beamed through their first note */
 const BEAMABLE = { eighth: 1, "16th": 2, "32nd": 3, "64th": 4 };
 function beamPlan(beats, bt) {
-  const compound = bt === 8 && beats % 3 === 0 && beats > 3;
-  if (bt === 8 && beats <= 3) return { beat: beats * 0.5, compound: false, whole: true };          // 3/8, 2/8: one group (in quarters)
-  if (compound) return { beat: 1.5, compound: true };
+  /* x/16 beams like x/8 at half the size (12/16 in dotted eighths, 3/16 one group) */
+  const u = bt === 16 ? 0.5 : 1, b8 = bt === 8 || bt === 16, compound = b8 && beats % 3 === 0 && beats > 3;
+  if (b8 && beats <= 3) return { beat: beats * 0.5 * u, compound: false, whole: true };          // 3/8, 2/8: one group (in quarters)
+  if (compound) return { beat: 1.5 * u, compound: true };
   if (bt === 2) return { beat: 2 };
-  if (bt === 8) return { beat: 0.5, groups: beats === 7 ? [1, 1, 1.5] : beats === 5 ? [1, 1.5] : null };
+  /* 5/8 = 3+2, 7/8 = 2+2+3 (§2) */
+  if (b8) { const g = beats === 7 ? [1, 1, 1.5] : beats === 5 ? [1.5, 1] : null; return { beat: u, groups: g && g.map(x => x * u) }; }
   return { beat: 4 / bt };
 }
 function autoBeam(doc) {
