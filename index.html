@@ -487,26 +487,37 @@
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-tuner-t">Stroik</h2><button class="done" data-close>Gotowe</button></div>
   <div class="host" id="tuner-sheet-host"><div id="tuner-ui">
-  <div class="tuner2" id="tuner2" data-st="off">
-    <div class="tn-top">
-      <div class="tn-note"><b id="t-note">–</b><span id="t-oct"></span></div>
-      <div class="tn-read"><b id="t-cents"></b><small id="t-hz">Zagraj długi dźwięk</small></div>
+  <div class="tuner2 lx" id="tuner2" data-st="off">
+    <div class="lx-glow" aria-hidden="true"></div>
+    <div class="lx-stage tn-stage">
+      <canvas class="lx-orb" id="t-orb" aria-hidden="true"></canvas>
+      <div class="tn-top">
+        <div class="tn-note"><b id="t-note">–</b><span id="t-oct"></span></div>
+        <div class="tn-read"><b id="t-cents" aria-live="polite"></b></div>
+      </div>
     </div>
+    <small class="tn-hz" id="t-hz">Zagraj długi dźwięk</small>
     <div class="tn-meter" aria-hidden="true">
       <div class="tn-zones" id="t-zones"></div>
       <div class="tn-ticks"><i></i><i></i><i></i><i></i><i class="c"></i><i></i><i></i><i></i><i></i></div>
       <div class="tn-dot" id="t-dot"></div>
       <div class="tn-scale"><span>−50</span><span>za nisko</span><span>0</span><span>za wysoko</span><span>+50</span></div>
     </div>
-    <canvas class="tn-trace" id="t-trace" aria-label="Wykres dźwięku z ostatnich sekund"></canvas>
+    <canvas class="tn-trace" id="t-trace" aria-hidden="true"></canvas>
     <button class="btn primary wide" id="t-go"><svg class="i"><use href="#mic"/></svg><span>Włącz stroik</span></button>
-    <p class="note">Stroik słucha przez mikrofon tylko na tym urządzeniu i niczego nie nagrywa.</p>
+    <p class="note tn-priv">Stroik słucha tylko na tym urządzeniu i niczego nie nagrywa.</p>
   </div>
-  <h3 class="lbl">Strój instrumentu</h3>
-  <div class="seg" id="t-instr"><button data-tr="0">C</button><button data-tr="2">B</button><button data-tr="9">Es</button><button data-tr="7">F</button></div>
-  <h3 class="lbl">Dokładność</h3>
-  <div class="seg three" id="t-tol"><button data-tol="10">±10 ¢</button><button data-tol="5">±5 ¢</button><button data-tol="3">±3 ¢</button></div>
-  <div class="list"><div class="li"><span class="grow"><b>A</b></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><span class="unit">Hz</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
+  <details class="lx-set" id="t-set">
+    <summary><span class="ic"><svg class="i"><use href="#sliders"/></svg></span><span class="grow"><b>Ustawienia stroika</b><small id="t-set-sum"></small></span><svg class="i chev"><use href="#down"/></svg></summary>
+    <div class="lx-set-body">
+      <h3 class="lbl">Strój instrumentu</h3>
+      <div class="seg" id="t-instr"><button data-tr="0">C</button><button data-tr="2">B</button><button data-tr="9">Es</button><button data-tr="7">F</button></div>
+      <h3 class="lbl">Dokładność</h3>
+      <div class="seg three" id="t-tol"><button data-tol="10">±10 ¢</button><button data-tol="5">±5 ¢</button><button data-tol="3">±3 ¢</button></div>
+      <h3 class="lbl">Strój A</h3>
+      <div class="list"><div class="li"><span class="grow"><b>A</b></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><span class="unit">Hz</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
+    </div>
+  </details>
   </div></div>
 </div>
 

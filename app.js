@@ -115,9 +115,10 @@ function tabShown(v, from) {
   $$("#tabbar [data-tab]").forEach(b => b.toggleAttribute("aria-current", b.dataset.tab === v));
   placeSlide();
   if (from === "tunerv" && v !== "tunerv" && (tuner.on || tuner.starting)) tunerStop();
-  if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on && from !== v) tunerAuto(); }
+  if (v === "tunerv") { $("#tuner-tab-host").appendChild($("#tuner-ui")); syncTuner(); tnOrb(); if (!tuner.on && from !== v) tunerAuto(); }
   if (v === "metrov") { $("#metro-tab-host").appendChild($("#metro-ui")); buildToolsSheet(); }
   if (v === "settings" && typeof renderProfile === "function") renderProfile();
+  if (v === "settings" && typeof syncOwn === "function") syncOwn();
   if (v === "settings" && NEWS[VERSION]) { store.set("newsSeen", VERSION); $('#tabbar [data-tab="settings"]')?.classList.remove("dot"); }
 }
 /* the brass slide pill sits behind the current tab and glides to the next one (the one "you are here" mark) */
@@ -3666,6 +3667,8 @@ function syncTuner() {
   $("#t-zones").style.background = `linear-gradient(90deg, var(--tn-far) 0%, var(--tn-far) ${pc(-15)}%, var(--tn-near) ${pc(-15)}%, var(--tn-near) ${pc(-z)}%, var(--tn-ok) ${pc(-z)}%, var(--tn-ok) ${pc(z)}%, var(--tn-near) ${pc(z)}%, var(--tn-near) ${pc(15)}%, var(--tn-far) ${pc(15)}%)`;
   $("#t-zones").style.opacity = ".28";
   $("#t-go").innerHTML = `${icon(tuner.on ? "stop" : "mic")}<span>${tuner.on ? "Wyłącz stroik" : "Włącz stroik"}</span>`;
+  const letterPc = ((tuner.tr % 12) + 12) % 12, sum = $("#t-set-sum");
+  if (sum) sum.textContent = `Strój ${({ 0: "C", 2: "B", 9: "Es", 7: "F" })[letterPc] || "C"} · ±${tuner.tol} ¢ · A ${tuner.a4} Hz`;
 }
 /* Pitch of one sound: McLeod Pitch Method (normalised autocorrelation), the method used by good tuners.
    It does not depend on how loud the sound is (phones give a quiet signal when auto-gain is off),
@@ -3825,6 +3828,9 @@ function tunerAnalyse(t) {
   }
   tuner.paused = false;
   tuner.an.getFloatTimeDomainData(tuner.buf);
+  /* loudness for the orb: RMS in dB, −60 dB → 0, −10 dB → 1 */
+  let sq = 0; const b = tuner.buf; for (let i = 0; i < b.length; i++) sq += b[i] * b[i];
+  tuner.lvl = Math.min(1, Math.max(0, (20 * Math.log10(Math.sqrt(sq / b.length) + 1e-9) + 60) / 50));
   const f = detectPitch(tuner.buf, tuner.ctx.sampleRate, 27, 1400);
   if (!(f > 0) || detectPitch.clarity < (tuner.shown === null ? 0.9 : 0.85)) { tuner.trace.push({ t, c: null }); return; }
   tuner.hist.push(f); if (tuner.hist.length > 5) tuner.hist.shift();
@@ -3844,6 +3850,7 @@ const tn = { els: null, W: 0, sized: false, cs: null, csAt: 0, txt: new Map() };
 function tnEls() {
   if (tn.els) return tn.els;
   tn.els = { box: $("#tuner2"), note: $("#t-note"), oct: $("#t-oct"), cents: $("#t-cents"), hz: $("#t-hz"), dot: $("#t-dot"), meter: $(".tn-meter"), cv: $("#t-trace") };
+  tnOrb();
   if (window.ResizeObserver) new ResizeObserver(() => { tn.sized = false; }).observe(tn.els.box);
   return tn.els;
 }
@@ -3853,6 +3860,20 @@ const tnText = (el, v) => { if (tn.txt.get(el) !== v) { tn.txt.set(el, v); el.te
 function writtenName(midi, tr = tuner.tr) {
   const w = midi + tr, oct = Math.floor(w / 12) - 1;
   return { name: NOTE_PL[((w % 12) + 12) % 12], oct: OCTAVE_NAMES[oct] || "" };
+}
+/* the listening orb behind the note (orb.js): sky, leaning flat/sharp, green with a ring once in tune
+   (enter at the chosen accuracy, leave 3 cents wider, "locked" after 300 ms, so it does not flicker) */
+function tnOrb() {
+  if (!tn.orb && typeof createOrb === "function" && $("#t-orb")) tn.orb = createOrb($("#t-orb"), { hue: "sky", drift: "x", hollow: true });
+  return tn.orb;
+}
+function tnOrbFrame(t, held, live, c) {
+  const o = tnOrb(); if (!o) return;
+  o.setLevel(tuner.on && !tuner.paused ? tuner.lvl || 0 : 0);
+  o.setTune(held ? c : null);
+  const inTune = live && Math.abs(c) <= (tuner.inTune ? tuner.tol + 3 : tuner.tol);
+  if (inTune !== !!tuner.inTune) { tuner.inTune = inTune; tuner.inTuneAt = t; }
+  o.setState(!tuner.on || !held ? "idle" : inTune && t - tuner.inTuneAt >= 300 ? "ok" : Math.abs(c) > 15 ? "far" : "listening");
 }
 function tunerLoop(t) {
   if (!tuner.on) return;
@@ -3875,6 +3896,7 @@ function tunerLoop(t) {
   if (!tn.sized) { tn.sized = true; tn.W = E.meter ? E.meter.clientWidth : 0; }
   const target = held ? Math.max(-50, Math.min(50, c)) / 50 * (tn.W / 2 - 23) : 0, nx = tuner.x + (target - tuner.x) * 0.22;
   if (Math.abs(nx - tuner.x) > 0.05 || !held) { tuner.x = nx; E.dot.style.transform = `translateX(${tuner.x.toFixed(1)}px)`; }
+  tnOrbFrame(t, held, live, c);
   drawTrace(t);
 }
 function drawTrace(t) {
@@ -3901,7 +3923,8 @@ function tunerStop(keepMic) {
   try { tuner.ctx && tuner.ctx.close(); } catch {} releaseMic(keepMic);
   tuner.stream = tuner.ctx = null; tuner.shown = null; tuner.trace = []; tuner.paused = false; tn.txt.clear(); $("#tuner2").dataset.st = "off";
   $("#t-note").textContent = "–"; $("#t-oct").textContent = ""; $("#t-cents").textContent = ""; $("#t-hz").textContent = "";
-  $("#t-dot").style.transform = ""; tuner.x = 0; drawTrace(performance.now()); syncTuner();
+  $("#t-dot").style.transform = ""; tuner.x = 0; tuner.lvl = 0; tuner.inTune = false; drawTrace(performance.now()); syncTuner();
+  if (tn.orb) { tn.orb.setLevel(0); tn.orb.setTune(null); tn.orb.setState("idle"); }
   if (!playState && !metro.on) { try { wakeLock?.release(); } catch {} wakeLock = null; }
 }
 $("#t-go").addEventListener("click", () => (tuner.on || tuner.starting) ? tunerStop() : tunerStart());
@@ -3910,7 +3933,7 @@ $$("#t-tol button").forEach(b => b.addEventListener("click", () => { tuner.tol =
 const setA4 = v => { tuner.a4 = Math.max(430, Math.min(450, v)); store.set("tunerA4", tuner.a4); syncTuner(); };
 $("#t-a-down").addEventListener("click", () => setA4(tuner.a4 - 1));
 $("#t-a-up").addEventListener("click", () => setA4(tuner.a4 + 1));
-function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerAuto(); }
+function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); tnOrb(); if (!tuner.on) tunerAuto(); }
 /* the tuner shown: it listens by itself only when that cannot bring up a permission prompt; otherwise one tap on
    "Włącz stroik" (the person decides when the phone asks) */
 async function tunerAuto() {

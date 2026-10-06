@@ -80,6 +80,46 @@
 .ownf.lx .of-tile:active{transform:scale(.96)}
 .ownf.lx .of-tile.ok{background:var(--lx-lime-tint);color:var(--lx-lime-ink)}
 
+/* ---------- tuner: the same stage, the note name inside the orb ---------- */
+.tuner2.lx{position:relative;background:none;padding:4px 0 0;gap:10px;align-items:center;border-radius:0}
+.tuner2.lx::before{display:none}                    /* the orb and its glow carry the state now */
+.tuner2.lx > .lx-glow{left:50%;top:-8%;width:min(130vw,640px);aspect-ratio:1;transform:translateX(-50%);background:radial-gradient(closest-side,color-mix(in oklab,var(--lx-sky) 14%,transparent),transparent);animation:lx-breathe 4s ease-in-out infinite alternate}
+.tuner2.lx[data-st="ok"] > .lx-glow{background:radial-gradient(closest-side,color-mix(in oklab,var(--lx-ok) 16%,transparent),transparent)}
+.tn-stage{width:min(82vw,340px,46dvh)}
+#sh-tuner .tn-stage{width:min(64vw,260px,36dvh)}
+.tuner2.lx .tn-top{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:0;pointer-events:none}
+.tuner2.lx .tn-note{flex-direction:column;align-items:center;gap:0}
+.tuner2.lx .tn-note b{font:700 clamp(64px,24vw,96px)/1 var(--display,var(--sans));letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.tuner2.lx .tn-note span{font-size:13px;color:var(--lx-text-2);min-height:1.2em}
+.tuner2.lx .tn-read{align-items:center;text-align:center}
+.tuner2.lx .tn-read b{font:600 22px/1.2 var(--sans);font-variant-numeric:tabular-nums;color:var(--lx-text-2);min-height:1.2em}
+.tuner2.lx[data-st="ok"] .tn-read b,.tuner2.lx[data-st="ok"] .tn-note b{color:var(--lx-ok-ink)}
+.tn-hz{display:block;text-align:center;color:var(--lx-text-3);font-size:14px;font-variant-numeric:tabular-nums;min-height:1.3em}
+.tuner2.lx .tn-meter{width:min(86vw,360px);height:52px}
+.tuner2.lx .tn-zones{top:22px;height:6px;border-radius:3px}
+.tuner2.lx .tn-ticks{top:16px;height:18px}
+.tuner2.lx .tn-ticks i{display:none}
+.tuner2.lx .tn-ticks i.c{display:block;height:18px;width:2px;opacity:.35;background:var(--lx-text)}
+.tuner2.lx[data-st] .tn-dot{top:4px;height:42px;background:transparent;border:0;box-shadow:none;opacity:1;display:flex;justify-content:center}
+.tuner2.lx .tn-dot::after{content:"";width:3px;height:42px;border-radius:2px;background:var(--lx-text-3);opacity:.4;transition:background-color 200ms,opacity 300ms}
+.tuner2.lx[data-st="ok"] .tn-dot::after{background:var(--lx-ok);opacity:1}
+.tuner2.lx[data-st="near"] .tn-dot::after{background:var(--tn-near,#C98A12);opacity:1}
+.tuner2.lx[data-st="far"] .tn-dot::after{background:var(--tn-far,#C93A2E);opacity:1}
+.tuner2.lx .tn-scale{font-size:11px}
+.tuner2.lx .tn-trace{display:none}
+.tuner2.lx #t-go{max-width:360px}
+.tuner2.lx .tn-priv{margin:0;text-align:center;font-size:13px}
+.lx-set{margin-top:20px;border-radius:16px;background:var(--lx-surface);box-shadow:var(--lx-sh-1)}
+.lx-set > summary{list-style:none;display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 16px;cursor:pointer;border-radius:16px}
+.lx-set > summary::-webkit-details-marker{display:none}
+.lx-set > summary .grow{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lx-set > summary small{color:var(--lx-text-3);font-size:13px;font-variant-numeric:tabular-nums}
+.lx-set > summary .chev{transition:transform var(--lx-dur-snappy) var(--lx-spring-snappy)}
+.lx-set[open] > summary .chev{transform:rotate(180deg)}
+.lx-set-body{padding:0 16px 16px}
+.lx-set-body .lbl:first-child{margin-top:4px}
+.lx-set[open] .lx-set-body{animation:lx-fade 180ms var(--lx-ease-out)}
+
 /* ---------- Ja → BRZMIENIA: tiles, the dashed "+" ---------- */
 .lx-over{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:600;color:var(--lx-text-3)}
 .snd-row{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -16px;padding:2px 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
