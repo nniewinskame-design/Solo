@@ -3102,6 +3102,7 @@ $("#ap-go").addEventListener("click", () => {
 });
 /* quick ensembles: duo = melody + second voice, trio = + bass; for the player's own instrument */
 $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
+  if (b.dataset.quick === "canon") return quickCanon();
   try {
     const me = instrById(instrOfPart(melodyPart()));
     let r = addPart(S.piece.xml, me.id, "voice2"), xml = r.xml, ids = [r.id];
@@ -3115,6 +3116,19 @@ $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
   } catch (e) { console.error(e); hud("Nie udało się dopisać partii"); }
 }));
 
+/* Kanon: three voices of the piece's instrument (trombones: Puzon I–III, the third a bass trombone), entering at
+   the distance where they sound best; a tune that does not work as a canon is said so, not written badly */
+function quickCanon() {
+  try {
+    const src = melodyPart(), me = instrById(instrOfPart(src)), plan = canonPlan(S.piece.xml, src, 3);
+    if (!plan) { hud("Ta melodia jest za krótka na kanon", 3000); return; }
+    if (plan.strongBad > 0.1) { hud("Ta melodia nie brzmi dobrze jako kanon", 3500); return; }
+    const third = ["puzon", "puzon-alt"].includes(me.id) ? "puzon-b" : me.id;
+    const r = canonXml(S.piece.xml, src, [me, instrById(third)], plan.d);
+    const xml = orchestrateXml(r.xml);
+    pushUndo(); closeSheetThen(() => { applyNewXml(xml, r.ids[0]); S.parts.forEach(p => { if (r.ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(`Kanon: wejścia co ${plan.d} ${plural(plan.d, "takt", "takty", "taktów")}`); });
+  } catch (e) { console.error(e); hud("Nie udało się zrobić kanonu"); }
+}
 /* "Zmień" a part: pick another instrument or what it plays; the new part takes the old one's place */
 $("#pp-change").addEventListener("click", () => { ap.replace = partSheetId; closeSheetThen(() => openSheet("addpart")); });
 function replacePart(xml, oldId, newId) {

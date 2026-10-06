@@ -698,3 +698,63 @@ function changePartInstr(xml, pid, from, to) {
 function shiftPartOctave(xml, pid, dir, instr) {
   return swapPart(xml, pid, one => { const w = kids(parseXml(transposeXmlString(one, { d: 7 * dir, s: 12 * dir })).documentElement, "part")[0]; if (instr) fitClef(w, instr); return w; });
 }
+
+/* ---------------- canon (round): the same tune, each voice entering a few bars after the previous one ----------------
+   The distance is chosen by ear, mathematically: every 1, 2, 3 or 4 bars, the one where the voices sound together best
+   (strong-beat dissonances weigh most). "Panie Janie" comes out at 2 bars. Earlier voices rest at the end, later ones
+   at the start; every other part (piano) gets empty bars so the score stays aligned. */
+function canonPlan(xml, srcId, n = 3) {
+  const doc = parseXml(xml), src = kids(doc.documentElement, "part").find(p => p.getAttribute("id") === srcId); if (!src) return null;
+  const ev = melodyEvents(src, chordsForBars(xml, srcId)); if (!ev.length) return null;
+  let beats = 4, bt = 4; const t = src.getElementsByTagName("time")[0]; if (t) { beats = parseInt(txt(t, "beats"), 10) || 4; bt = parseInt(txt(t, "beat-type"), 10) || 4; }
+  const barLen = beats * 4 / bt, B = kids(src, "measure").length;
+  const notes = ev.map(e => ({ s: e.bar * barLen + e.on, e: e.bar * barLen + e.on + e.dur, m: e.midi, strong: e.strong, beat: e.beat }));
+  const at = (shift, time) => { const x = notes.find(q => q.s + shift <= time + 1e-6 && time < q.e + shift - 1e-6); return x ? x.m : null; };
+  let best = null;
+  for (let d = 1; d <= 4 && d * (n - 1) < B; d++) {
+    let bad = 0, hits = 0, sHits = 0, sBad = 0;
+    for (let k = 0; k < n; k++) notes.forEach(q => {
+      const time = q.s + k * d * barLen, sound = [];
+      for (let j = 0; j < n; j++) { const m = at(j * d * barLen, time); if (m !== null) sound.push(m); }
+      if (sound.length < 2) return;
+      for (let a = 0; a < sound.length; a++) for (let b = a + 1; b < sound.length; b++) {
+        const iv = Math.abs(sound[a] - sound[b]) % 12; hits++;
+        if (q.strong) { sHits++; if ([1, 2, 6, 10, 11].includes(iv)) sBad++; }
+        if ([1, 2, 6, 10, 11].includes(iv)) bad += q.strong ? 3 : q.beat ? 1 : 0.3;
+        else if (iv === 0) bad += 0.6;                         // the same note: no harmony, the voices only double
+      }
+    });
+    const score = hits ? bad / hits : 9;
+    (canonPlan.all = canonPlan.all || {})[d] = score;
+    if (!best || score < best.score - 1e-9) best = { d, score, strongBad: sHits ? sBad / sHits : 1 };
+  }
+  return best && { ...best, bars: B };
+}
+function restMeasure(doc, part, num) {
+  let div = 1, beats = 4, bt = 4; const a = part.getElementsByTagName("attributes")[0];
+  if (a) { const dv = kid(a, "divisions"); if (dv) div = parseFloat(dv.textContent) || 1; const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || 4; bt = parseInt(txt(t, "beat-type"), 10) || 4; } }
+  const cap = div * 4 * beats / bt, two = /<staves>[2-9]<\/staves>/.test(new XMLSerializer().serializeToString(part).slice(0, 4000));
+  const m = doc.createElement("measure"); m.setAttribute("number", String(num));
+  m.innerHTML = `<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice>${two ? "<staff>1</staff>" : ""}</note>` + (two ? `<backup><duration>${cap}</duration></backup><note><rest measure="yes"/><duration>${cap}</duration><voice>5</voice><staff>2</staff></note>` : "");
+  return m;
+}
+/* voices: instruments for voice 2, 3… (voice 1 is the source part); returns the new score and the new part ids */
+function canonXml(xml, srcId, voices, d) {
+  let out = xml; const ids = [];
+  for (const ins of voices) { const before = new Set(kids(parseXml(out).documentElement, "part").map(p => p.getAttribute("id"))); out = makePart(out, srcId, { role: "melody", instr: ins }); ids.push(kids(parseXml(out).documentElement, "part").map(p => p.getAttribute("id")).find(id => !before.has(id))); }
+  const doc = parseXml(out), root = doc.documentElement, n = voices.length + 1;
+  kids(root, "part").forEach(p => {
+    const k = ids.indexOf(p.getAttribute("id")) + 1;          // 0: the source and every other part
+    const pre = k * d, post = (n - 1 - k) * d, ms = kids(p, "measure");
+    if (pre) {
+      /* the attributes (clef, key, time) and the tempo move to the first, empty bar */
+      const first = ms[0], head = [...first.children].filter(c => c.tagName === "attributes" || c.tagName === "print" || (c.tagName === "direction" && c.getElementsByTagName("sound").length));
+      const rests = Array.from({ length: pre }, () => restMeasure(doc, p, 0));
+      head.reverse().forEach(c => rests[0].insertBefore(c, rests[0].firstChild));
+      rests.forEach(r => p.insertBefore(r, first));
+    }
+    for (let i = 0; i < post; i++) p.appendChild(restMeasure(doc, p, 0));
+    kids(p, "measure").forEach((m, i) => m.setAttribute("number", String(i + 1)));
+  });
+  return { xml: new XMLSerializer().serializeToString(doc), ids };
+}
