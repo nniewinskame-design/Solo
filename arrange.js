@@ -265,38 +265,54 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
 /* chords or bass: one per bar, as long as the bar, in the key's main triads (chordsForBars) */
 /* instruments that play chords (stacked notes); every other one plays a chord one note at a time */
 const POLY = new Set(["fortepian", "organy", "akordeon", "keyboard", "harfa", "gitara", "ukulele", "mandolina", "marimba", "wibrafon"]);
+/* an accompaniment bar keeps its barlines (repeats, voltas, the final double bar), the tempo and the attributes;
+   new notes go before the closing barline */
+function clearBar(m) {
+  [...m.children].filter(c => !["attributes", "print", "barline"].includes(c.tagName) && !(c.tagName === "direction" && c.getElementsByTagName("sound").length)).forEach(c => c.remove());
+  const end = kids(m, "barline").find(b => (b.getAttribute("location") || "right") === "right") || null;
+  return h => { const t = m.ownerDocument.createElement("x"); t.innerHTML = h; [...t.childNodes].forEach(nd => m.insertBefore(nd, end)); };
+}
+/* q quarters as notes (tied when one value cannot hold it: 5/4 = dotted half + half) or rests; pitches: <pitch> xml list */
+function valuesXml(q, div, pitches, voice = 1, staff = "") {
+  const vs = noteValues(q), st = staff ? `<staff>${staff}</staff>` : "";
+  return vs.map(([len, type, dot], i) => {
+    const tie = pitches && vs.length > 1 ? (i ? `<tie type="stop"/>` : "") + (i < vs.length - 1 ? `<tie type="start"/>` : "") : "";
+    const tied = tie ? `<notations>${tie.replace(/<tie /g, "<tied ")}</notations>` : "";
+    const body = `<duration>${len * div}</duration>${tie}<voice>${voice}</voice><type>${type}</type>${dot ? "<dot/>" : ""}${st}`;
+    return pitches ? pitches.map((p, j) => `<note>${j ? "<chord/>" : ""}${p}${body}${tied}</note>`).join("") : `<note><rest/>${body}</note>`;
+  }).join("");
+}
 function chordPartXml(one, srcId, role, mono = false) {
-  const doc = parseXml(one), part = kids(doc.documentElement, "part")[0], chords = chordsForBars(one, srcId); chordPartXml.last = 48;
-  let div = 1, beats = 4, bt = 4, prev = null;
-  kids(part, "measure").forEach((m, i) => {
-    kids(m, "attributes").forEach(a => { const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div; const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; } });
-    [...m.children].filter(c => !["attributes", "print"].includes(c.tagName)).forEach(c => c.remove());
-    const cap = div * 4 * beats / bt, ty = { 16: "whole", 8: "half", 4: "quarter" }[cap / div * 4] || "", dot = [12, 6, 3].includes(cap / div * 4) ? "<dot/>" : "", tyd = ty || { 12: "half", 6: "quarter", 3: "eighth" }[cap / div * 4] || "whole";
+  const doc = parseXml(one), part = kids(doc.documentElement, "part")[0], chords = chordsForBars(one, srcId);
+  let prev = null, last = 48;     // the previous bass note: the next root goes to the nearer octave
+  const P = (p, midi) => `<pitch><step>${p.letter}</step>${p.alter ? `<alter>${p.alter}</alter>` : ""}<octave>${Math.floor((midi - p.alter) / 12) - 1}</octave></pitch>`;
+  barInfo(part).forEach(({ m, div, beats, bt, full, len, pickup }, i) => {
+    const add = clearBar(m), q = len / div;
     const c = chords[i] || prev; prev = c;
-    if (!c) { m.insertAdjacentHTML("beforeend", `<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice></note>`); return; }
+    /* the pickup (§12): the accompaniment waits for the first full bar */
+    if (pickup) { add(valuesXml(q, div, null)); return; }
+    if (!c) { add(`<note><rest measure="yes"/><duration>${len}</duration><voice>1</voice></note>`); return; }
     const rootLof = c.tonicLof + c.lof, pc = l => { const p = lofToPitch(l); return { p, semi: ([0, 2, 4, 5, 7, 9, 11][STEP_I[p.letter]] + p.alter + 12) % 12 }; };
     if (mono && role === "chords") {
       /* a wind or string player breaks the chord: one note per beat, root – 3rd – 5th (– 3rd), close above the
          root, the root moving to the nearer octave (band accompaniment) */
-      const comp = bt === 8 && beats % 3 === 0, bd = comp ? div * 1.5 : div * 4 / bt, nb = Math.max(1, Math.round(cap / bd));
-      const bty = comp ? "quarter" : { 1: "whole", 2: "half", 4: "quarter", 8: "eighth", 16: "16th" }[bt] || "quarter", bdot = comp ? "<dot/>" : "";
+      const comp = bt === 8 && beats % 3 === 0, bq = comp ? 1.5 : 4 / bt, nb = Math.max(1, Math.round(q / bq));
       const tl = [rootLof, rootLof + (c.minor ? -3 : 4), rootLof + 1], r0 = pc(tl[0]).semi;
-      const last = chordPartXml.last ?? 48, root = [36, 48, 60].map(o => o + r0).reduce((a, b) => Math.abs(b - last) < Math.abs(a - last) ? b : a); chordPartXml.last = root;
+      const root = [36, 48, 60].map(o => o + r0).reduce((a, b) => Math.abs(b - last) < Math.abs(a - last) ? b : a); last = root;
       const mid = tl.map((l, k) => { const { p, semi } = pc(l); let midi = root - r0 + semi; if (k && midi <= root) midi += 12; return { p, midi }; });
       const seq = nb === 2 ? [0, 2] : nb === 3 ? [0, 1, 2] : [0, 1, 2, 1, 0, 1, 2, 1].slice(0, nb);
-      seq.forEach(k => { const { p, midi } = mid[k], oct = Math.floor((midi - p.alter) / 12) - 1;
-        m.insertAdjacentHTML("beforeend", `<note><pitch><step>${p.letter}</step>${p.alter ? `<alter>${p.alter}</alter>` : ""}<octave>${oct}</octave></pitch><duration>${bd}</duration><voice>1</voice><type>${bty}</type>${bdot}</note>`); });
+      let left = q; seq.forEach((k, j) => { const d = j === seq.length - 1 ? left : Math.min(bq, left); left -= d; if (d > 1e-6) add(valuesXml(d, div, [P(mid[k].p, mid[k].midi)])); });
       return;
     }
     const tones = role === "bass" ? [rootLof] : [rootLof, rootLof + (c.minor ? -3 : 4), rootLof + 1];
     let base = 48;   // C3: chords from here up (moved into the instrument's range afterwards)
-    tones.forEach((l, k) => {
+    const ps = tones.map((l, k) => {
       const { p, semi } = pc(l); let midi = base + semi; if (k && midi <= base) midi += 12;
       /* the bass (and the chord's root) goes to the nearer octave, so it moves by step or a fourth, not a leap */
-      if (k === 0) { const last = chordPartXml.last ?? 48; midi = [36, 48, 60].map(o => o + semi).reduce((a, b) => Math.abs(b - last) < Math.abs(a - last) ? b : a); chordPartXml.last = midi; base = midi; }
-      const oct = Math.floor((midi - p.alter) / 12) - 1;
-      m.insertAdjacentHTML("beforeend", `<note>${k ? "<chord/>" : ""}<pitch><step>${p.letter}</step>${p.alter ? `<alter>${p.alter}</alter>` : ""}<octave>${oct}</octave></pitch><duration>${cap}</duration><voice>1</voice><type>${tyd}</type>${dot}</note>`);
+      if (k === 0) { midi = [36, 48, 60].map(o => o + semi).reduce((a, b) => Math.abs(b - last) < Math.abs(a - last) ? b : a); last = midi; base = midi; }
+      return P(p, midi);
     });
+    add(valuesXml(q, div, ps));
   });
   return new XMLSerializer().serializeToString(doc);
 }
@@ -371,14 +387,15 @@ function strongOnsets(beats, bt) {
 }
 /* the melody as events: pitch, bar, strong or weak, the bar's chord tones */
 function melodyEvents(part, chords) {
-  let div = 1, beats = 4, bt = 4, fifths = 0; const ev = [];
+  let div = 1, beats = 4, bt = 4, fifths = 0, t0 = 0; const ev = [], bi0 = barInfo(part);
   kids(part, "measure").forEach((m, bi) => {
     kids(m, "attributes").forEach(a => {
       const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
       const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
       const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0;
     });
-    const strong = strongOnsets(beats, bt), unit = bt === 8 && beats % 3 === 0 ? 1.5 : 4 / bt; let pos = 0;
+    /* a pickup bar counts from where it really starts (its first note is not beat 1); t: time from the start */
+    const strong = strongOnsets(beats, bt), unit = bt === 8 && beats % 3 === 0 ? 1.5 : 4 / bt, B = bi0[bi], off = B.pickup ? (B.full - B.len) / B.div : 0; let pos = off;
     const c = chords[bi]; let pcs = null;
     let spell = null;
     if (c) { const r = c.tonicLof + c.lof, ls = [r, r + (c.minor ? -3 : 4), r + 1, ...(c.seventh ? [r - 2] : [])].map(lofToPitch);
@@ -389,9 +406,10 @@ function melodyEvents(part, chords) {
       if (el.tagName !== "note" || kid(el, "chord") || kid(el, "grace")) return;
       if ((txt(el, "voice") || "1") !== "1") return;
       const dur = (parseFloat(txt(el, "duration")) || 0) / div, p = kid(el, "pitch");
-      if (p) ev.push({ el, bar: bi, on: pos, dur, strong: strong.some(s => Math.abs(s - pos) < 1e-6), beat: Math.abs(pos / unit - Math.round(pos / unit)) < 1e-6, midi: midiOf(p), idx: parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")], pcs, spell, fifths, tonicPc: c ? ((SCALE_ST[STEP_I[lofToPitch(c.tonicLof).letter]] + lofToPitch(c.tonicLof).alter) % 12 + 12) % 12 : null });
+      if (p) ev.push({ el, bar: bi, on: pos, t: t0 + pos - off, dur, strong: strong.some(s => Math.abs(s - pos) < 1e-6), beat: Math.abs(pos / unit - Math.round(pos / unit)) < 1e-6, midi: midiOf(p), idx: parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")], pcs, spell, fifths, tonicPc: c ? ((SCALE_ST[STEP_I[lofToPitch(c.tonicLof).letter]] + lofToPitch(c.tonicLof).alter) % 12 + 12) % 12 : null });
       pos += dur;
     });
+    t0 += B.len / B.div;
   });
   return ev;
 }
@@ -588,25 +606,21 @@ function ruledVoiceXml(xml, partId, { third = false, lowMidi = 40, v2Midi = null
    between E2 and E3, nothing low and thick (no thirds below C3). */
 function pianoPartXml(one, srcId) {
   const doc = parseXml(one), part = kids(doc.documentElement, "part")[0], chords = chordsForBars(one, srcId);
-  let div = 1, beats = 4, bt = 4, prev = null, prevTop = 67;
-  const pname = midi => { const pc = ((midi % 12) + 12) % 12, names = ["C", "C", "D", "E", "E", "F", "F", "G", "G", "A", "B", "B"], alts = [0, 1, 0, -1, 0, 0, 1, 0, 1, 0, -1, 0]; return { st: names[pc], al: alts[pc], oc: Math.floor(midi / 12) - 1 }; };
-  const spellIn = (midi, fifths) => { for (const st of STEP_N) { const base = SCALE_ST[STEP_I[st]], al = ((midi % 12) - base + 18) % 12 - 6; if (al === keyAlter(fifths, st)) { const oc = Math.floor((midi - al) / 12) - 1; return { st, al, oc }; } } return pname(midi); };
-  const P = (midi, f) => { const x = spellIn(midi, f); return `<pitch><step>${x.st}</step>${x.al ? `<alter>${x.al}</alter>` : ""}<octave>${x.oc}</octave></pitch>`; };
-  let fifths = 0, first = true;
-  kids(part, "measure").forEach((m, i) => {
+  let prev = null, prevTop = 67, first = true;
+  barInfo(part).forEach(({ m, div, beats, bt, full, len, pickup }, i) => {
     kids(m, "attributes").forEach(a => {
-      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
-      const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0;
       if (first) { kids(a, "clef").forEach(c => c.remove()); const st = doc.createElement("staves"); st.textContent = "2"; a.appendChild(st); a.insertAdjacentHTML("beforeend", `<clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef>`); first = false; }
       else kids(a, "clef").forEach(c => c.remove());
     });
-    [...m.children].filter(c => !["attributes", "print", "barline"].includes(c.tagName) && !(c.tagName === "direction" && c.getElementsByTagName("sound").length)).forEach(c => c.remove());
-    const q = div, cap = div * 4 * beats / bt, c = chords[i] || prev; prev = c;
-    const end = kid(m, "barline"), add = h => { const t = doc.createElement("x"); t.innerHTML = h; [...t.childNodes].forEach(nd => m.insertBefore(nd, end || null)); };
-    if (!c) { add(`<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice><staff>1</staff></note><backup><duration>${cap}</duration></backup><note><rest measure="yes"/><duration>${cap}</duration><voice>5</voice><staff>2</staff></note>`); return; }
-    const r = c.tonicLof + c.lof, pcs = [r, r + (c.minor ? -3 : 4), r + 1].map(l => { const p = lofToPitch(l); return ((SCALE_ST[STEP_I[p.letter]] + p.alter) % 12 + 12) % 12; });
-    if (c.seventh) pcs[2] = (pcs[0] + 10) % 12;                                // V7 without its 5th
+    const add = clearBar(m), q = div, cap = len, c = chords[i] || prev; prev = c;
+    const both = (r, l) => add(r + `<backup><duration>${cap}</duration></backup>` + l);
+    /* the pickup (§12): both hands wait for the first full bar */
+    if (pickup) { both(valuesXml(cap / div, div, null, 1, 1), valuesXml(cap / div, div, null, 5, 2)); return; }
+    if (!c) { both(`<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice><staff>1</staff></note>`, `<note><rest measure="yes"/><duration>${cap}</duration><voice>5</voice><staff>2</staff></note>`); return; }
+    /* the chord's own spelling (G♯ in E major in A minor, E♯ in C♯ major), never the nearest key note */
+    const r = c.tonicLof + c.lof, ls = [r, r + (c.minor ? -3 : 4), c.seventh ? r - 2 : r + 1].map(lofToPitch);   // V7 without its 5th
+    const pcs = ls.map(p => ((SCALE_ST[STEP_I[p.letter]] + p.alter) % 12 + 12) % 12), spell = {}; pcs.forEach((pc, k) => (spell[pc] = ls[k]));
+    const P = midi => { const x = spell[((midi % 12) + 12) % 12]; return `<pitch><step>${x.letter}</step>${x.alter ? `<alter>${x.alter}</alter>` : ""}<octave>${Math.floor((midi - x.alter) / 12) - 1}</octave></pitch>`; };
     /* right hand: the inversion whose top is nearest the previous one, inside C4–C5 */
     let best = null;
     for (let inv = 0; inv < 3; inv++) {
@@ -616,20 +630,23 @@ function pianoPartXml(one, srcId) {
     }
     const rh = best ? best.ch : [60, 64, 67]; prevTop = rh[2];
     let root = 40 + ((pcs[0] - 40) % 12 + 12) % 12, fifth = root + 7; if (fifth > 55) fifth -= 12;
-    const chordXml = (d, t, dot = "") => rh.map((x, j) => `<note>${j ? "<chord/>" : ""}${P(x, fifths)}<duration>${d}</duration><voice>1</voice><type>${t}</type>${dot}<staff>1</staff></note>`).join("");
+    const fifthP = `<pitch><step>${lofToPitch(r + 1).letter}</step>${lofToPitch(r + 1).alter ? `<alter>${lofToPitch(r + 1).alter}</alter>` : ""}<octave>${Math.floor((fifth - lofToPitch(r + 1).alter) / 12) - 1}</octave></pitch>`;
+    const chordXml = (d, t, dot = "") => rh.map((x, j) => `<note>${j ? "<chord/>" : ""}${P(x)}<duration>${d}</duration><voice>1</voice><type>${t}</type>${dot}<staff>1</staff></note>`).join("");
     const rest = (d, t, v, s, dot = "") => `<note><rest/><duration>${d}</duration><voice>${v}</voice><type>${t}</type>${dot}<staff>${s}</staff></note>`;
-    const bass = (x, d, t, dot = "") => `<note>${P(x, fifths)}<duration>${d}</duration><voice>5</voice><type>${t}</type>${dot}<staff>2</staff></note>`;
+    const bass = (x, d, t, dot = "") => `<note>${x === fifth ? fifthP : P(x)}<duration>${d}</duration><voice>5</voice><type>${t}</type>${dot}<staff>2</staff></note>`;
     let R = "", L = "";
-    if (beats === 3 && bt === 4) { R = rest(q, "quarter", 1, 1) + chordXml(q, "quarter") + chordXml(q, "quarter"); L = bass(root, q, "quarter") + rest(2 * q, "half", 5, 2); }
-    else if (beats === 2 && bt === 4) { const e = q / 2; R = rest(e, "eighth", 1, 1) + chordXml(e, "eighth") + rest(e, "eighth", 1, 1) + chordXml(e, "eighth"); L = bass(root, q, "quarter") + bass(fifth, q, "quarter"); }
-    else if (beats === 4 && bt === 4) { R = rest(q, "quarter", 1, 1) + chordXml(q, "quarter") + rest(q, "quarter", 1, 1) + chordXml(q, "quarter"); L = bass(root, 2 * q, "half") + bass(fifth, 2 * q, "half"); }
-    else if (bt === 8 && beats === 6) { const e = q / 2; R = (rest(e, "eighth", 1, 1) + chordXml(e, "eighth") + chordXml(e, "eighth")).repeat(2); L = bass(root, 3 * e, "quarter", "<dot/>") + bass(fifth, 3 * e, "quarter", "<dot/>"); }
-    else { const t = { 4: "whole", 3: "half", 2: "half", 1.5: "quarter" }[cap / div] || "whole", dot = cap / div === 3 || cap / div === 1.5 ? "<dot/>" : ""; R = chordXml(cap, t, dot); L = bass(root, cap, t, dot); }
-    add(R + `<backup><duration>${cap}</duration></backup>` + L);
+    const whole = cap === full;
+    if (whole && beats === 3 && bt === 4) { R = rest(q, "quarter", 1, 1) + chordXml(q, "quarter") + chordXml(q, "quarter"); L = bass(root, q, "quarter") + rest(2 * q, "half", 5, 2); }
+    else if (whole && beats === 2 && bt === 4) { const e = q / 2; R = rest(e, "eighth", 1, 1) + chordXml(e, "eighth") + rest(e, "eighth", 1, 1) + chordXml(e, "eighth"); L = bass(root, q, "quarter") + bass(fifth, q, "quarter"); }
+    else if (whole && beats === 4 && bt === 4) { R = rest(q, "quarter", 1, 1) + chordXml(q, "quarter") + rest(q, "quarter", 1, 1) + chordXml(q, "quarter"); L = bass(root, 2 * q, "half") + bass(fifth, 2 * q, "half"); }
+    else if (whole && bt === 8 && beats === 6) { const e = q / 2; R = (rest(e, "eighth", 1, 1) + chordXml(e, "eighth") + chordXml(e, "eighth")).repeat(2); L = bass(root, 3 * e, "quarter", "<dot/>") + bass(fifth, 3 * e, "quarter", "<dot/>"); }
+    else {         // other metres and a short last bar: one chord over the bar (tied values when one cannot hold it)
+      const rp = rh.map(P); R = valuesXml(cap / div, div, rp, 1, 1); L = valuesXml(cap / div, div, [P(root)], 5, 2);
+    }
+    both(R, L);
   });
   return new XMLSerializer().serializeToString(doc);
 }
-
 /* ---------------- the score as an orchestra ----------------
    Each part remembers its instrument (MusicXML <score-instrument><instrument-name>), so "Puzon III" can be a bass
    trombone. Parts of one section keep the numbers they have; a new or changed part takes the next one, the bass
@@ -717,9 +734,9 @@ function shiftPartOctave(xml, pid, dir, instr) {
 function canonPlan(xml, srcId, n = 3) {
   const doc = parseXml(xml), src = kids(doc.documentElement, "part").find(p => p.getAttribute("id") === srcId); if (!src) return null;
   const ev = melodyEvents(src, chordsForBars(xml, srcId)); if (!ev.length) return null;
-  let beats = 4, bt = 4; const t = src.getElementsByTagName("time")[0]; if (t) { beats = parseInt(txt(t, "beats"), 10) || 4; bt = parseInt(txt(t, "beat-type"), 10) || 4; }
-  const barLen = beats * 4 / bt, B = kids(src, "measure").length;
-  const notes = ev.map(e => ({ s: e.bar * barLen + e.on, e: e.bar * barLen + e.on + e.dur, m: e.midi, strong: e.strong, beat: e.beat }));
+  /* voices enter whole bars apart (a pickup keeps its place before the bar line: times are real, not bar × length) */
+  const bi = barInfo(src), barLen = bi.length > 1 ? bi[1].full / bi[1].div : bi[0].full / bi[0].div, B = bi.length;
+  const notes = ev.map(e => ({ s: e.t, e: e.t + e.dur, m: e.midi, strong: e.strong, beat: e.beat }));
   const at = (shift, time) => { const x = notes.find(q => q.s + shift <= time + 1e-6 && time < q.e + shift - 1e-6); return x ? x.m : null; };
   let best = null;
   for (let d = 1; d <= 4 && d * (n - 1) < B; d++) {
@@ -741,30 +758,53 @@ function canonPlan(xml, srcId, n = 3) {
   }
   return best && { ...best, bars: B };
 }
-function restMeasure(doc, part, num) {
+const twoStaff = part => { const s = part.getElementsByTagName("staves")[0]; return !!s && parseInt(s.textContent, 10) > 1; };
+/* an empty bar (a whole-bar rest); len: a shorter bar (a pickup, or the bar that completes it), in divisions */
+function restMeasure(doc, part, num, len = null) {
   let div = 1, beats = 4, bt = 4; const a = part.getElementsByTagName("attributes")[0];
   if (a) { const dv = kid(a, "divisions"); if (dv) div = parseFloat(dv.textContent) || 1; const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || 4; bt = parseInt(txt(t, "beat-type"), 10) || 4; } }
-  const cap = div * 4 * beats / bt, two = /<staves>[2-9]<\/staves>/.test(new XMLSerializer().serializeToString(part).slice(0, 4000));
+  const cap = div * 4 * beats / bt, two = twoStaff(part);
   const m = doc.createElement("measure"); m.setAttribute("number", String(num));
+  if (len !== null && len < cap - 1e-6) { m.setAttribute("implicit", "yes"); m.innerHTML = valuesXml(len / div, div, null, 1, two ? 1 : "") + (two ? `<backup><duration>${len}</duration></backup>` + valuesXml(len / div, div, null, 5, 2) : ""); return m; }
   m.innerHTML = `<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice>${two ? "<staff>1</staff>" : ""}</note>` + (two ? `<backup><duration>${cap}</duration></backup><note><rest measure="yes"/><duration>${cap}</duration><voice>5</voice><staff>2</staff></note>` : "");
   return m;
 }
-/* voices: instruments for voice 2, 3… (voice 1 is the source part); returns the new score and the new part ids */
+/* rests of q quarters put into a bar: at its start (before the first note) or at its end (before the closing barline) */
+function padBar(m, q, div, atStart, two = false) {
+  const t = m.ownerDocument.createElement("x");
+  t.innerHTML = two ? valuesXml(q, div, null, 5, 2) + `<backup><duration>${q * div}</duration></backup>` + valuesXml(q, div, null, 1, 1) : valuesXml(q, div, null);
+  const ref = atStart ? [...m.children].find(c => ["note", "backup", "forward"].includes(c.tagName)) || null : kids(m, "barline").find(b => (b.getAttribute("location") || "right") === "right") || null;
+  [...t.childNodes].forEach(nd => m.insertBefore(nd, ref));
+  m.removeAttribute("implicit");
+}
+/* voices: instruments for voice 2, 3… (voice 1 is the source part); returns the new score and the new part ids.
+   A pickup keeps its place: a later voice starts with a short empty bar, then whole empty bars, and its pickup sits at
+   the end of a full bar; earlier voices fill their short last bar and the score ends with the short bar (§12). The
+   final double bar moves to the new last bar of every part. */
 function canonXml(xml, srcId, voices, d) {
   let out = xml; const ids = [];
   for (const ins of voices) { const before = new Set(kids(parseXml(out).documentElement, "part").map(p => p.getAttribute("id"))); out = makePart(out, srcId, { role: "melody", instr: ins }); ids.push(kids(parseXml(out).documentElement, "part").map(p => p.getAttribute("id")).find(id => !before.has(id))); }
   const doc = parseXml(out), root = doc.documentElement, n = voices.length + 1;
   kids(root, "part").forEach(p => {
     const k = ids.indexOf(p.getAttribute("id")) + 1;          // 0: the source and every other part
-    const pre = k * d, post = (n - 1 - k) * d, ms = kids(p, "measure");
+    const pre = k * d, post = (n - 1 - k) * d, ms = kids(p, "measure"), bi = barInfo(p);
+    if (!ms.length) return;
+    const F = bi[0].full, first = bi[0], lastI = bi[bi.length - 1], single = !twoStaff(p);
     if (pre) {
       /* the attributes (clef, key, time) and the tempo move to the first, empty bar */
-      const first = ms[0], head = [...first.children].filter(c => c.tagName === "attributes" || c.tagName === "print" || (c.tagName === "direction" && c.getElementsByTagName("sound").length));
-      const rests = Array.from({ length: pre }, () => restMeasure(doc, p, 0));
+      const head = [...ms[0].children].filter(c => c.tagName === "attributes" || c.tagName === "print" || (c.tagName === "direction" && c.getElementsByTagName("sound").length));
+      const rests = Array.from({ length: pre }, (_, i) => restMeasure(doc, p, 0, i === 0 && first.pickup ? first.len : null));
       head.reverse().forEach(c => rests[0].insertBefore(c, rests[0].firstChild));
-      rests.forEach(r => p.insertBefore(r, first));
+      rests.forEach(r => p.insertBefore(r, ms[0]));
+      if (first.pickup && single) padBar(ms[0], (F - first.len) / first.div, first.div, true);
     }
-    for (let i = 0; i < post; i++) p.appendChild(restMeasure(doc, p, 0));
+    if (post) {
+      const shortEnd = lastI.len < lastI.full - 1e-6;
+      if (shortEnd) padBar(lastI.m, (lastI.full - lastI.len) / lastI.div, lastI.div, false, !single);
+      for (let i = 0; i < post; i++) p.appendChild(restMeasure(doc, p, 0, shortEnd && i === post - 1 ? lastI.len : null));
+      const fin = kids(lastI.m, "barline").find(b => (b.getAttribute("location") || "right") === "right" && /light-heavy/.test(txt(b, "bar-style")) && !kid(b, "repeat"));
+      if (fin) kids(p, "measure").pop().appendChild(fin);
+    }
     kids(p, "measure").forEach((m, i) => m.setAttribute("number", String(i + 1)));
   });
   return { xml: new XMLSerializer().serializeToString(doc), ids };
