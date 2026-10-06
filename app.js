@@ -2885,6 +2885,12 @@ async function openXmlFile(f) {
     openPiece({ xml, sourceType: "file", title, composer: null });
   } catch (err) { console.error(err); hud(err.message || "Nie udało się otworzyć pliku.", 4000); }
 }
+/* the browser closed Solo while it was reading (out of memory): say so once, and read the low-memory way next time */
+(() => {
+  const at = +store.get("homrReading", 0); if (!at) return;
+  store.del("homrReading");
+  if (Date.now() - at < 30 * 60e3) { store.set("homrLowMem", "1"); setTimeout(() => hud("Telefon zamknął Solo w trakcie odczytu. Następny odczyt pójdzie w trybie oszczędnym. Najlepiej po jednej stronie.", 7000), 1500); }
+})();
 const newPageId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 async function makePage(src) {
   const { blob, W, H } = await canvasToJpegBlob(src, 2400, 0.9);
@@ -3488,10 +3494,14 @@ async function readPage(pg, i, n, signal, ctx) {
     throw fail(readErrText(r.error, log, ctx));
   }
 }
+/* a phone that ran out of memory reading once (or whose page was closed by the browser mid-reading) reads in the
+   low-memory way from the start from then on: no retry loop of heavy attempts */
+const lowMemPhone = () => store.get("homrLowMem") === "1" || (/iPhone|iPod/.test(navigator.userAgent) && !navigator.gpu);   // an iPhone without WebGPU: the low-memory way at once
 async function readOnDevice(pages, signal) {
-  const ctx = { prefer: null, hidden: document.hidden, stage: "", retryDoubts: false };
+  const ctx = { prefer: null, hidden: document.hidden, stage: "", retryDoubts: false, lowMem: lowMemPhone() };
   const onVis = () => { if (document.hidden) ctx.hidden = true; };
   document.addEventListener("visibilitychange", onVis);
+  store.set("homrReading", String(Date.now()));
   try {
     await prefetchReader(signal);
     let fresh = 0;
@@ -3507,7 +3517,7 @@ async function readOnDevice(pages, signal) {
         ctx.retryDoubts = true; pages.forEach(p => { if (p.res.gpuDoubt) p.res = null; }); i = -1;
       }
     }
-  } finally { document.removeEventListener("visibilitychange", onVis); }
+  } finally { document.removeEventListener("visibilitychange", onVis); store.del("homrReading"); if (ctx.lowMem) store.set("homrLowMem", "1"); }
   store.set("modelReady", "1");
   const used = pages.filter(p => p.res && !p.res.empty), skipped = pages.map((p, i) => p.res && p.res.empty ? i + 1 : 0).filter(Boolean);
   if (!used.length) { const e = new Error(HOMR_ERR.not_music); if (pages.length === 1) e.page = pages[0]; throw e; }
