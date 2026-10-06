@@ -1413,3 +1413,34 @@ body.editmode #btn-back{display:none}       /* while editing, "Gotowe" is the wa
 .shead .done{justify-self:end}
 .shead .done.ghost:first-child{justify-self:start}
 .li.stepper{background:transparent!important}
+
+/* ===== Onboarding: questions on calm cards, a progress bar, a live staff instead of photos ===== */
+.onb{background:var(--canvas)}
+.onb-dots{flex:1;display:flex;gap:4px;margin:0 12px}
+.onb-dots i{flex:1;height:4px;width:auto!important;border-radius:2px;background:var(--surface-2);opacity:1}
+.onb-dots i.on,.onb-dots i.done{background:var(--text)}
+.onb-tile{--h:var(--slate);--h-ink:var(--slate-ink);background:var(--surface);box-shadow:var(--shadow-1),0 0 0 .5px var(--hairline);border-radius:var(--r-l);color:var(--text);
+  transition:transform var(--spring-snappy-d) var(--spring-snappy),box-shadow 180ms var(--ease-out)}
+.onb-tile::before{content:"";width:40px;height:40px;border-radius:12px;background:color-mix(in oklab,var(--h) var(--tint-mix),transparent);flex:none}
+.onb-tile.on{box-shadow:0 0 0 2px var(--h),var(--shadow-1)}
+.onb-tile span small{display:block;font:400 14px var(--font);color:var(--text-2);margin-top:2px}
+.onb-tile .onb-ex{position:absolute;margin-left:12px;width:40px;text-align:center;color:var(--h-ink);font:600 16px var(--font)}
+.onb-a4{justify-content:center}
+.stage{width:min(320px,86vw);height:auto;margin:6vh auto 8px;display:block}
+.stage .st-lines path{stroke:var(--hairline);stroke-width:1.5;fill:none}
+.stage .st-notes path{stroke-width:2.2;stroke-linecap:round}
+.stage .st-head{fill:var(--brand);opacity:.9}
+@media (prefers-reduced-motion:no-preference){
+  .stage .st-notes g{opacity:0;transform-box:fill-box;transform-origin:center;animation:stdrop 600ms var(--spring-bouncy) var(--d) both}
+  .stage .st-head{animation:sthead 2.4s linear .2s infinite}
+}
+@keyframes stdrop{from{opacity:0;transform:translateY(-14px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes sthead{from{transform:translateX(0)}to{transform:translateX(250px)}}
+.onb-dots i{height:4px!important;min-height:0!important;border-radius:2px!important}
+.onb-tile::before{display:none}
+.onb-tile{justify-content:flex-start;gap:14px;width:100%}
+.onb-ic,.onb-tile .onb-ex{position:static;flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0;
+  background:color-mix(in oklab,var(--h) var(--tint-mix),transparent);color:var(--h-ink)}
+.onb-ic svg.i{width:22px;height:22px}
+.onb-grid.one{align-items:stretch}
+.onb-tile,.onb-tile.on{border:0;outline-offset:3px}

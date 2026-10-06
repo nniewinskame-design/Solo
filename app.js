@@ -3953,8 +3953,8 @@ const TOUR = [
   ["#btn-play", "Posłuchaj", "Takt odliczania, potem kursor idzie za muzyką, a strona przewija się sama."],
   ["#btn-loop", "Pętla", "Powtarza 4 takty. Przesuń uchwyty albo dotknij taktu, także w trakcie grania."],
   ["#btn-tempo", "Tempo", "Zwolnij, przyspiesz i włącz metronom."],
-  ["#btn-edit", "Popraw", "Wybierz długość i dotknij pięciolinii, albo dotknij nuty, żeby ją zmienić."],
-  ["#btn-tools", "Narzędzia", "Tonacja, klucz, oryginał i wysyłanie."]
+  ["#btn-edit", "Edytuj", "Wybierz długość i dotknij pięciolinii, albo dotknij nuty, żeby ją zmienić. Gotowe kończy."],
+  ["#btn-tools", "Więcej", "Tonacja, klucz, oryginał i wysyłanie."]
 ];
 let tourI = -1;
 function tourShow() {

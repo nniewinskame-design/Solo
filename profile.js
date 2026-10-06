@@ -158,7 +158,7 @@ function profileSummary(p = profile()) {
 
 /* ---------------- onboarding: one question per screen, big tiles, always "Pomiń" ---------------- */
 const onb = { step: 0, p: null };
-const ONB_STEPS = ["hello", "instr", "main", "reading", "role", "done"];
+const ONB_STEPS = ["hello", "role", "instr", "main", "reading", "a4", "done"];
 function openOnboarding() {
   onb.p = profile(); onb.p.instruments = [...onb.p.instruments]; onb.step = 0;
   $("#onb").hidden = false; renderOnb();
@@ -167,6 +167,7 @@ function onbSkipStep(name) {
   const p = onb.p;
   if (name === "main") return p.instruments.length < 2;
   if (name === "reading") return !trPc(instrById(p.main));          // an octave apart only: C is still C
+  if (name === "a4") return p.role !== "teacher";                     // pupils keep 440 Hz (the tuner can change it)
   return false;
 }
 function onbGo(d) {
@@ -180,36 +181,43 @@ function finishOnb(skipped) {
   saveProfile(p); store.set("welcomed", "1");
   fadeOut($("#onb"), 220);
 }
-function tile(on, label, data, extra = "") { return `<button class="onb-tile${on ? " on" : ""}" ${data} aria-pressed="${on}">${extra}<span>${esc(label)}</span></button>`; }
+function tile(on, label, data, extra = "", hue = "slate", sub = "") { return `<button class="onb-tile${on ? " on" : ""}" style="--h:var(--${hue});--h-ink:var(--${hue}-ink)" ${data} aria-pressed="${on}">${extra}<span>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ""}</span></button>`; }
+/* a live mini-scene instead of a photo: a staff where the notes land one by one and the playhead follows */
+const STAGE_SVG = `<svg class="stage" viewBox="0 0 320 120" aria-hidden="true"><g class="st-lines"><path d="M10 34H310M10 46H310M10 58H310M10 70H310M10 82H310"/></g>
+  <g class="st-notes"><g style="--d:0s"><ellipse cx="70" cy="76" rx="8" ry="6" style="fill:var(--amber)"/><path d="M77 74V36" style="stroke:var(--amber)"/></g>
+  <g style="--d:.35s"><ellipse cx="130" cy="64" rx="8" ry="6" style="fill:var(--coral)"/><path d="M137 62V24" style="stroke:var(--coral)"/></g>
+  <g style="--d:.7s"><ellipse cx="190" cy="52" rx="8" ry="6" style="fill:var(--green)"/><path d="M183 54V92" style="stroke:var(--green)"/></g>
+  <g style="--d:1.05s"><ellipse cx="250" cy="40" rx="8" ry="6" style="fill:var(--blue)"/><path d="M243 42V80" style="stroke:var(--blue)"/></g></g>
+  <rect class="st-head" x="40" y="22" width="3" height="72" rx="1.5"/></svg>`;
 function renderOnb() {
   const p = onb.p, name = ONB_STEPS[onb.step], box = $("#onb-body");
   $("#onb-back").hidden = onb.step === 0;
-  $("#onb-dots").innerHTML = ONB_STEPS.map((_, i) => `<i class="${i === onb.step ? "on" : ""}"></i>`).join("");
+  $("#onb-dots").innerHTML = ONB_STEPS.map((_, i) => `<i class="${i === onb.step ? "on" : i < onb.step ? "done" : ""}"></i>`).join("");   // a progress bar: answered steps filled
   let h = "", next = "Dalej";
   if (name === "hello") {
-    h = `<div class="onb-brand"><svg class="mark"><use href="#note"/></svg><span>Solo</span></div>
-      <h1 class="h-xl">Kilka pytań na start</h1>
-      <p class="onb-lead">Solo ustawi się pod Ciebie. Wszystko zmienisz później w zakładce „Ja”.</p>
+    h = `${STAGE_SVG}<h1 class="h-xl">Cześć, tu Solo.</h1>
+      <p class="onb-lead">Nuty, stroik i metronom w jednym miejscu. Do ćwiczenia w domu i na lekcji.</p>
       <p class="w-legal">Korzystając z Solo, akceptujesz <a href="regulamin.html" data-doc="regulamin">regulamin</a> i&nbsp;<a href="prywatnosc.html" data-doc="prywatnosc">politykę&nbsp;prywatności</a>.</p>`;
     next = "Zaczynamy";
   } else if (name === "instr") {
-    h = `<h2 class="h-l">Na czym grasz?</h2><div id="onb-picker"></div>`;
+    h = `<h2 class="h-l">Na czym grasz?</h2><p class="onb-lead">Możesz wybrać kilka.</p><div id="onb-picker"></div>`;
   } else if (name === "main") {
-    h = `<h2 class="h-l">Główny instrument</h2><div class="onb-grid one">` +
-      p.instruments.map(id => tile(p.main === id, instrById(id).name, `data-main="${id}"`)).join("") + `</div>`;
+    h = `<h2 class="h-l">Który jest główny?</h2><p class="onb-lead">Od niego zaczną się stroik i odtwarzanie.</p><div class="onb-grid one">` +
+      p.instruments.map(id => tile(p.main === id, instrById(id).name, `data-main="${id}"`, "", hueOf(id))).join("") + `</div>`;
   } else if (name === "reading") {
     const m = instrById(p.main), w = NOTE_PL[trPc(m)];
-    h = `<h2 class="h-l">Stroik pokazuje</h2><div class="onb-grid one">` +
-      tile(p.reading === "written", `Zapis dla instrumentu`, `data-read="written"`, `<b class="onb-ex">C → ${w}</b>`) +
-      tile(p.reading === "concert", `Dźwięki rzeczywiste`, `data-read="concert"`, `<b class="onb-ex">C → C</b>`) + `</div>`;
+    h = `<h2 class="h-l">Jak stroik ma nazywać dźwięki?</h2><div class="onb-grid one">` +
+      tile(p.reading === "written", `Tak jak w Twoich nutach`, `data-read="written"`, `<b class="onb-ex">C</b>`, "sky", `C w nutach to C na stroiku`) +
+      tile(p.reading === "concert", `Tak jak brzmią`, `data-read="concert"`, `<b class="onb-ex">${w}</b>`, "sky", `C w nutach to ${w} na stroiku`) + `</div>`;
   } else if (name === "role") {
-    h = `<h2 class="h-l">Kim jesteś?</h2><div class="onb-grid one">` +
-      tile(p.role === "teacher", "Uczę gry", `data-role="teacher"`) + tile(p.role === "student", "Uczę się", `data-role="student"`) + tile(p.role === "self", "Gram dla siebie", `data-role="self"`) + `</div>
-      <h3 class="lbl">Strój A</h3><div class="seg three" id="onb-a4">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>
-      `;
+    h = `<h2 class="h-l">Kim jesteś?</h2><p class="onb-lead">Dopasujemy Solo do Ciebie.</p><div class="onb-grid one">` +
+      tile(p.role === "teacher", "Uczę gry", `data-role="teacher"`, `<i class="onb-ic">${icon("music")}</i>`, "violet") + tile(p.role === "student", "Uczę się", `data-role="student"`, `<i class="onb-ic">${icon("note")}</i>`, "green") + tile(p.role === "self", "Gram dla siebie", `data-role="self"`, `<i class="onb-ic">${icon("heart")}</i>`, "amber") + `</div>`;
+  } else if (name === "a4") {
+    h = `<h2 class="h-l">Na jakim stroju grasz?</h2><p class="onb-lead">Nie wiesz? Zostaw 440 Hz.</p>
+      <div class="chips onb-a4" id="onb-a4">${[440, 441, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>`;
   } else {
     const m = instrById(p.main);
-    h = `<h2 class="h-l">Gotowe</h2>
+    h = `<h2 class="h-l">Gotowe.</h2>
       <div class="onb-sum"><b>${esc(m.name)}</b><span>${esc(profileSummary(p))}</span></div>
       <div class="onb-own"><svg class="i"><use href="#mic"/></svg><div class="grow"><b>Twój dźwięk</b><small>Solo zagra nuty Twoim brzmieniem.</small></div><button class="btn small tinted" id="onb-own">Nagraj</button></div>`;
     next = "Zacznij";
