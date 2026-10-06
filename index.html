@@ -587,11 +587,19 @@
   <p class="note first" id="bar-note">Metrum, klucz i znaki zmieniają się od tego taktu do końca utworu.</p>
   <h3 class="lbl">Metrum</h3>
   <div class="meter" id="bar-time"></div>
-  <h3 class="lbl">Klucz zapisany w nutach</h3>
-  <div class="seg" id="bar-clef"><button data-v="F">Basowy</button><button data-v="G">Wiolinowy</button><button data-v="C4">Tenorowy</button><button data-v="C3">Altowy</button></div>
-  <p class="note">Nuty zostają na swoich liniach.</p>
-  <h3 class="lbl">Znaki przy kluczu</h3>
-  <label class="ask-row" for="bar-key"><span>Znaki przy kluczu</span><select id="bar-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label>
+  <h3 class="lbl" id="bar-clef-t">Klucz tej partii</h3>
+  <div class="chips" id="bar-clef"><button data-v="G">Wiolinowy</button><button data-v="F">Basowy</button><button data-v="C4">Tenorowy</button><button data-v="C3">Altowy</button></div>
+  <div class="seg" id="bar-clefmode" style="margin-top:10px"><button data-m="sound">Dźwięki zostają</button><button data-m="lines">Nuty zostają na liniach</button></div>
+  <p class="note" id="bar-clefnote"></p>
+  <h3 class="lbl">Tonacja utworu</h3>
+  <div class="keypick" id="bar-keypick">
+    <div class="kp-row"><button type="button" class="pill round sm" data-kd="-1" aria-label="Tonacja z jednym bemolem więcej"><svg class="i"><use href="#minus"/></svg></button>
+      <div class="kp-val" aria-live="polite"><b id="bar-keyname"></b><small id="bar-keysig"></small></div>
+      <button type="button" class="pill round sm" data-kd="1" aria-label="Tonacja z jednym krzyżykiem więcej"><svg class="i"><use href="#plus"/></svg></button></div>
+    <p class="note" style="margin:0;text-align:center">Wszystkie partie przenoszą się razem.</p>
+  </div>
+  <details class="bar-fix"><summary>Popraw tylko znaki przy kluczu</summary>
+  <label class="ask-row" for="bar-key"><span>Znaki przy kluczu</span><select id="bar-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="-5">5 bemoli</option><option value="-6">6 bemoli</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option><option value="5">5 krzyżyków</option><option value="6">6 krzyżyków</option></select></label></details>
   <h3 class="lbl">Takty</h3>
   <div class="list">
     <button class="li tap" id="bar-add"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt za</b></span></button>
@@ -608,9 +616,6 @@
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-more-t">Więcej</h2><button class="done" data-close>Gotowe</button></div>
   <div class="tiles three first">
-    <button class="tile" data-sheet="key"><svg class="i"><use href="#updown"/></svg><span>Tonacja</span></button>
-    <button class="tile" data-sheet="clef"><svg class="i"><use href="#clef"/></svg><span>Klucz</span></button>
-    <button class="tile" data-sheet="addpart"><svg class="i"><use href="#plus"/></svg><span>Dodaj partię</span></button>
     <button class="tile" data-sheet="orig" id="row-orig"><svg class="i"><use href="#image"/></svg><span>Oryginał</span></button>
     <button class="tile" data-sheet="tuner"><svg class="i"><use href="#fork"/></svg><span>Stroik</span></button>
     <button class="tile" data-sheet="tools"><svg class="i"><use href="#metronome"/></svg><span>Metronom</span></button>
@@ -687,11 +692,14 @@
   <h3 class="lbl">Brzmienie</h3>
   <div class="list">
     <button class="li tap" id="pp-instr"><span class="grow"><b>Zmień instrument</b><small id="pp-instr-now"></small></span><svg class="i chev"><use href="#right"/></svg></button>
-    <div class="li stepper"><button class="pill round" id="pp-down" aria-label="Oktawę niżej"><svg class="i"><use href="#minus"/></svg></button><span class="grow step-val">Oktawa</span><button class="pill round" id="pp-up" aria-label="Oktawę wyżej"><svg class="i"><use href="#plus"/></svg></button></div>
   </div>
-  <div id="pp-rolebox"><h3 class="lbl">Instrument gra</h3>
+  <div class="tiles two" style="margin-top:10px">
+    <button class="tile" id="pp-down"><svg class="i"><use href="#octave-down"/></svg><span>Oktawę niżej</span></button>
+    <button class="tile" id="pp-up"><svg class="i"><use href="#octave"/></svg><span>Oktawę wyżej</span></button>
+  </div>
+  <div id="pp-rolebox"><h3 class="lbl">Co gra ta partia</h3>
   <div class="chips" id="pp-role"><button data-role="voice2">2. głos</button><button data-role="voice3">3. głos</button><button data-role="melody">Ta sama melodia</button><button data-role="bass">Bas</button><button data-role="chords">Akordy</button></div>
-  <button class="link more-opts" id="pp-change">Więcej możliwości</button></div>
+  <p class="note" id="pp-rolenote">Wybierz, a Solo napisze tę partię od nowa z melodii.</p></div>
   <h3 class="lbl">Udostępnij</h3>
   <div class="tiles two">
     <button class="tile" id="pp-print"><svg class="i"><use href="#print"/></svg><span>Drukuj</span></button>

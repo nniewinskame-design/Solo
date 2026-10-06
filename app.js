@@ -559,6 +559,9 @@ function loadState(piece, settings) {
     S.pageMine = !!settings.pageMine;
     S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
   }
+  /* clef and key chosen by hand for the view (before 4.0 test 44) are dropped: they are edited in the music now;
+     the automatic clef/octave for the instrument (ensureOnStaff) still applies */
+  if (S.preset >= 0 || S.iv.d || S.iv.s || S.clefMine) { S.iv = { d: 0, s: 0 }; S.preset = -1; S.clef = "keep"; S.clefMine = false; S.readOct = 0; }
   if (S.piece.instrument == null) S.piece.instrument = first && !PIANO_RE.test(first.name) ? first.name : "";
   const rp = S.parts.find(p => p.id === readingPartId()); if (rp) S.srcClef = rp.clef;     // the clef of the part being read
 }
@@ -693,7 +696,7 @@ function recordFromState() {
     id: S.piece.id || ("p" + now.toString(36) + Math.random().toString(36).slice(2, 7)),
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
-    issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
+    issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, trShift: S.piece.trShift || 0, partRoles: S.piece.partRoles || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
     settings: { melody: S.melody || null, keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
@@ -1283,6 +1286,14 @@ function buildBarSheet() {
   const t = timeAt(part, m), c = clefAt(part, m), k = keyAt(part, m);
   meterPicker($("#bar-time"), t, v => barOp("time", v));
   $$("#bar-clef button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c)));
+  $("#bar-clef-t").textContent = `Klucz · ${partLabel(S.parts.find(x => x.id === pid) || { id: pid, name: "" }) || "ta partia"}`;
+  $$("#bar-clefmode button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m === barClefMode)));
+  $("#bar-clefnote").textContent = barClefMode === "lines" ? "Do poprawiania źle odczytanego klucza: nuty zostają w tych samych miejscach, zmieniają się dźwięki." : bar === 1 ? "Zmienia się tylko ta partia, w całym utworze." : `Zmienia się tylko ta partia, od taktu ${bar}.`;
+  const mode = (() => { const k1 = kids(part, "measure")[0]?.getElementsByTagName("key")[0]; return k1 && txt(k1, "mode") === "minor" ? "minor" : S.srcKey?.mode || "major"; })();
+  const k1 = keyAt(part, kids(part, "measure")[0]), n = Math.abs(k1);
+  $("#bar-keyname").textContent = keyName(k1, mode);
+  $("#bar-keysig").textContent = !n ? "Bez znaków" : `${n} ${k1 > 0 ? plural(n, "krzyżyk", "krzyżyki", "krzyżyków") : plural(n, "bemol", "bemole", "bemoli")}`;
+  $$("#bar-keypick [data-kd]").forEach(b => (b.disabled = Math.abs(k1 + +b.dataset.kd) > 7));
   $("#bar-key").value = String(k);
   $("#bar-del").disabled = kids(part, "measure").length < 2;
   $("#bar-bpm").textContent = String(curBpm());
@@ -1331,7 +1342,8 @@ function barOp(op, val) {
     const trF = id => intervalFifths(trIv(partTr(id)));
     parts.filter(p => op === "key" || p.getAttribute("id") === pid).forEach(part => {
       const ms = kids(part, "measure"); if (!ms[bar - 1]) return;
-      const oldClef = clefAt(part, ms[bar - 1]), shift = op === "clef" ? CLEF_BOTTOM[val] - CLEF_BOTTOM[oldClef] : 0;
+      /* a clef change keeps the sound (the notes move on the staff) unless "Nuty zostają na liniach" (a misread clef) */
+      const oldClef = clefAt(part, ms[bar - 1]), shift = op === "clef" && barClefMode === "lines" ? CLEF_BOTTOM[val] - CLEF_BOTTOM[oldClef] : 0;
       let oldKey = keyAt(part, ms[bar - 1]); const newKey = op === "key" ? +val - trF(pid) + trF(part.getAttribute("id")) : null;
       later(part, bar - 1).forEach((mm, j) => {
         kids(mm, "attributes").forEach(a => {
@@ -1387,7 +1399,25 @@ function barOp(op, val) {
   hud(red ? `Metrum ${val}. ${red} ${plural(red, "takt trzeba", "takty trzeba", "taktów trzeba")} poprawić (na czerwono)` : { time: `Metrum ${val}`, clef: "Zmieniono klucz", key: "Zmieniono znaki przy kluczu", add: "Dodano takt", addbefore: "Dodano takt", del: "Usunięto takt" }[op], red ? 4000 : 1600);
   if (op === "del" || op === "add" || op === "addbefore") closeSheet(); else buildBarSheet();
 }
+let barClefMode = "sound";
 $$("#bar-clef button").forEach(b => b.addEventListener("click", () => barOp("clef", b.dataset.v)));
+$$("#bar-clefmode button").forEach(b => b.addEventListener("click", () => { barClefMode = b.dataset.m; buildBarSheet(); }));
+/* "Tonacja utworu": the whole piece (every part) moves to the key one fifth up or down the circle, by the nearest
+   interval (at most a tritone); the part being edited names the key */
+function transposeScore(df) {
+  const { pid } = barTarget(), doc = parseXml(S.piece.xml);
+  const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || doc.getElementsByTagName("part")[0];
+  const k1 = keyAt(part, kids(part, "measure")[0]); if (Math.abs(k1 + df) > 7) return;
+  /* of the two ways (up or down), the one that keeps the piece nearest where it was written (no drifting down step by step) */
+  const kk = Math.round(7 * df / 12), base = { d: 4 * df - 7 * kk, s: 7 * df - 12 * kk }, tot = S.piece.trShift || 0;
+  const iv = [base, { d: base.d + 7, s: base.s + 12 }, { d: base.d - 7, s: base.s - 12 }].reduce((a, b) => Math.abs(tot + b.s) < Math.abs(tot + a.s) ? b : a);
+  S.piece.trShift = tot + iv.s;
+  pushUndo();
+  S.piece.xml = transposeXmlString(S.piece.xml, iv, true);
+  refreshInfo(); afterEdit(); buildBarSheet();
+  hud(`Tonacja: ${$("#bar-keyname").textContent}`, 1600);
+}
+$("#bar-keypick").addEventListener("click", e => { const b = e.target.closest("[data-kd]"); if (b && !b.disabled) transposeScore(+b.dataset.kd); });
 $("#bar-key").addEventListener("change", e => barOp("key", e.target.value));
 $("#bar-add").addEventListener("click", () => barOp("add"));
 $("#bar-addbefore").addEventListener("click", () => barOp("addbefore"));
@@ -3420,7 +3450,8 @@ $("#s-title").addEventListener("click", () => inlineEdit($("#s-title"), { value:
 $("#s-sub").addEventListener("click", e => {
   const b = e.target.closest("[data-edit]"); if (!b) return;
   const k = b.dataset.edit;
-  if (k === "clef" || k === "key") { openSheet(k); return; }
+  /* the clef and the key are changed in editing (Takt), not in the view (Nat, 7 Oct) */
+  if (k === "clef" || k === "key") { const go = () => { S.editSel = null; S.fromBar = -1; openSheet("bar"); }; if (S.editMode) go(); else { setEditMode(true); whenDrawn(go); } return; }
   inlineEdit(b, { value: S.piece[k] || "", placeholder: k === "composer" ? "Kompozytor" : "Instrument", onSave: v => setPieceField(k, v) });
 });
 
@@ -3560,6 +3591,7 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Odsłuch nuty przy edycji gra jak w zapisie: tonacja, długość, dynamika, instrument.",
   "Mikrofon włącza się dopiero, gdy go potrzebujesz, i gaśnie po wyjściu ze stroika.",
   "Naprawione: po pętli i dotknięciu strony znikały przyciski.",
+  "Klucz każdej partii i tonację całego utworu zmieniasz w edycji (Takt). W „⋯” zostały tylko widok i udostępnianie.",
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
   "Nowa melodia: wybierasz klucz, tonację (dur albo moll) i dowolne metrum.",
@@ -4246,14 +4278,20 @@ function buildPartSheet() {
   $("#pp-instr").disabled = (S.parts.find(p => p.id === pid) || {}).staves > 1;
   $("#pp-instr-now").textContent = instrById(instrOfPart(pid)).name;
   $("#pp-rolebox").hidden = pid === melodyPart();          // the melody is what the others are written from
+  /* only what this part really plays is marked (known when Solo wrote it); nothing marked for a scanned part */
+  const role = (S.piece.partRoles || {})[pid];
+  $$("#pp-role [data-role]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.role === role)));
+  $("#pp-rolenote").textContent = role ? "Wybierz inną, a Solo napisze tę partię od nowa z melodii." : "Wybierz, a Solo napisze tę partię od nowa z melodii.";
 }
+const setPartRole = (id, role) => { if (!id) return; S.piece.partRoles = { ...(S.piece.partRoles || {}), [id]: role }; };
 /* what this part plays, rewritten from the melody in one tap (its instrument stays) */
 $("#pp-role").addEventListener("click", e => {
   const b = e.target.closest("[data-role]"); if (!b) return;
   const pid = partSheetId;
   try {
     const r = addPart(S.piece.xml, instrOfPart(pid), b.dataset.role, { src: melodyPart(), int: 0 }); if (!r.id) return;
-    pushUndo(); closeSheetThen(() => { applyNewXml(orchestrateXml(replacePart(r.xml, pid, r.id), r.id), r.id); hudUndo(`Teraz: ${b.textContent}`); });
+    if (b.getAttribute("aria-pressed") === "true") return;
+    pushUndo(); setPartRole(r.id, b.dataset.role); closeSheetThen(() => { applyNewXml(orchestrateXml(replacePart(r.xml, pid, r.id), r.id), r.id); hudUndo(`Teraz: ${b.textContent}`); });
   } catch (err) { console.error(err); hud("Nie udało się zmienić partii"); }
 });
 $("#pp-only").addEventListener("click", () => { closeSheet(); showOnly(S.only === partSheetId ? null : partSheetId); });
@@ -4382,7 +4420,7 @@ $("#ap-go").addEventListener("click", () => {
     const r = addPart(S.piece.xml, ap.instr, ap.role, { int: ap.int, src: ap.src, same: (ap.role === "voice2" || ap.role === "voice3") && ap.show === "same" && !$("#ap-showbox").hidden });
     const rep = ap.replace; ap.replace = null;
     if (rep && r.id) { r.xml = replacePart(r.xml, rep, r.id); if (rep === S.melody) S.melody = r.id; }
-    pushUndo(); closeSheetThen(() => { applyNewXml(r.xml, r.id); hudUndo(rep ? "Zmieniono partię" : "Dodano partię"); });
+    pushUndo(); setPartRole(r.id, ap.role); closeSheetThen(() => { applyNewXml(r.xml, r.id); hudUndo(rep ? "Zmieniono partię" : "Dodano partię"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać tej partii"); }
 });
 /* quick ensembles: duo = melody + second voice, trio = + bass; for the player's own instrument */
@@ -4400,7 +4438,7 @@ $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
       const third = ["puzon", "puzon-alt"].includes(me.id) ? "puzon-b" : me.lo <= low - 7 || !SECTION_BASS[me.id] ? me.id : SECTION_BASS[me.id];
       const r2 = addPart(xml, third, "voice3"); xml = r2.xml; ids.push(r2.id);
     }
-    pushUndo(); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });
+    pushUndo(); setPartRole(ids[0], "voice2"); setPartRole(ids[1], "voice3"); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać partii"); }
 }));
 
@@ -4422,7 +4460,7 @@ function quickCanon() {
   } catch (e) { console.error(e); hud("Nie udało się zrobić kanonu"); }
 }
 /* "Zmień" a part: pick another instrument or what it plays; the new part takes the old one's place */
-$("#pp-change").addEventListener("click", () => { ap.replace = partSheetId; closeSheetThen(() => openSheet("addpart")); });
+
 function replacePart(xml, oldId, newId) {
   const doc = parseXml(xml), root = doc.documentElement, parts = kids(root, "part"), pl = kid(root, "part-list");
   const o = parts.find(p => p.getAttribute("id") === oldId), n = parts.find(p => p.getAttribute("id") === newId);

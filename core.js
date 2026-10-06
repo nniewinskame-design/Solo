@@ -327,7 +327,7 @@ function castOff(root) {
 }
 
 /* Write the interval into the MusicXML itself (used for exporting the file to other programs). */
-function transposeXmlString(xml, iv) {
+function transposeXmlString(xml, iv, keepTr = false) {
   if (!iv || (iv.d === 0 && iv.s === 0)) return xml;
   const doc = parseXml(xml);
   const df = intervalFifths(iv);
@@ -345,7 +345,7 @@ function transposeXmlString(xml, iv) {
   });
   Array.from(doc.getElementsByTagName("key")).forEach(k => { const f = kid(k, "fifths"); if (f) f.textContent = String((parseInt(f.textContent, 10) || 0) + df); });
   Array.from(doc.getElementsByTagName("accidental")).forEach(a => a.remove());
-  Array.from(doc.getElementsByTagName("transpose")).forEach(t => t.remove());
+  if (!keepTr) Array.from(doc.getElementsByTagName("transpose")).forEach(t => t.remove());     // kept when the piece itself is moved (a B♭ part stays a B♭ part)
   return new XMLSerializer().serializeToString(doc);
 }
 
