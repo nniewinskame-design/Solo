@@ -593,6 +593,7 @@ function openPiece(piece, settings) {
     $("#notice-text").textContent = n ? `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
   }
   updateTitles();
+  S.only = null; S.keepBefore = null;              // "Tylko ta" belongs to the piece it was used in
   $("#peek").hidden = true; pb.loop = null; pb.trainer = null; pb.mute.clear(); pb.resumeMs = 0; $("#loopbar").hidden = true; $("#btn-loop").setAttribute("aria-pressed", "false"); S.undo = []; S.editSel = null; S.keepSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
   $("#pages").innerHTML = `<div class="loading-page"><span class="spinner"></span></div>`;
   $("#scroller").scrollTop = 0;
@@ -678,7 +679,9 @@ function enlargeTitle(root, factor, shift = 1.25) {
   tr.querySelectorAll("tspan[font-size]").forEach(t => { const v = parseFloat(t.getAttribute("font-size")); if (v) t.setAttribute("font-size", Math.round(v * factor) + "px"); });
 }
 let renderTimer = null;
-function render() { clearTimeout(renderTimer); renderTimer = setTimeout(doRender, 40); }
+/* while the key slider is being dragged the music is drawn at most every 250 ms (a full drawing per key step made
+   the drag stutter); the last key is drawn when the finger stops */
+function render() { clearTimeout(renderTimer); let drag = false; try { drag = slider.dragging; } catch {} renderTimer = setTimeout(doRender, drag ? 250 : 40); }
 async function doRender() {
   if (!S.piece || S.view !== "score") return;
   if ($("#score").hidden) { renderTimer = setTimeout(doRender, 30); return; }
@@ -1801,7 +1804,7 @@ document.addEventListener("visibilitychange", () => {
 /* ---------------- Print & export ---------------- */
 async function printScore() {
   await engineReady; stopPlayback();
-  tk.setOptions(a4Options());
+  tk.setOptions(a4Options({}, 1));                 // the paper size, as the PDF (not the screen's zoom)
   tk.loadData(processedXml());
   let html = "";
   for (let i = 1; i <= tk.getPageCount(); i++) html += `<div class="pg">${tk.renderToSVG(i)}</div>`;
