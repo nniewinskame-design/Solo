@@ -3035,7 +3035,9 @@ function soundingLine(xml, pid, voice = "1") {
 function secondVoiceIn(xml, src) {
   const trS = partTr(src), mel = soundingLine(xml, src);
   const cands = [soundingLine(xml, src, "2"), ...S.parts.filter(p => p.id !== src && p.staves < 2).map(p => soundingLine(xml, p.id))]   // a one-line piano or harp voice counts too
-    .filter(l => l.length === mel.length && l.length && l.some((m, i) => m !== mel[i]));
+    .filter(l => l.length === mel.length && l.length && l.some((m, i) => m !== mel[i]))
+    /* the same tune in another octave (a trombone doubling the violins) is the melody, not a 2nd voice */
+    .filter(l => l.filter((m, i) => (((m - mel[i]) % 12) + 12) % 12 === 0).length < 0.7 * l.length);
   if (!cands.length) return null;
   /* the nearest line to the melody (below it, or above it when a higher instrument plays it) */
   const dist = l => l.reduce((x, m, i) => x + Math.abs(mel[i] - m), 0), top = cands.reduce((a, b) => dist(b) < dist(a) ? b : a);

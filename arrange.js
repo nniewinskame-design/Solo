@@ -489,6 +489,7 @@ function placedCost(e, c, i, n, ctx, idx) {
     else if (e.strong && e.pcs.includes(mpc) && !ctx.loose) return Infinity;
     else cost += e.strong ? 4 : e.beat ? 3 : 0.5;
     if (ctx.third) { const have = us.map(u => ((u % 12) + 12) % 12);
+      if (us.length > 1 && pc === ((us[1] % 12) + 12) % 12 && i && i < n - 1) cost += 1.5;    // not the 2nd voice's note again
       if (e.strong && e.pcs.includes(pc) && !have.includes(pc)) cost -= 2;
       if (pc === ((e.pcs[1] % 12) + 12) % 12 && have.includes(pc)) cost += 2; }
   }
@@ -531,7 +532,7 @@ function placedLine(ev, ctx) {
   return out;
 }
 /* every way the new voice can sit (under all, between, above all): the cheapest; under the others is the usual
-   place for a 2nd or 3rd voice and is preferred a little */
+   place for a 2nd or 3rd voice and is chosen whenever the instrument can play it there */
 function placedBest(ev, others, opts) {
   const k = others.length, n = ev.length; let best = null;
   for (let mask = 0; mask < 1 << k; mask++) {
@@ -541,7 +542,7 @@ function placedBest(ev, others, opts) {
     if (!ok) continue;
     for (const loose of [false, true]) {
       const line = placedLine(ev, { ...opts, others, sides, loose });
-      if (line) { const c = line.cost + sides.filter(x => x > 0).length * 0.4 * n + (loose ? 50 : 0); if (!best || c < best.c) best = { line, c }; break; }
+      if (line) { const c = line.cost + sides.filter(x => x > 0).length * 2.5 * n + (loose ? 50 : 0); if (!best || c < best.c) best = { line, c }; break; }
     }
   }
   return best && best.line;
