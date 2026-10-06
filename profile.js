@@ -72,7 +72,8 @@ function instrPicker(box, { selected = [], multi = false, onPick }) {
   const p = profile(), mine = [...new Set([...(p.instruments || []), ...JSON.parse(store.get("recentInstr", "[]"))])].filter(id => INSTRUMENTS.some(i => i.id === id)).slice(0, 8);
   const chip = i => `<button class="ichip" data-i="${i.id}" aria-pressed="${selected.includes(i.id)}">${esc(i.name)}</button>`;
   const draw = q => {
-    const f = (q || "").trim().toLowerCase(), hit = i => !f || i.name.toLowerCase().includes(f);
+    /* without Polish letters too ("trabka", "altowka"), and by other names ("skrzydłówka", "cello") */
+    const f = plainName(q).trim(), alias = f.length > 2 ? instrFromName(f) : null, hit = i => !f || plainName(i.name).includes(f) || alias === i;
     let h = "";
     if (!f && mine.length) h += `<h3 class="lbl">Twoje</h3><div class="ichips">${mine.map(id => chip(instrById(id))).join("")}</div>`;
     INSTR_GROUPS.forEach(g => { const list = INSTRUMENTS.filter(i => i.group === g && hit(i)); if (list.length) h += `<h3 class="lbl">${g}</h3><div class="ichips">${list.map(chip).join("")}</div>`; });
@@ -92,6 +93,33 @@ const instrById = id => INSTRUMENTS.find(i => i.id === id) || INSTRUMENTS[0];
 /* the range a pupil plays comfortably (sounding MIDI): from the tables, otherwise the middle 70% of the full range */
 const comfOf = i => i.comf || [Math.round(i.lo + (i.hi - i.lo) * 0.15), Math.round(i.hi - (i.hi - i.lo) * 0.15)];
 const clefsOf = i => i.clefs || [i.clef];
+/* an instrument from a part's name in Polish, English, Italian or German (MuseScore, Finale, a scan): "Trumpet in B♭",
+   "Klarnet B 1", "Violoncello"; the more specific names first. null when the name says nothing. */
+const plainName = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l").replace(/♭/g, "b").replace(/♯/g, "#");
+const NAME_ALIASES = [
+  [/bass\s*trombone|puzon\s*bas|bassposaune|trombone\s*basso/, "puzon-b"], [/alto\s*trombone|puzon\s*alt|altposaune/, "puzon-alt"], [/trombon|puzon|posaune/, "puzon"],
+  [/trumpet\s*in\s*c\b|trabka\s*c\b|tromba\s*in\s*do|trompete\s*in\s*c\b/, "trabka-c"], [/trumpet|trabk|tromba|trompet/, "trabka"],
+  [/cornet|kornet/, "kornet"], [/flugel|flicorn|skrzydlowk/, "flugelhorn"], [/english\s*horn|cor\s*anglais|corno\s*inglese|rozek|englischhorn/, "rozek"],
+  [/alto\s*horn|tenor\s*horn|sakshorn\s*alt|althorn/, "sakshorn-a"], [/sakshorn\s*ten/, "sakshorn-t"], [/bari(tone)?\s*sax|saksofon\s*baryt|baritonsax/, "sax-b"],
+  [/euphon|eufon/, "eufonium"], [/bariton|baryton/, "baryton"], [/sousaphon|suzafon/, "suzafon"], [/tuba/, "tuba"],
+  [/horn|waltorn|corno|\bcor\b/, "waltornia"], [/alto\s*flute|flet\s*alt|altflote|flauto\s*contralto/, "flet-a"], [/piccolo|ottavino|pikolo/, "piccolo"],
+  [/recorder|flet\s*prosty|blockflote|flauto\s*dolce/, "flet-p"], [/flute|flet|flauto|flote/, "flet"], [/oboe|oboj/, "oboj"],
+  [/bass\s*clarinet|klarnet\s*bas|bassklarinette|clarinetto\s*basso/, "klarnet-bas"], [/(clarinet|klarnet|klarinette|clarinetto)\s*(in\s*)?(eb|es|mi\s*b)\b/, "klarnet-es"],
+  [/(clarinet|klarnet|klarinette|clarinetto)\s*(in\s*)?(a|la)\b/, "klarnet-a"], [/clarinet|klarnet|klarinette/, "klarnet"],
+  [/contra\s*bassoon|kontrafagot|contrafagott|kontrafagott/, "kontrafagot"], [/bassoon|fagot/, "fagot"],
+  [/soprano\s*sax|saksofon\s*sopran|sopransax/, "sax-s"], [/tenor\s*sax|saksofon\s*tenor|tenorsax/, "sax-t"], [/sax|saks/, "sax-a"],
+  [/violin|skrzyp|violino|geige/, "skrzypce"], [/viola|altowk|bratsche/, "altowka"], [/cello|wiolonczel/, "wiolonczela"],
+  [/bass\s*guitar|electric\s*bass|gitara\s*bas|e-bass/, "gitara-bas"], [/double\s*bass|contrabass|kontrabas|string\s*bass|contrabbasso/, "kontrabas"],
+  [/guitar|gitar/, "gitara"], [/ukulele/, "ukulele"], [/mandolin/, "mandolina"], [/harp|harf|arpa|harfe/, "harfa"],
+  [/glockenspiel|dzwonk|bells|campanelli/, "dzwonki"], [/xylophon|ksylofon/, "ksylofon"], [/marimba/, "marimba"], [/vibraphon|wibrafon/, "wibrafon"],
+  [/accordion|akordeon|akkordeon/, "akordeon"], [/organ|organy|orgel|organo/, "organy"], [/keyboard/, "keyboard"], [/piano|fortepian|klavier/, "fortepian"],
+  [/soprano|sopran/, "sopran"], [/^(alto|alt)( \d| i+)?$/, "alt"], [/^tenor( \d| i+)?$/, "tenor"], [/^(bass|bas|basso)( \d| i+)?$/, "bas"]
+];
+function instrFromName(name) {
+  const n = plainName(name).trim(); if (!n) return null;
+  const exact = INSTRUMENTS.find(i => plainName(i.name) === n.replace(/ (i|ii|iii|iv|v|vi|\d)$/, "")); if (exact) return exact;
+  const a = NAME_ALIASES.find(([re]) => re.test(n)); return a ? instrById(a[1]) : null;
+}
 const PROFILE_DEFAULT = { instruments: ["puzon"], main: "puzon", reading: "written", role: "", a4: 440, done: false };
 function profile() {
   let p = null; try { p = JSON.parse(store.get("profile", "null")); } catch {}

@@ -514,12 +514,13 @@ function declaredOf(pid) {
   if (!S.piece) return null; if (declaredOf.xml !== S.piece.xml) { declaredOf.xml = S.piece.xml; declaredOf.map = {}; [...parseXml(S.piece.xml).getElementsByTagName("score-part")].forEach(sp => { const i = declaredInstr(sp); if (i) declaredOf.map[sp.getAttribute("id")] = i; }); }
   return declaredOf.map[pid] || null;
 }
+/* one place decides a part's instrument: the one it declares, else its name (Polish, English, Italian, German:
+   "Trumpet in B♭", "Violoncello"), else for the melody the piece's instrument; null when nothing says */
 function namedInstr(pid) {
   const dec = declaredOf(pid); if (dec) return dec;
   const p = S.parts && S.parts.find(x => x.id === pid); if (!p || p.staves > 1 || PIANO_RE.test(p.name)) return null;
-  const names = [(typeof partLabel === "function" ? partLabel(p) : p.name) || "", S.piece && S.piece.instrument || ""].map(n => n.replace(/ (I|II|III|IV|V)$/, "").trim().toLowerCase());
-  for (const n of names) { const hit = n && INSTRUMENTS.find(i => i.name.toLowerCase() === n); if (hit) return hit; }
-  return null;
+  const own = instrFromName(typeof partLabel === "function" ? partLabel(p) : p.name); if (own) return own;
+  return pid === melodyPart() && S.piece && S.piece.instrument ? instrFromName(S.piece.instrument) : null;
 }
 /* a phone shows big notes that fit the screen: an A4 page there is under half its paper size (7.2 mm staff ≈ 13 px);
    A4 stays the view on a tablet and whenever the player picked it */
@@ -1707,7 +1708,17 @@ async function shareXml() {
   if (!S.piece) return;
   const name = safeName(S.piece.title) + ".musicxml";
   let xml;
-  try { xml = transposeXmlString(processedXml(), S.iv); } catch { xml = S.piece.xml; }
+  try {
+    xml = transposeXmlString(processedXml(), S.iv);
+    /* every transposing part says how it sounds (<transpose>), so other programs play it in tune: its instrument's
+       transposition, moved by a key change; a part read for another instrument (a preset) is the player's instrument */
+    const doc = parseXml(xml), read = readingPartId();
+    kids(doc.documentElement, "part").forEach(p => {
+      const pid = p.getAttribute("id"), tr = S.preset >= 0 && pid === read ? mainInstr().tr || 0 : partTr(pid) + S.iv.s;
+      setTranspose(doc, p, S.preset >= 0 && pid === read ? trIv(tr) : { d: trIv(partTr(pid)).d + S.iv.d, s: tr });
+    });
+    xml = new XMLSerializer().serializeToString(doc);
+  } catch (e) { console.warn(e); xml = S.piece.xml; }
   const type = "application/vnd.recordare.musicxml+xml";
   try {
     const file = new File([xml], name, { type });
@@ -2769,13 +2780,11 @@ $("#t-a-down").addEventListener("click", () => setA4(tuner.a4 - 1));
 $("#t-a-up").addEventListener("click", () => setA4(tuner.a4 + 1));
 function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerStart(); }
 /* which instrument a part is: its name (Puzon II → Puzon), a piano by its two staves, the melody by the piece's instrument */
+/* the instrument for sound and new parts: as namedInstr; a piano part is a piano; unknown: the player's own */
 function instrOfPart(pid) {
-  const dec = declaredOf(pid); if (dec) return dec.id;
-  const p = S.parts && S.parts.find(x => x.id === pid); if (!p) return mainInstr().id;
-  if (p.staves > 1 || PIANO_RE.test(p.name)) return "fortepian";
-  const name = (typeof partLabel === "function" ? partLabel(p) : p.name || "").replace(/ (I|II|III|IV|V)$/, "").trim().toLowerCase();
-  const hit = INSTRUMENTS.find(i => i.name.toLowerCase() === name) || INSTRUMENTS.find(i => name && i.name.toLowerCase().split(" ")[0] === name.split(" ")[0] && i.name.split(" ").length === 1) || INSTRUMENTS.find(i => name.startsWith(i.name.toLowerCase()));
-  return hit ? hit.id : mainInstr().id;
+  const p = S.parts && S.parts.find(x => x.id === pid);
+  if (p && !declaredOf(pid) && (p.staves > 1 || PIANO_RE.test(p.name))) return "fortepian";
+  const i = p && namedInstr(pid); return i ? i.id : mainInstr().id;
 }
 /* the player's recording of exactly this instrument, otherwise this instrument's own timbre (never another's recording) */
 function voiceFor(instrId) {
@@ -2987,11 +2996,14 @@ $("#pp-print").addEventListener("click", () => closeSheetThen(() => withOnly(par
 $("#pp-send").addEventListener("click", () => closeSheetThen(async () => { const keep = exportParts; exportParts = [partSheetId]; try { await savePdf(true); } finally { exportParts = keep; } }));
 /* the same notes on another instrument (a bassoon line as the 2nd trombone); an octave up or down */
 $("#pp-instr").addEventListener("click", () => { const pid = partSheetId; closeSheetThen(() => pickInstrument("Jaki instrument?", id => {
-  pushUndo(); applyNewXml(orchestrateXml(changePartInstr(S.piece.xml, pid, instrById(instrOfPart(pid)), instrById(id)), pid), pid); hudUndo(`Teraz: ${instrById(id).name}`);
+  pushUndo(); applyNewXml(orchestrateXml(changePartInstr(S.piece.xml, pid, instrById(instrOfPart(pid)), instrById(id), partTr(pid)), pid), pid); hudUndo(`Teraz: ${instrById(id).name}`);
 })); });
 $$("#pp-up, #pp-down").forEach(b => b.addEventListener("click", () => {
   const pid = partSheetId, dir = b.id === "pp-up" ? 1 : -1, ins = S.parts.find(p => p.id === pid)?.staves > 1 ? null : instrById(instrOfPart(pid));
-  pushUndo(); applyNewXml(orchestrateXml(shiftPartOctave(S.piece.xml, pid, dir, ins)), pid);   /* keeps its number */ hudUndo(dir > 0 ? "Oktawę wyżej" : "Oktawę niżej");
+  const out = shiftPartOctave(S.piece.xml, pid, dir, ins), known = ins && namedInstr(pid), tr = partTr(pid);
+  /* an octave the instrument cannot play is refused (the notes stay where they were) */
+  if (known && outOfRange(out, pid, known, tr) > 0.2 && outOfRange(out, pid, known, tr) > outOfRange(S.piece.xml, pid, known, tr)) { hud(`${dir > 0 ? "Wyżej" : "Niżej"} ${known.name.toLowerCase()} nie zagra`, 3000); return; }
+  pushUndo(); applyNewXml(orchestrateXml(out), pid);   /* keeps its number */ hudUndo(dir > 0 ? "Oktawę wyżej" : "Oktawę niżej");
 }));
 $("#pp-del").addEventListener("click", () => {
   const id = partSheetId, doc = parseXml(S.piece.xml), root = doc.documentElement;
@@ -3017,12 +3029,14 @@ function hudUndo(msg) {
 /* sections numbered and the score in orchestra order (arrange.js orchestrate); a part's instrument: the one it
    declares, else its name, else (the melody) the piece's instrument */
 function orchestrateXml(xml, newId = null) {
-  const plain = n => (n || "").replace(/ (I|II|III|IV|V|VI|\d)$/, "").trim().toLowerCase();
-  const first = analyseXml(xml).parts.find(p => !(p.staves > 1 || PIANO_RE.test(p.name)));
-  return orchestrate(xml, sp => {
+  const mel = S.piece && S.parts ? melodyPart() : null;
+  return orchestrate(xml, (sp, p) => {
     const dec = declaredInstr(sp); if (dec) return dec;
-    const n = plain(txt(sp, "part-name")), hit = INSTRUMENTS.find(i => i.name.toLowerCase() === n); if (hit) return hit;
-    if (first && sp.getAttribute("id") === first.id && S.piece && S.piece.instrument) return INSTRUMENTS.find(i => i.name.toLowerCase() === plain(S.piece.instrument)) || null;
+    /* a name is trusted when the part's own <transpose> agrees with it (no <transpose> = not transposed: a "Trumpet"
+       in a concert-pitch score is not a B♭ part), or when it is one of Solo's own Polish names */
+    const nm = txt(sp, "part-name"), hit = instrFromName(nm), own = INSTRUMENTS.some(i => i.name.toLowerCase() === nm.replace(/ (I|II|III|IV|V|VI|\d)$/, "").trim().toLowerCase());
+    if (hit && (own || (p ? trOfTranspose(p) ?? 0 : 0) === (hit.tr || 0))) return hit;
+    if (sp.getAttribute("id") === mel && S.piece.instrument) return instrFromName(S.piece.instrument);
     return null;
   }, newId);
 }
@@ -3069,8 +3083,19 @@ $$("#ap-show button").forEach(b => b.addEventListener("click", () => { ap.show =
 /* the melody part: the first kept one that is not a piano */
 const melodyPart = () => (S.parts.find(p => p.keep && !(p.staves > 1 || PIANO_RE.test(p.name))) || S.parts[0]).id;
 function partLabel(p) { if (declaredOf(p.id)) return partName(p.id) || p.name; const own = partName(p.id) || p.name, solo = S.parts.find(x => !(x.staves > 1 || PIANO_RE.test(x.name))); return p === solo && S.piece.instrument && !/ (I|II|III|IV)$/.test(own) ? S.piece.instrument : own; }
-/* how far a part is written above how it sounds: only for a part named for a transposing instrument */
-function partTr(pid) { try { const i = namedInstr(pid); return i ? i.tr || 0 : 0; } catch { return 0; } }
+/* how far a part is written above how it sounds: the instrument it declares, else its own <transpose> (an imported
+   "Trumpet in B♭"), else the instrument its exact name or the piece names (a scan read for "Trąbka B"). Verovio's
+   MIDI values are the written notes (it does not apply <transpose> there), so playback subtracts this once. */
+function partTr(pid) {
+  try {
+    const dec = declaredOf(pid); if (dec) return dec.tr || 0;
+    const t = partTr.xml === S.piece.xml ? partTr.map : (partTr.xml = S.piece.xml, partTr.map = Object.fromEntries(kids(parseXml(S.piece.xml).documentElement, "part").map(p => [p.getAttribute("id"), trOfTranspose(p)])));
+    if (t[pid] != null) return t[pid];
+    const p = S.parts.find(x => x.id === pid); if (!p || p.staves > 1 || PIANO_RE.test(p.name)) return 0;
+    const exact = n => INSTRUMENTS.find(i => i.name.toLowerCase() === (n || "").replace(/ (I|II|III|IV|V|VI)$/, "").trim().toLowerCase());
+    const i = exact(partLabel(p)) || (pid === melodyPart() ? exact(S.piece.instrument) : null); return i ? i.tr || 0 : 0;
+  } catch { return 0; }
+}
 /* the notes of one voice of a part as they sound (written pitch minus the instrument's transposition) */
 function soundingLine(xml, pid, voice = "1") {
   const part = kids(parseXml(xml).documentElement, "part").find(p => p.getAttribute("id") === pid); if (!part) return [];
@@ -3230,10 +3255,14 @@ $("#addto-new").addEventListener("click", () => { colTarget = null; colPiece = c
 function markRange() {
   if (S.iv.d || S.iv.s) return;
   try {
+    const known = {};        // a part whose instrument nothing names is not tinted (never measured against the player's own)
     $$("#pages g.note").forEach(g => {
       const pid = partOfEl(g); if (!pid) return;
-      const ins = instrById(instrOfPart(pid)), v = tk.getMIDIValuesForElement(g.id); if (!v || !(v.pitch > 0)) return;
-      const w = v.pitch; g.classList.toggle("outrange", w < ins.lo + ins.tr - 1 || w > ins.hi + ins.tr + 1);
+      if (!(pid in known)) known[pid] = namedInstr(pid) ? { ins: namedInstr(pid), tr: partTr(pid) } : null;
+      const k = known[pid]; if (!k) return;
+      const v = tk.getMIDIValuesForElement(g.id); if (!v || !(v.pitch > 0)) return;
+      const w = v.pitch - k.tr - (pid === readingPartId() ? 12 * (S.readOct || 0) : 0);
+      g.classList.toggle("outrange", w < k.ins.lo - 1 || w > k.ins.hi + 1);
     });
   } catch (e) { console.warn(e); }
 }

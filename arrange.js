@@ -3,6 +3,8 @@
    Uses the helpers in core.js (parseXml, kids, kid, txt, keyAlter, STEP_I, STEP_N, lofToPitch, plName). */
 "use strict";
 
+/* what a generated voice keeps of the melody's directions: the tempo, dynamics and hairpins (every part has its own) */
+const keepDir = d => ["sound", "dynamics", "wedge"].some(t => d.getElementsByTagName(t).length);
 const midiOf = p => 12 * (parseInt(txt(p, "octave"), 10) + 1) + [0, 2, 4, 5, 7, 9, 11][STEP_I[txt(p, "step")]] + (parseFloat(txt(p, "alter")) || 0);
 function setPitch(doc, p, idx, fifths) {
   const st = STEP_N[((idx % 7) + 7) % 7];
@@ -23,7 +25,7 @@ function secondVoiceXml(xml, partId, { interval = 3, level = 1 } = {}) {
   let fifths = 0, prev = null, prevMel = null;
   kids(part, "measure").forEach(m => {
     kids(m, "attributes").forEach(a => { const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0; });
-    kids(m, "direction").forEach(d => d.remove());
+    kids(m, "direction").forEach(d => { if (!keepDir(d)) d.remove(); });
     kids(m, "note").forEach(note => {
       kids(note, "accidental").forEach(a => a.remove()); kids(note, "lyric").forEach(a => a.remove());
       const p = kid(note, "pitch"); if (!p) return;
@@ -159,12 +161,32 @@ function partForInstrument(xml, iv, srcFifths = 0) {
    "chords" (one chord per bar), "bass" (the chord root per bar). The new part is written for its instrument:
    its transposition (trumpet in B♭ reads a tone higher), its clef, and an octave that suits its range. */
 const TR_IV = { 0: { d: 0, s: 0 }, 2: { d: 1, s: 2 }, 3: { d: 2, s: 3 }, 5: { d: 3, s: 5 }, 7: { d: 4, s: 7 }, 9: { d: 5, s: 9 }, 12: { d: 7, s: 12 }, 14: { d: 8, s: 14 }, 21: { d: 12, s: 21 }, "-3": { d: -2, s: -3 }, "-12": { d: -7, s: -12 }, "-24": { d: -14, s: -24 } };
+/* any transposition as an interval (a value not in the table: the usual spelling of that many semitones) */
+const trIv = tr => TR_IV[tr] || { d: Math.round((tr || 0) * 7 / 12), s: tr || 0 };
+/* MusicXML <transpose> (what to add to the written note to get the sound): every part Solo writes for a transposing
+   instrument carries it, so other programs (MuseScore, Finale, Sibelius) play and show it right. iv: written =
+   sounding + iv; whole octaves go to <octave-change> (tenor sax: -1 -2 and octave -1, as MuseScore writes it).
+   Verovio draws the written notes either way, and Solo's playback takes MIDI values without it (written pitch). */
+function setTranspose(doc, part, iv) {
+  [...part.getElementsByTagName("transpose")].forEach(t => t.remove());
+  if (!iv || (!iv.d && !iv.s)) return;
+  const s = -iv.s, oc = s < 0 ? -Math.floor(-s / 12) : Math.floor(s / 12), d = -iv.d - 7 * oc;
+  const m = kids(part, "measure")[0]; if (!m) return;
+  let a = kid(m, "attributes"); if (!a) { a = doc.createElement("attributes"); m.insertBefore(a, [...m.children].find(c => c.tagName !== "print") || null); }
+  const t = doc.createElement("transpose"); t.innerHTML = `<diatonic>${d}</diatonic><chromatic>${s - 12 * oc}</chromatic>${oc ? `<octave-change>${oc}</octave-change>` : ""}`;
+  a.insertBefore(t, ["directive", "measure-style", "for-part"].map(x => kid(a, x)).find(Boolean) || null);
+}
+/* the transposition a part's own <transpose> says (B♭ trumpet: 2, tenor sax: 14), or null */
+function trOfTranspose(part) {
+  const t = part && part.getElementsByTagName("transpose")[0]; if (!t) return null;
+  return -((parseInt(txt(t, "chromatic"), 10) || 0) + 12 * (parseInt(txt(t, "octave-change"), 10) || 0));
+}
 const PART_CLEF = { bass: "<sign>F</sign><line>4</line>", treble: "<sign>G</sign><line>2</line>", alto: "<sign>C</sign><line>3</line>", tenor: "<sign>C</sign><line>4</line>" };
 /* the octave a new part is written in (sounding pitches ps, their diatonic positions idx): inside the instrument's
    range, then in the range a pupil plays comfortably (TRN / Bandworld grade tables), then the fewest ledger lines in
    the best of the instrument's clefs (Gould: 2–3 are fine, more means another octave or clef) */
 function octaveFor(ps, instr, idx, maxOct = 4, info = {}) {
-  const [cl, ch] = comfOf(instr), t = TR_IV[instr.tr] || TR_IV[0], n = Math.max(1, ps.length); let best = Infinity, oct = Math.min(0, maxOct);
+  const [cl, ch] = comfOf(instr), t = trIv(instr.tr), n = Math.max(1, ps.length); let best = Infinity, oct = Math.min(0, maxOct);
   info.outR = 1;
   for (let o = -4; o <= maxOct; o++) {
     const outR = ps.filter(x => x + 12 * o < instr.lo || x + 12 * o > instr.hi).length / n, outC = ps.filter(x => x + 12 * o < cl || x + 12 * o > ch).length / n;
@@ -197,7 +219,7 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
     /* 0 = "Sam dobierze": the rule-based line; 9: chord tones; 3/6/5: parallel, as the player asked */
     /* the clef the voice will be read in: of the instrument's clefs, the one whose staff sits on its comfortable
        range; written positions = source positions − the source's transposition + the instrument's */
-    const tW = TR_IV[instr.tr] || TR_IV[0], tS = TR_IV[srcTr] || TR_IV[0], cm = comfOf(instr), mid = (cm[0] + cm[1]) / 2 + (instr.tr || 0);
+    const tW = trIv(instr.tr), tS = trIv(srcTr), cm = comfOf(instr), mid = (cm[0] + cm[1]) / 2 + (instr.tr || 0);
     const midIdx = Math.round((mid - 12) * 7 / 12), cf = clefsOf(instr).reduce((a, b) => Math.abs(CLEF_LINES[b] + 4 - midIdx) < Math.abs(CLEF_LINES[a] + 4 - midIdx) ? b : a);
     const place = { range: [instr.lo + srcTr, instr.hi + srcTr], comf: cm.map(x => x + srcTr), staff: CLEF_LINES[cf], wShift: tW.d - tS.d };
     const gen = (above, placed) => { const vx = interval === 0 ? ruledVoiceXml(one, srcId, { third, lowMidi: comfOf(instr)[0] + srcTr - (above ? 12 : 0), v2Midi, above, place: placed ? place : null })
@@ -215,7 +237,7 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
     const tops = melL.map((m, i) => third && v2Midi && v2Midi.length === melL.length ? Math.min(m, v2Midi[i]) : m);
     if (vp.length === tops.length && !placedVoice) {
       voiceMax = Math.floor(Math.min(...vp.map((x, i) => (tops[i] - x) / 12)));
-      const info = {}; octaveFor(vp.map(x => x - srcTr), instr, partIdx(vpart).map(i => i - (TR_IV[srcTr] || TR_IV[0]).d), voiceMax, info);
+      const info = {}; octaveFor(vp.map(x => x - srcTr), instr, partIdx(vpart).map(i => i - (trIv(srcTr)).d), voiceMax, info);
       if (info.outR > 0) { if (interval === 0) { vone = gen(false, true); voiceMax = 0; placedVoice = true; } else { vone = gen(true); voiceMax = 4; } }
     }
     one = vone;
@@ -226,7 +248,7 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
   }
   /* a source written for a transposing instrument (trumpet in B♭: a 2nd above) is taken back to concert pitch
      first, so the new part sounds with it, not a 2nd off */
-  if (srcTr) { const t0 = TR_IV[srcTr] || { d: 0, s: srcTr }; one = transposeXmlString(one, fixEnharmonic({ d: -t0.d, s: -t0.s }, srcFifths)); const k = parseXml(one).getElementsByTagName("key")[0]; srcFifths = k ? parseInt(txt(k, "fifths"), 10) || 0 : 0; }
+  if (srcTr) { const t0 = trIv(srcTr); one = transposeXmlString(one, fixEnharmonic({ d: -t0.d, s: -t0.s }, srcFifths)); const k = parseXml(one).getElementsByTagName("key")[0]; srcFifths = k ? parseInt(txt(k, "fifths"), 10) || 0 : 0; }
   const twoStaves = /<staves>2<\/staves>/.test(one);
   /* sounding range of the instrument: move by octaves so the part sits in its middle */
   const od = parseXml(one), op = kids(od.documentElement, "part")[0];
@@ -236,7 +258,7 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
      pupil plays comfortably (TRN / Bandworld grade tables), never outside the full range if it can be helped */
   const oct = twoStaves || placedVoice ? 0 : octaveFor(ps, instr, partIdx(op), voiceMax);
   let iv = { d: 7 * oct, s: 12 * oct };
-  const t = TR_IV[instr.tr] || TR_IV[0]; iv = fixEnharmonic({ d: iv.d + t.d, s: iv.s + t.s }, srcFifths);
+  const t = trIv(instr.tr); iv = fixEnharmonic({ d: iv.d + t.d, s: iv.s + t.s }, srcFifths);
   const wd = parseXml(transposeXmlString(one, iv)), wp = kids(wd.documentElement, "part")[0];
   const srcClef = src.getElementsByTagName("clef")[0];
   /* the clef: the instrument's own, or (trombone, cello, bassoon: tenor clef; viola: treble) another one if it
@@ -250,13 +272,16 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
     let best = ledgerCost(idx, CLEF_OF[clefName]) - 0.5;
     clefsOf(instr).filter(c => c !== instr.clef).forEach(c => { const v = ledgerCost(idx, c); if (v < best) { best = v; clefName = c; } });
   }
-  if (!twoStaves) [...wp.getElementsByTagName("clef")].forEach((c, i) => { if (i === 0) c.innerHTML = clefName ? (PART_CLEF[clefName] || PART_CLEF.treble) : srcClef.innerHTML; else c.remove(); });
-  /* tempo words and dynamics stay with the top part only (a score prints them once); the tempo itself is kept */
-  [...wp.getElementsByTagName("direction")].forEach(d => { if (!d.getElementsByTagName("sound").length) d.remove(); else [...d.getElementsByTagName("direction-type")].forEach(t => { t.innerHTML = "<words></words>"; }); });
+  /* later clef changes stay only for the same instrument (keepClef) and only in clefs it reads (cello bass → tenor) */
+  if (!twoStaves) [...wp.getElementsByTagName("clef")].forEach((c, i) => { if (i === 0) c.innerHTML = clefName ? (PART_CLEF[clefName] || PART_CLEF.treble) : srcClef.innerHTML; else if (!keepClef || !clefsOf(instr).includes(clefNameOf(c))) c.remove(); });
+  /* tempo words stay with the top part only (a score prints them once); the tempo itself is kept; dynamics and
+     hairpins go into every part (MOLA: a printed part needs its own dynamics, §11) */
+  [...wp.getElementsByTagName("direction")].forEach(d => { if (d.getElementsByTagName("dynamics").length || d.getElementsByTagName("wedge").length) return; if (!d.getElementsByTagName("sound").length) d.remove(); else [...d.getElementsByTagName("direction-type")].forEach(t => { t.innerHTML = "<words></words>"; }); });
   [...wp.getElementsByTagName("lyric")].forEach(l => l.remove());
   /* the new part joins the score with a free id */
   const ids = new Set(parts.map(p => p.getAttribute("id"))); let n = 2; while (ids.has("P" + n)) n++;
   const id = "P" + n, np = doc.importNode(wp, true); np.setAttribute("id", id);
+  setTranspose(doc, np, trIv(instr.tr));
   root.appendChild(np);
   const pl = kid(root, "part-list"), sp = doc.createElement("score-part"); sp.setAttribute("id", id);
   sp.innerHTML = `<part-name>${xesc(instr.name)}</part-name>`; pl.appendChild(sp); setDeclared(doc, sp, instr);
@@ -345,7 +370,7 @@ function chordVoiceXml(xml, partId, nth = 1) {
   let fifths = 0;
   kids(part, "measure").forEach((m, i) => {
     kids(m, "attributes").forEach(a => { const k = kid(a, "key"); if (k) fifths = parseInt(txt(k, "fifths"), 10) || 0; });
-    kids(m, "direction").forEach(d => d.remove());
+    kids(m, "direction").forEach(d => { if (!keepDir(d)) d.remove(); });
     const c = chords[i]; if (!c) return;
     const r = c.tonicLof + c.lof, pcs = [r, r + (c.minor ? -3 : 4), r + 1].map(l => { const p = lofToPitch(l); return ((([0, 2, 4, 5, 7, 9, 11][STEP_I[p.letter]] + p.alter) % 12) + 12) % 12; });
     kids(m, "note").forEach(note => {
@@ -593,7 +618,7 @@ function ruledVoiceXml(xml, partId, { third = false, lowMidi = 40, v2Midi = null
   const copyEv = melodyEvents(part, chords);
   copyEv.forEach((e, i) => { const p = kid(e.el, "pitch"); if (p && line[i]) { setPitch(doc, p, line[i].idx, e.fifths);
       if (line[i].alt) { let al = kid(p, "alter"); if (!al) { al = doc.createElement("alter"); p.insertBefore(al, kid(p, "octave")); al.textContent = "0"; } al.textContent = String((parseInt(al.textContent, 10) || 0) + line[i].alt); } kids(e.el, "accidental").forEach(a => a.remove()); kids(e.el, "lyric").forEach(a => a.remove()); } });
-  kids(part, "measure").forEach(m => { kids(m, "direction").forEach(d => { if (!d.getElementsByTagName("sound").length) d.remove(); }); [...m.getElementsByTagName("lyric")].forEach(l => l.remove()); });
+  kids(part, "measure").forEach(m => { kids(m, "direction").forEach(d => { if (!keepDir(d)) d.remove(); }); [...m.getElementsByTagName("lyric")].forEach(l => l.remove()); });
   root.appendChild(part);
   const pl = kid(root, "part-list"), sp = doc.createElement("score-part"); sp.setAttribute("id", id); sp.innerHTML = `<part-name>Głos</part-name>`; pl.appendChild(sp);
   return new XMLSerializer().serializeToString(doc);
@@ -659,20 +684,34 @@ const SCORE_ORDER = ["piccolo", "flet", "flet-a", "flet-p", "oboj", "rozek", "kl
 const SECTION = { puzon: "Puzon", "puzon-alt": "Puzon", "puzon-b": "Puzon", trabka: "Trąbka", "trabka-c": "Trąbka" };
 const SECTION_RANK = { "puzon-alt": 0, puzon: 1, "puzon-b": 2 };
 const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
-function declaredInstr(sp) { const n = sp && sp.getElementsByTagName("instrument-name")[0]; return n ? INSTRUMENTS.find(i => i.name === n.textContent.trim()) || null : null; }
+/* the instrument a part declares: by Solo's id in the score-instrument id (P2-puzon-b, survives a renamed instrument),
+   else by its Polish name (scores saved before the id was written) */
+function declaredInstr(sp) {
+  const si = sp && kids(sp, "score-instrument")[0]; if (!si) return null;
+  const sid = si.getAttribute("id") || "", pre = (sp.getAttribute("id") || "") + "-";
+  const byId = sid.startsWith(pre) && INSTRUMENTS.find(i => i.id === sid.slice(pre.length)); if (byId) return byId;
+  const n = si.getElementsByTagName("instrument-name")[0]; return n ? INSTRUMENTS.find(i => i.name === n.textContent.trim()) || null : null;
+}
+/* General MIDI programs (1–128), so other programs open each part with its own sound, not a piano */
+const GM = { puzon: 58, "puzon-alt": 58, "puzon-b": 58, trabka: 57, "trabka-c": 57, kornet: 57, flugelhorn: 57, waltornia: 61, "sakshorn-a": 61, "sakshorn-t": 59, eufonium: 59, baryton: 59, tuba: 59, suzafon: 59,
+  flet: 74, piccolo: 73, "flet-a": 74, "flet-p": 75, oboj: 69, rozek: 70, klarnet: 72, "klarnet-a": 72, "klarnet-es": 72, "klarnet-bas": 72, fagot: 71, kontrafagot: 71,
+  "sax-s": 65, "sax-a": 66, "sax-t": 67, "sax-b": 68, skrzypce: 41, altowka: 42, wiolonczela: 43, kontrabas: 44, fortepian: 1, organy: 20, akordeon: 22, keyboard: 1,
+  gitara: 25, "gitara-bas": 34, ukulele: 25, mandolina: 26, harfa: 47, dzwonki: 10, ksylofon: 14, marimba: 13, wibrafon: 12, sopran: 53, alt: 53, tenor: 53, bas: 53 };
 function setDeclared(doc, sp, instr) {
-  kids(sp, "score-instrument").forEach(x => x.remove());
-  const si = doc.createElement("score-instrument"); si.setAttribute("id", sp.getAttribute("id") + "-I1");
+  ["score-instrument", "midi-device", "midi-instrument"].forEach(t => kids(sp, t).forEach(x => x.remove()));
+  const sid = sp.getAttribute("id") + "-" + instr.id;
+  const si = doc.createElement("score-instrument"); si.setAttribute("id", sid);
   const nm = doc.createElement("instrument-name"); nm.textContent = instr.name; si.appendChild(nm);
-  const before = kids(sp, "midi-device")[0] || kids(sp, "midi-instrument")[0] || kids(sp, "player")[0];
+  const before = kids(sp, "player")[0];
   before ? sp.insertBefore(si, before) : sp.appendChild(si);
+  if (GM[instr.id]) { const mi = doc.createElement("midi-instrument"); mi.setAttribute("id", sid); mi.innerHTML = `<midi-program>${GM[instr.id]}</midi-program>`; sp.appendChild(mi); }
 }
 /* instrOf(sp, partEl) → the part's instrument or null; staves > 1 (piano) keep their name */
 function orchestrate(xml, instrOf, newId = null) {
   const doc = parseXml(xml), root = doc.documentElement, pl = kid(root, "part-list"); if (!pl) return xml;
   const sps = kids(pl, "score-part"), partEl = id => kids(root, "part").find(p => p.getAttribute("id") === id);
   const info = sps.map((sp, k) => {
-    const p = partEl(sp.getAttribute("id")), two = p && /<staves>[2-9]<\/staves>/.test(new XMLSerializer().serializeToString(p).slice(0, 4000));
+    const p = partEl(sp.getAttribute("id")), two = p && twoStaff(p);
     const ins = instrOf(sp, p); if (ins && !two) setDeclared(doc, sp, ins);
     const ps = p ? partPitches(p).map(m => m - (ins ? ins.tr || 0 : 0)) : [];
     const num = ROMAN.indexOf((txt(sp, "part-name").match(/ (I|II|III|IV|V|VI)$/) || [])[1]);
@@ -697,31 +736,41 @@ function orchestrate(xml, instrOf, newId = null) {
 }
 /* the clef a part is read in: of the instrument's clefs, the fewest ledger lines (its usual clef a little preferred) */
 function fitClef(part, instr) {
-  if (/<staves>[2-9]<\/staves>/.test(new XMLSerializer().serializeToString(part).slice(0, 4000))) return;
+  if (twoStaff(part)) return;
   const idx = partIdx(part); if (!idx.length) return;
   let best = ledgerCost(idx, instr.clef) - 0.5, name = instr.clef;
   clefsOf(instr).filter(c => c !== instr.clef).forEach(c => { const v = ledgerCost(idx, c); if (v < best) { best = v; name = c; } });
-  [...part.getElementsByTagName("clef")].forEach((c, i) => { if (i === 0) c.innerHTML = PART_CLEF[name] || PART_CLEF.treble; else c.remove(); });
+  /* later clef changes (cello bass → tenor → treble) stay when the instrument reads that clef */
+  [...part.getElementsByTagName("clef")].forEach((c, i) => { if (i === 0) c.innerHTML = PART_CLEF[name] || PART_CLEF.treble; else if (!clefsOf(instr).includes(clefNameOf(c))) c.remove(); });
 }
+/* fn rewrites the part; its <transpose> is kept (transposeXmlString drops it), changePartInstr sets a new one */
 function swapPart(xml, pid, fn) {
   const doc = parseXml(xml), root = doc.documentElement, part = kids(root, "part").find(p => p.getAttribute("id") === pid); if (!part) return xml;
-  const np = fn(soloScore(doc, part)); if (!np) return xml;
+  const tr = trOfTranspose(part), np = fn(soloScore(doc, part)); if (!np) return xml;
   const imp = doc.importNode(np, true); imp.setAttribute("id", pid); part.replaceWith(imp);
+  if (tr) setTranspose(doc, imp, trIv(tr));
   return new XMLSerializer().serializeToString(doc);
 }
 /* the same notes for another instrument: same sound (its transposition, its clef); an octave moves only if the
    notes would leave the new instrument's range */
-function changePartInstr(xml, pid, from, to) {
+function changePartInstr(xml, pid, from, to, fromTr = null) {
   const out = swapPart(xml, pid, one => {
     const p0 = kids(parseXml(one).documentElement, "part")[0], f = parseInt(txt(p0.getElementsByTagName("key")[0] || p0, "fifths") || "0", 10) || 0;
-    const tf = TR_IV[from.tr] || TR_IV[0], tt = TR_IV[to.tr] || TR_IV[0], ps = partPitches(p0).map(m => m - (from.tr || 0));
-    const oct = ps.some(m => m < to.lo || m > to.hi) ? octaveFor(ps, to, partIdx(p0).map(i => i - tf.d)) : 0;
+    const fr = fromTr ?? from.tr ?? 0, tf = trIv(fr), tt = trIv(to.tr), ps = partPitches(p0).map(m => m - fr);
+    /* the octave by the same rule as a new part (§6: range, then comfort, then ledger lines); the present one on a tie */
+    const oct = octaveFor(ps, to, partIdx(p0).map(i => i - tf.d));
     const w = kids(parseXml(transposeXmlString(one, fixEnharmonic({ d: tt.d - tf.d + 7 * oct, s: tt.s - tf.s + 12 * oct }, f))).documentElement, "part")[0];
     fitClef(w, to); return w;
   });
   const d = parseXml(out), sp = [...d.getElementsByTagName("score-part")].find(x => x.getAttribute("id") === pid);
   if (sp) { setDeclared(d, sp, to); kid(sp, "part-name").textContent = to.name; }
+  const np = kids(d.documentElement, "part").find(p => p.getAttribute("id") === pid); if (np) setTranspose(d, np, trIv(to.tr));
   return new XMLSerializer().serializeToString(d);
+}
+/* the share of a part's notes outside an instrument's range (tr: how the part is written above the sound) */
+function outOfRange(xml, pid, instr, tr = instr.tr || 0) {
+  const p = kids(parseXml(xml).documentElement, "part").find(x => x.getAttribute("id") === pid); if (!p) return 0;
+  const ps = partPitches(p).map(m => m - tr); return ps.length ? ps.filter(m => m < instr.lo || m > instr.hi).length / ps.length : 0;
 }
 function shiftPartOctave(xml, pid, dir, instr) {
   return swapPart(xml, pid, one => { const w = kids(parseXml(transposeXmlString(one, { d: 7 * dir, s: 12 * dir })).documentElement, "part")[0]; if (instr) fitClef(w, instr); return w; });

@@ -132,7 +132,7 @@ function analyseXml(xml) {
     let staves = 1; const st = p.getElementsByTagName("staves")[0]; if (st) staves = parseInt(st.textContent, 10) || 1;
     const clefEl = p.getElementsByTagName("clef")[0];
     const trEl = p.getElementsByTagName("transpose")[0];
-    const transp = trEl ? parseInt(txt(trEl, "chromatic") || "0", 10) : 0;
+    const transp = trEl ? (parseInt(txt(trEl, "chromatic") || "0", 10) || 0) + 12 * (parseInt(txt(trEl, "octave-change") || "0", 10) || 0) : 0;   // sounding − written
     const name = names[id] || "Głos";
     const isPiano = staves > 1 || PIANO_RE.test(name);
     return { id, name, staves, keep: !isPiano, clef: clefNameOf(clefEl) || "treble", transp };
