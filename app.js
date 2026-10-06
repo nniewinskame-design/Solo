@@ -460,7 +460,7 @@ async function renameInLibrary(p, field, v) {
   try { await DB.put(rec); } catch { hud("Nie udało się zapisać."); return; }
   refreshLibrary();
   try {
-    const snap = { piece: S.piece, parts: S.parts, srcKey: S.srcKey, srcClef: S.srcClef, clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, loadedKey: S.loadedKey };
+    const snap = { piece: S.piece, parts: S.parts, melody: S.melody, srcKey: S.srcKey, srcClef: S.srcClef, clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm, loadedKey: S.loadedKey };
     loadState(rec, rec.settings);
     const thumb = await makeThumb();
     Object.assign(S, snap); S.loadedKey = null;
@@ -2979,7 +2979,7 @@ async function migrateExample() {
         composer: !p.composer || /beethoven|meow/i.test(p.composer) ? "Melodia ludowa" : p.composer, settings: /<beats>3<\/beats>/.test(p.xml) ? p.settings : { ...(p.settings || {}), iv: { d: 0, s: 0 }, preset: -1 }, thumb: null };
       if (rec.settings && rec.settings.preset === undefined) rec.settings.preset = -1;
       await DB.put(rec);
-      const snap = { piece: S.piece, parts: S.parts, srcKey: S.srcKey, srcClef: S.srcClef, clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm };
+      const snap = { piece: S.piece, parts: S.parts, melody: S.melody, srcKey: S.srcKey, srcClef: S.srcClef, clef: S.clef, iv: S.iv, preset: S.preset, bpm: S.bpm };
       try { loadState(rec, rec.settings); rec.keyLabel = curKeyName(); rec.thumb = await makeThumb(); await DB.put(rec); } catch (e) { console.warn(e); }
       Object.assign(S, snap); S.loadedKey = null;
     }
