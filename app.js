@@ -3425,7 +3425,7 @@ $("#s-sub").addEventListener("click", e => {
 function syncSettings() {
   syncInstall();
   const items = NEWS[VERSION] || [];
-  $("#news").innerHTML = `<p class="txt"><b>Wersja ${esc(VERSION)}</b></p><ul class="news">${items.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
+  $("#news").innerHTML = `<ul class="news">${items.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`; $("#news-ver").textContent = `Wersja ${VERSION}`;
   $("#ver").textContent = BUILD ? `${VERSION} · test ${BUILD}` : VERSION;
   DB.all().then(all => {
     $("#store-count").textContent = all.length ? `${all.length} ${plural(all.length, "utwór", "utwory", "utworów")} w bibliotece` : "Biblioteka jest pusta";
@@ -3490,7 +3490,7 @@ function nudgeBackup(all) {
   el.hidden = !(changed && due);
 }
 $("#nudge-save")?.addEventListener("click", async () => { const r = await saveBackup(); if (r.how !== "blocked") hud(backupText(r), 3000); });
-$("#news-open")?.addEventListener("click", () => { store.set("newsSeen", VERSION); $("#news-nudge").hidden = true; go("settings"); setTimeout(() => $("#news").scrollIntoView({ behavior: "smooth", block: "center" }), 450); });
+$("#news-open")?.addEventListener("click", () => { store.set("newsSeen", VERSION); $("#news-nudge").hidden = true; go("settings"); $("#news-det").open = true; setTimeout(() => $("#news-det").scrollIntoView({ behavior: "smooth", block: "center" }), 450); });
 $("#news-x")?.addEventListener("click", () => { store.set("newsSeen", VERSION); fadeOut($("#news-nudge"), 180); });
 $("#nudge-x")?.addEventListener("click", () => { store.set("nudgeLater", String(Date.now())); fadeOut($("#backup-nudge"), 180); });
 /* Reading a backup back: everything is checked first (nothing is written from a damaged file), an older copy never
@@ -3558,6 +3558,8 @@ const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran
   "Mikrofon włącza się dopiero, gdy go potrzebujesz, i gaśnie po wyjściu ze stroika.",
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
   "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
+  "Nowa melodia: wybierasz klucz, tonację (dur albo moll) i dowolne metrum.",
+  "Zakładka Ja uporządkowana. Tylko jasny wygląd.",
   "Metronom ze stukaniem tempa i akcentami. Stroik z wielką nutą.",
   "Tonacje molowe z właściwymi akordami. Przedtakt wyrównany we wszystkich partiach.",
   "Partie dla instrumentów transponujących brzmią poprawnie, także po eksporcie.",
@@ -4020,10 +4022,14 @@ $("#btn-tour").addEventListener("click", () => {
 /* ---------------- Install (T9) ---------------- */
 let installEvt = null;
 const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+/* "Na ekranie początkowym" only while Solo is not installed, with the steps for this device only */
+const deviceOs = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) ? "ios" : /Android/.test(navigator.userAgent) ? "android" : "desktop";
 function syncInstall() {
-  $("#installed").hidden = !standalone(); $("#install-steps").hidden = standalone();   // the steps only while it is not installed
+  $("#install-sec").hidden = standalone();
+  $("#installed").hidden = true;
   $("#btn-install").hidden = standalone() || !installEvt;
   $("#install-steps").hidden = standalone();
+  const os = deviceOs(); $$("#install-steps [data-os]").forEach(p => (p.hidden = p.dataset.os !== os));
 }
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; syncInstall(); });
 window.addEventListener("appinstalled", () => { installEvt = null; syncInstall(); hud("Solo jest na ekranie początkowym", 3000); });
@@ -4130,24 +4136,38 @@ function safariNotice(all) {
 }
 
 /* ---------------- a new melody: the basics first (benchmark: MuseScore, iReal Pro, Flat), then an empty staff ---------------- */
-const nm = { instr: null, time: "4/4", key: 0, bpm: 90, title: "" };
+const nm = { instr: null, time: "4/4", key: 0, mode: "major", clef: null, bpm: 90, title: "" };
 function buildNewSheet() {
   const p = profile(); nm.instr = nm.instr || p.main;
   const ids = [...new Set([...p.instruments, nm.instr])];
   $("#new-instr").innerHTML = ids.map(id => `<button class="ichip" ${hueStyle(id)} data-i="${id}" aria-pressed="${id === nm.instr}">${esc(instrById(id).name)}</button>`).join("") +
     `<button data-more aria-label="Inny instrument">${icon("plus")}</button>`;
   meterPicker($("#new-time"), nm.time, v => { nm.time = v; });
-  $("#new-key").value = String(nm.key); $("#new-bpm").textContent = String(nm.bpm);
+  $("#new-bpm").textContent = String(nm.bpm);
   $("#new-title").value = nm.title;
-  $("#new-clef").textContent = "klucz " + (CLEF_PL[instrById(nm.instr).clef] || "wiolinowy");
+  /* the clefs this instrument is written in (trombone: bass, tenor; viola: alto, treble), its usual one first */
+  const ins = instrById(nm.instr), clefs = [...new Set([ins.clef, ...(typeof clefsOf === "function" ? clefsOf(ins) : [])])].filter(c => CLEF_PL[c]);
+  if (!clefs.includes(nm.clef)) nm.clef = ins.clef;
+  $("#new-clefs").innerHTML = clefs.map(c => `<button type="button" data-clef="${c}" aria-pressed="${c === nm.clef}">${cap(CLEF_PL[c])}</button>`).join("");
+  syncNewKey();
 }
+/* the key by its name (F-dur, d-moll) with its signature under it; − / + walk the circle of fifths (7♭ … 7♯) */
+function syncNewKey() {
+  $("#new-keyname").textContent = keyName(nm.key, nm.mode); const n = Math.abs(nm.key); $("#new-keysig").textContent = !n ? "Bez znaków" : `${n} ${nm.key > 0 ? plural(n, "krzyżyk", "krzyżyki", "krzyżyków") : plural(n, "bemol", "bemole", "bemoli")}`;
+  $$("#new-keypick [data-mode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === nm.mode)));
+  $$("#new-keypick [data-kd]").forEach(b => (b.disabled = Math.abs(nm.key + +b.dataset.kd) > 7));
+}
+$("#new-keypick").addEventListener("click", e => {
+  const d = e.target.closest("[data-kd]"), m = e.target.closest("[data-mode]");
+  if (d) nm.key = Math.max(-7, Math.min(7, nm.key + +d.dataset.kd)); if (m) nm.mode = m.dataset.mode; syncNewKey();
+});
+$("#new-clefs").addEventListener("click", e => { const b = e.target.closest("[data-clef]"); if (b) { nm.clef = b.dataset.clef; buildNewSheet(); } });
 $("#new-instr").addEventListener("click", e => {
   const b = e.target.closest("[data-i]"); if (b) { nm.instr = b.dataset.i; buildNewSheet(); }
   /* any instrument: the same searchable picker as everywhere, then back to this sheet */
   if (e.target.closest("[data-more]")) pickInstrument("Instrument", id => { nm.instr = id; openSheet("new"); });
 });
 $("#new-instr").addEventListener("change", e => { if (e.target.id === "new-instr-more" && e.target.value) { nm.instr = e.target.value; buildNewSheet(); } });
-$("#new-key").addEventListener("change", e => { nm.key = +e.target.value; });
 $("#new-title").addEventListener("input", e => { nm.title = e.target.value; });
 [["#new-bpm-down", -5], ["#new-bpm-up", 5]].forEach(([s, d]) => $(s).addEventListener("click", () => { nm.bpm = Math.max(30, Math.min(240, nm.bpm + d)); $("#new-bpm").textContent = String(nm.bpm); }));
 /* a ready tune written for the chosen instrument (its octave, transposition, clef) with the piano under it */
@@ -4170,7 +4190,7 @@ function openReadyTune(tid) {
 $("#new-go").addEventListener("click", () => {
   const ins = instrById(nm.instr), [beats, bt] = nm.time.split("/");
   /* the new part declares its instrument (and <transpose> for a transposing one), in its own clef */
-  const d = parseXml(blankXml(4, { clef: ins.clef, beats, beatType: bt, fifths: nm.key, tempo: nm.bpm, title: nm.title || "Nowa melodia", part: ins.name }));
+  const d = parseXml(blankXml(4, { clef: nm.clef || ins.clef, beats, beatType: bt, fifths: nm.key, mode: nm.mode, tempo: nm.bpm, title: nm.title || "Nowa melodia", part: ins.name }));
   setDeclared(d, d.getElementsByTagName("score-part")[0], ins); setTranspose(d, d.getElementsByTagName("part")[0], trIv(ins.tr));
   const xml = new XMLSerializer().serializeToString(d);
   closeSheetThen(() => {

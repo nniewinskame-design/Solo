@@ -1614,3 +1614,73 @@ a,.link{color:var(--brand-ink)}
 #score #s-sub{font-size:13px;margin-top:3px}
 #score .stitle .a{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 :root{--tn-ok:var(--in-tune);--tn-near:var(--near-tune);--tn-far:var(--off-tune)}
+
+/* ===== clean gradients, v2 (Nat: "still dirty"): interpolated in OKLCH so the middle keeps its colour (sRGB mixing
+   greys it), one opaque layer of light tints instead of stacked transparent ones, and Gaussian fades
+   (alpha = e^(−4.5·t²)) instead of linear ones, which leave a visible rim ===== */
+:root{
+  --grad-brand:linear-gradient(120deg,#2D8CFF,#5A63FF 50%,#9A4DFF);
+  --fade-g:linear-gradient(180deg,#000 0%,rgb(0 0 0/.96) 10%,rgb(0 0 0/.84) 20%,rgb(0 0 0/.67) 30%,rgb(0 0 0/.49) 40%,rgb(0 0 0/.33) 50%,rgb(0 0 0/.2) 60%,rgb(0 0 0/.11) 70%,rgb(0 0 0/.05) 80%,rgb(0 0 0/.02) 90%,transparent 100%);
+}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){
+  :root{--grad-brand:linear-gradient(in oklch 120deg,#2D8CFF,#9A4DFF)}
+}
+/* the wash: opaque, light, three neighbouring tints, faded with the Gaussian mask */
+.aura{background:linear-gradient(100deg,#D6E6FF,#E0DCFF 50%,#F0DDFF)}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){ .aura{background:linear-gradient(in oklch 100deg,#D3E5FF,#EEDBFF)} }
+.aura::after{display:none}
+.mast .aura,.mast .aura{background:linear-gradient(100deg,#CFE2FF,#DCD7FF 50%,#EED6FF)}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){ .mast .aura{background:linear-gradient(in oklch 100deg,#C9DFFF,#EBD3FF)} }
+.mast .aura{bottom:0;-webkit-mask:var(--fade-g);mask:var(--fade-g)}
+/* start screen: one soft Gaussian glow of the brand colour behind the tile, nothing else */
+#splash .aura{background:radial-gradient(closest-side circle at 50% 46%,rgb(90 99 255/.26) 0%,rgb(90 99 255/.25) 10%,rgb(90 99 255/.22) 20%,rgb(90 99 255/.17) 30%,rgb(90 99 255/.13) 40%,rgb(90 99 255/.085) 50%,rgb(90 99 255/.05) 60%,rgb(90 99 255/.03) 70%,rgb(90 99 255/.015) 80%,rgb(90 99 255/.006) 90%,rgb(90 99 255/0) 100%);
+  inset:-10% -40%}
+#splash .sp-tile{box-shadow:0 24px 48px -20px rgb(90 99 255/.55),inset 0 1px 0 rgb(255 255 255/.3)}
+/* chips: a flat, clean tint (no two-colour wash); chosen = the OKLCH gradient */
+.ichip,.pchip,.chips>button{background:var(--h-tint,color-mix(in oklab,var(--h) 14%,#fff))}
+.ichip[aria-pressed="true"],.chips>button[aria-pressed="true"],.pchip.only{background:linear-gradient(120deg,var(--h),var(--h2))}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){
+  .ichip[aria-pressed="true"],.chips>button[aria-pressed="true"],.pchip.only{background:linear-gradient(in oklch 120deg,var(--h),var(--h2))}
+}
+.notice{background:#EEF2FF;box-shadow:none}
+.dock .play,.dock .play.on,.fab,.btn.primary,.done:not(.ghost),.pill.text[aria-pressed=true],.cchip[aria-selected="true"]{box-shadow:0 10px 24px -12px rgb(90 99 255/.6),inset 0 1px 0 rgb(255 255 255/.22)}
+/* colour lives in crisp shapes on a clean canvas (no washes behind text): the logo tile, Play, "+", the chosen chip */
+#splash .aura,.mast .aura{display:none}
+.mast{padding-top:calc(30px + var(--safe-t));padding-bottom:16px}
+.mast .brand svg.mark{width:30px;height:30px;padding:6px 7px;border-radius:9px;background:var(--grad-brand);color:#fff;box-sizing:border-box;margin:0 4px 0 0;
+  box-shadow:0 6px 14px -6px rgb(90 99 255/.6),inset 0 1px 0 rgb(255 255 255/.3)}
+.mast .brand{align-items:center}
+
+/* ===== Ja: a card on top, settings as labelled rows in one group, one "Solo" group, a quiet footnote ===== */
+.me-card{display:flex;align-items:center;gap:14px;padding:14px;margin:4px 0 18px;border-radius:20px;background:var(--surface);box-shadow:var(--shadow-1),0 0 0 .5px var(--hairline)}
+.me-tile{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;flex:none;color:var(--h-on,#fff);
+  background:linear-gradient(135deg,var(--h,var(--brand)),var(--h2,var(--brand-2)));box-shadow:0 8px 18px -10px var(--h2,rgb(90 99 255));}
+@supports (background:linear-gradient(in oklch 90deg,red,blue)){ .me-tile{background:linear-gradient(in oklch 135deg,var(--h,var(--brand)),var(--h2,var(--brand-2)))} }
+.me-tile svg.i{width:26px;height:26px}
+.me-txt b{display:block;font:650 19px/1.2 var(--font);letter-spacing:-.025em}
+.me-txt small{display:block;margin-top:3px;font:500 13.5px var(--font);color:var(--text-2)}
+.prof{gap:0}
+.me-group{padding:4px 14px}
+.me-row{display:flex;flex-direction:column;gap:8px;padding:12px 0;border-bottom:1px solid var(--hairline)}
+.me-row:last-child{border-bottom:0}
+.me-l{font:600 13px var(--font);color:var(--text-2)}
+.me-note{font:500 12px var(--font);color:var(--text-3)}
+.me-row .seg{background:var(--surface-2)}
+.ichip.add{padding:0 10px}
+.li-det summary{list-style:none;cursor:pointer}
+.li-det summary::-webkit-details-marker{display:none}
+.li-det[open] summary .chev{transform:rotate(180deg)}
+.li-det summary .chev{transition:transform 220ms var(--ease-out)}
+.li-det .news{margin:0;padding-left:18px;font-size:14px;line-height:1.5;color:var(--text-2)}
+.li-det .news li{margin:4px 0}
+.me-foot{margin:14px 6px 30px;font:400 12.5px/1.55 var(--font);color:var(--text-3);text-align:center}
+.me-foot a{color:var(--text-2)}
+/* new melody: the key by name, stepped round the circle of fifths */
+.keypick{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--r-card);background:var(--surface);box-shadow:var(--shadow-1),0 0 0 .5px var(--hairline)}
+.kp-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.kp-val{text-align:center;min-width:0}
+.kp-val b{display:block;font:650 20px/1.15 var(--font);letter-spacing:-.025em}
+.kp-val small{display:block;font:500 13px var(--font);color:var(--text-3);margin-top:2px}
+.kp-mode{grid-template-columns:1fr 1fr}
+.me-foot{margin-bottom:calc(120px + var(--safe-b))}
+#sh-new .li .grow{display:flex;align-items:center;gap:6px;font:600 18px var(--font)}

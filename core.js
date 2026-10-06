@@ -690,7 +690,7 @@ function blankXml(bars = 8, o = {}) {
   const cx = { treble: ["G", 2], bass: ["F", 4], tenor: ["C", 4], alto: ["C", 3] }[o.clef] || ["G", 2], clef = `<sign>${cx[0]}</sign><line>${cx[1]}</line>`;
   const tempo = o.tempo ? `<direction placement="above"><direction-type><words></words></direction-type><sound tempo="${o.tempo}"/></direction>` : "";
   let m = "";
-  for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>${div}</divisions><key><fifths>${fifths}</fifths></key><time><beats>${beats}</beats><beat-type>${bt}</beat-type></time><clef>${clef}</clef></attributes>${tempo}` : ""}${emptyBarXml(beats, bt, div)}</measure>`;
+  for (let i = 1; i <= bars; i++) m += `<measure number="${i}">${i === 1 ? `<attributes><divisions>${div}</divisions><key><fifths>${fifths}</fifths>${o.mode === "minor" ? "<mode>minor</mode>" : ""}</key><time><beats>${beats}</beats><beat-type>${bt}</beat-type></time><clef>${clef}</clef></attributes>${tempo}` : ""}${emptyBarXml(beats, bt, div)}</measure>`;
   return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(o.title || "Moje nuty")}</work-title></work><part-list><score-part id="P1"><part-name>${xesc(o.part || "Głos solowy")}</part-name></score-part></part-list><part id="P1">${m}</part></score-partwise>`;
 }
 function doubtfulBars(issues) { return [...new Set((issues || []).map(t => parseInt((t.match(/Takt (\d+)/) || [])[1], 10)).filter(Boolean))]; }

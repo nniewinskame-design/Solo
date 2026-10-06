@@ -74,7 +74,7 @@ const INSTR_GROUPS = ["Dęte blaszane", "Dęte drewniane", "Smyczkowe", "Klawisz
 /* one colour per instrument family, everywhere (Clear Stage: colour = meaning, never a part's index) */
 /* (FAMILY_HUE, the family → colour map, lives in orb.js, which loads first) */
 function hueOf(instr) { const i = typeof instr === "string" ? instrById(instr) : instr; return (i && FAMILY_HUE[i.group]) || "slate"; }
-const hueStyle = instr => { const h = hueOf(instr); return `style="--h:var(--${h});--h2:var(--${h}-2);--h-ink:var(--${h}-ink);--h-on:var(--${h}-on)"`; };
+const hueStyle = instr => { const h = hueOf(instr); return `style="--h:var(--${h});--h2:var(--${h}-2);--h-ink:var(--${h}-ink);--h-on:var(--${h}-on);--h-tint:var(--${h}-tint)"`; };
 /* the instrument picker (benchmark: MuseScore, StaffPad, Dorico, BandLab): search, "yours" first, then families */
 const recentInstr = () => { try { const r = JSON.parse(store.get("recentInstr", "[]")); return Array.isArray(r) ? r : []; } catch { return []; } };
 function instrPicker(box, { selected = [], multi = false, onPick }) {
@@ -271,18 +271,22 @@ function timbreNote(kind) {
 function renderProfile() {
   const box = $("#prof"); if (!box) return;
   const p = profile(), m = instrById(p.main);
-  box.innerHTML = `<div class="ichips">${p.instruments.map(id => `<button class="ichip" ${hueStyle(id)} data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>
-    ${p.instruments.length > 1 ? `<p class="sub">Główny: ${esc(m.name)}</p>` : ""}
-    ${trPc(m) ? `<h3 class="lbl">Stroik pokazuje</h3><div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla instrumentu</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>` : ""}
-    <h3 class="lbl">Rola</h3><div class="seg three"><button data-role="teacher" aria-pressed="${p.role === "teacher"}">Uczę</button><button data-role="student" aria-pressed="${p.role === "student"}">Uczę się</button><button data-role="self" aria-pressed="${p.role === "self"}">Dla siebie</button></div>
-    <h3 class="lbl">Strój A</h3><div class="seg three">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>
-    <button class="btn tinted wide" data-again>Pytania na start jeszcze raz</button>`;
+  const ROLE = { teacher: "Uczę gry", student: "Uczę się", self: "Gram dla siebie" };
+  /* the card at the top: who plays what, at a glance; the main instrument's family colour on the tile */
+  const card = $("#me-card");
+  if (card) card.innerHTML = `<span class="me-tile" ${hueStyle(m)}>${icon("user")}</span><span class="me-txt"><b>${esc(m.name)}</b><small>${esc(ROLE[p.role] || "")} · A = ${p.a4} Hz</small></span>`;
+  const row = (label, body, note = "") => `<div class="me-row"><span class="me-l">${label}</span>${body}${note}</div>`;
+  box.innerHTML = `<div class="group me-group">
+    ${row("Instrumenty", `<div class="ichips">${p.instruments.map(id => `<button class="ichip" ${hueStyle(id)} data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip add" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>`, p.instruments.length > 1 ? `<small class="me-note">Dotknij, żeby wybrać główny</small>` : "")}
+    ${row("Rola", `<div class="seg three"><button data-role="teacher" aria-pressed="${p.role === "teacher"}">Uczę</button><button data-role="student" aria-pressed="${p.role === "student"}">Uczę się</button><button data-role="self" aria-pressed="${p.role === "self"}">Dla siebie</button></div>`)}
+    ${row("Strój A", `<div class="seg three">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>`)}
+    ${trPc(m) ? row("Stroik pokazuje", `<div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla ${esc(m.name.toLowerCase())}</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>`) : ""}
+  </div>`;
 }
 $("#prof").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   const p = profile();
   if (b.hasAttribute("data-edit")) { openSheet("instr"); return; }
-  if (b.hasAttribute("data-again")) { openOnboarding(); return; }
   if (b.dataset.main) p.main = b.dataset.main;
   if (b.dataset.read) p.reading = b.dataset.read;
   if (b.dataset.role) p.role = b.dataset.role;

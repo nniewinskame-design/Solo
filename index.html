@@ -34,6 +34,7 @@
   <symbol id="left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
   <symbol id="right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
   <symbol id="down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="star" viewBox="0 0 24 24"><path d="M12 3.5l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z"/></symbol>
   <symbol id="play" viewBox="0 0 24 24"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.6-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.2" fill="currentColor" stroke="none"/></symbol>
   <symbol id="updown" viewBox="0 0 24 24"><path d="M9 17.2V6.5M18 13.2V3.5"/><ellipse class="h" cx="6.6" cy="17.6" rx="3" ry="2.15" transform="rotate(-22 6.6 17.6)"/><ellipse cx="15.6" cy="13.6" rx="3" ry="2.15" transform="rotate(-22 15.6 13.6)"/><path d="M10.5 21h6.5M14.5 18.5l2.5 2.5"/></symbol>
@@ -252,7 +253,7 @@
   <div class="wrap narrow">
     <h1 class="h-l page-title tabtitle">Ja</h1>
 
-    <h3 class="lbl">Instrumenty</h3>
+    <div class="me-card" id="me-card"></div>
     <div class="prof" id="prof"></div>
 
     <h3 class="lbl lx-over" id="snd-t">Brzmienia</h3>
@@ -268,37 +269,29 @@
     </div>
     <p class="status-line" id="backup-status"></p>
 
+    <div id="install-sec">
     <h3 class="lbl">Na ekranie początkowym</h3>
     <div class="group">
       <button class="li tap" id="btn-install" hidden><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Dodaj Solo do ekranu</b><small>Solo stanie się aplikacją z własną ikoną</small></span><svg class="i chev"><use href="#right"/></svg></button>
       <div class="li" id="installed" hidden><span class="ic"><svg class="i"><use href="#check"/></svg></span><span class="grow"><b>Solo jest na ekranie początkowym</b><small>Aktualizuje się samo, ikonę dodaje się tylko raz</small></span></div>
       <div class="li col" id="install-steps">
-        <p class="txt"><b>iPad, iPhone:</b> w Safari dotknij <b>Udostępnij</b>, potem <b>Do ekranu początkowego</b>.</p>
-        <p class="txt"><b>Android:</b> w Chrome otwórz menu <b>⋮</b> i wybierz <b>Dodaj do ekranu głównego</b> (albo <b>Zainstaluj aplikację</b>). Wtedy Solo pojawi się też w Ustawieniach telefonu, w Aplikacjach. W innych przeglądarkach, np. DuckDuckGo, może powstać tylko skrót: otwórz Solo w Chrome.</p>
-        <p class="txt"><b>Windows:</b> w Edge lub Chrome kliknij ikonę instalacji na końcu paska adresu.</p>
+        <p class="txt" data-os="ios"><b>iPad, iPhone:</b> w Safari dotknij <b>Udostępnij</b>, potem <b>Do ekranu początkowego</b>.</p>
+        <p class="txt" data-os="android"><b>Android:</b> w Chrome otwórz menu <b>⋮</b> i wybierz <b>Dodaj do ekranu głównego</b> (albo <b>Zainstaluj aplikację</b>). Wtedy Solo pojawi się też w Ustawieniach telefonu, w Aplikacjach. W innych przeglądarkach, np. DuckDuckGo, może powstać tylko skrót: otwórz Solo w Chrome.</p>
+        <p class="txt" data-os="desktop"><b>Komputer:</b> w Edge lub Chrome kliknij ikonę instalacji na końcu paska adresu.</p>
       </div>
     </div>
 
-    <h3 class="lbl">Pomoc</h3>
-    <div class="group"><button class="li tap" id="btn-tour"><span class="ic"><svg class="i"><use href="#info"/></svg></span><span class="grow"><b>Samouczek</b><small>Krótko po ekranie nut</small></span><svg class="i chev"><use href="#right"/></svg></button></div>
+    </div>
 
-    <h3 class="lbl">Co nowego</h3>
-    <div class="group"><div class="li col" id="news"></div></div>
-
-    <h3 class="lbl">Informacje prawne</h3>
+    <h3 class="lbl">Solo</h3>
     <div class="group">
+      <button class="li tap" id="btn-tour"><span class="ic"><svg class="i"><use href="#info"/></svg></span><span class="grow"><b>Samouczek</b><small>Krótko po ekranie nut</small></span><svg class="i chev"><use href="#right"/></svg></button>
+      <details class="li-det" id="news-det"><summary class="li tap"><span class="ic"><svg class="i"><use href="#star"/></svg></span><span class="grow"><b>Co nowego</b><small id="news-ver"></small></span><svg class="i chev"><use href="#down"/></svg></summary><div class="li col" id="news"></div></details>
       <a class="li tap" href="prywatnosc.html" data-doc="prywatnosc"><span class="ic"><svg class="i"><use href="#lock"/></svg></span><span class="grow"><b>Polityka prywatności</b><small>Bez plików cookies</small></span><svg class="i chev"><use href="#right"/></svg></a>
-      <a class="li tap" href="regulamin.html" data-doc="regulamin"><span class="ic"><svg class="i"><use href="#info"/></svg></span><span class="grow"><b>Regulamin</b></span><svg class="i chev"><use href="#right"/></svg></a>
+      <a class="li tap" href="regulamin.html" data-doc="regulamin"><span class="ic"><svg class="i"><use href="#file"/></svg></span><span class="grow"><b>Regulamin</b></span><svg class="i chev"><use href="#right"/></svg></a>
       <a class="li tap" href="licencje.html" data-doc="licencje"><span class="ic"><svg class="i"><use href="#music"/></svg></span><span class="grow"><b>Licencje</b></span><svg class="i chev"><use href="#right"/></svg></a>
     </div>
-
-    <h3 class="lbl">O aplikacji</h3>
-    <div class="group">
-      <div class="li col">
-        <p class="txt">Solo działa w przeglądarce. Nuty i zdjęcia są odczytywane i zapisywane tylko na tym urządzeniu. Bez reklam, śledzenia i plików cookies.</p>
-        <p class="txt small">© 2026 Meow Studios · <a href="mailto:nniewinskame@gmail.com">nniewinskame@gmail.com</a> · Wersja <span id="ver"></span></p>
-      </div>
-    </div>
+    <p class="me-foot">Nuty i zdjęcia zostają tylko na tym urządzeniu. Bez reklam, śledzenia i plików cookies.<br>© 2026 Meow Studios · <a href="mailto:nniewinskame@gmail.com">kontakt</a> · wersja <span id="ver"></span></p>
   </div>
 </section>
 
@@ -568,13 +561,20 @@
 <div class="sheet" id="sh-new" role="dialog" aria-modal="true" aria-labelledby="sh-new-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-new-t">Nowa melodia</h2><button class="done ghost" data-close>Anuluj</button></div>
-  <h3 class="lbl first">Instrument <small id="new-clef"></small></h3>
+  <h3 class="lbl first">Instrument</h3>
   <div class="chips" id="new-instr"></div>
   <div class="list fields" style="margin-top:16px"><label class="li"><span class="fk">Tytuł</span><input id="new-title" type="text" autocomplete="off" placeholder="Nowa melodia"></label></div>
   <h3 class="lbl">Metrum</h3>
   <div class="meter" id="new-time"></div>
+  <h3 class="lbl">Klucz</h3>
+  <div class="chips" id="new-clefs"></div>
   <h3 class="lbl">Tonacja</h3>
-  <label class="ask-row" for="new-key"><span>Znaki przy kluczu</span><select id="new-key"><option value="0">Bez znaków</option><option value="-1">1 bemol</option><option value="-2">2 bemole</option><option value="-3">3 bemole</option><option value="-4">4 bemole</option><option value="1">1 krzyżyk</option><option value="2">2 krzyżyki</option><option value="3">3 krzyżyki</option><option value="4">4 krzyżyki</option></select></label>
+  <div class="keypick" id="new-keypick">
+    <div class="kp-row"><button type="button" class="pill round sm" data-kd="-1" aria-label="Mniej krzyżyków, więcej bemoli"><svg class="i"><use href="#minus"/></svg></button>
+      <div class="kp-val" aria-live="polite"><b id="new-keyname"></b><small id="new-keysig"></small></div>
+      <button type="button" class="pill round sm" data-kd="1" aria-label="Więcej krzyżyków, mniej bemoli"><svg class="i"><use href="#plus"/></svg></button></div>
+    <div class="seg kp-mode"><button type="button" data-mode="major">dur</button><button type="button" data-mode="minor">moll</button></div>
+  </div>
   <h3 class="lbl">Tempo</h3>
   <div class="list"><div class="li"><span class="ic"><svg class="i"><use href="#metronome"/></svg></span><span class="grow"><svg class="q"><use href="#quarter"/></svg> = <b id="new-bpm">90</b></span><button class="pill round sm" id="new-bpm-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><button class="pill round sm" id="new-bpm-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div></div>
   <button class="btn primary wide" id="new-go"><svg class="i"><use href="#pencil"/></svg><span>Zacznij pisać</span></button>
