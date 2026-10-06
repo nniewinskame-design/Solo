@@ -71,11 +71,15 @@ const INSTRUMENTS = [
   { id: "bas", name: "Bas", clef: "bass", tr: 0, lo: 40, hi: 64, voice: "voice", group: "Głos" }
 ];
 const INSTR_GROUPS = ["Dęte blaszane", "Dęte drewniane", "Smyczkowe", "Klawiszowe", "Szarpane", "Perkusyjne", "Głos"];
+/* one colour per instrument family, everywhere (Clear Stage: colour = meaning, never a part's index) */
+const FAMILY_HUE = { "Dęte blaszane": "amber", "Dęte drewniane": "green", "Smyczkowe": "coral", "Klawiszowe": "blue", "Szarpane": "violet", "Perkusyjne": "teal", "Głos": "pink" };
+function hueOf(instr) { const i = typeof instr === "string" ? instrById(instr) : instr; return (i && FAMILY_HUE[i.group]) || "slate"; }
+const hueStyle = instr => { const h = hueOf(instr); return `style="--h:var(--${h});--h-ink:var(--${h}-ink)"`; };
 /* the instrument picker (benchmark: MuseScore, StaffPad, Dorico, BandLab): search, "yours" first, then families */
 const recentInstr = () => { try { const r = JSON.parse(store.get("recentInstr", "[]")); return Array.isArray(r) ? r : []; } catch { return []; } };
 function instrPicker(box, { selected = [], multi = false, onPick }) {
   const p = profile(), mine = [...new Set([...(p.instruments || []), ...recentInstr()])].filter(id => INSTRUMENTS.some(i => i.id === id)).slice(0, 8);
-  const chip = i => `<button class="ichip" data-i="${i.id}" aria-pressed="${selected.includes(i.id)}">${esc(i.name)}</button>`;
+  const chip = i => `<button class="ichip" ${hueStyle(i)} data-i="${i.id}" aria-pressed="${selected.includes(i.id)}">${esc(i.name)}</button>`;
   const draw = q => {
     /* without Polish letters too ("trabka", "altowka"), and by other names ("skrzydłówka", "cello") */
     const f = plainName(q).trim(), alias = f.length > 2 ? instrFromName(f) : null, hit = i => !f || plainName(i.name).includes(f) || alias === i;
@@ -265,7 +269,7 @@ function timbreNote(kind) {
 function renderProfile() {
   const box = $("#prof"); if (!box) return;
   const p = profile(), m = instrById(p.main);
-  box.innerHTML = `<div class="ichips">${p.instruments.map(id => `<button class="ichip" data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>
+  box.innerHTML = `<div class="ichips">${p.instruments.map(id => `<button class="ichip" ${hueStyle(id)} data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>
     ${p.instruments.length > 1 ? `<p class="sub">Główny: ${esc(m.name)}</p>` : ""}
     ${trPc(m) ? `<h3 class="lbl">Stroik pokazuje</h3><div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla instrumentu</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>` : ""}
     <h3 class="lbl">Rola</h3><div class="seg three"><button data-role="teacher" aria-pressed="${p.role === "teacher"}">Uczę</button><button data-role="student" aria-pressed="${p.role === "student"}">Uczę się</button><button data-role="self" aria-pressed="${p.role === "self"}">Dla siebie</button></div>

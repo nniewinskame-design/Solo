@@ -878,7 +878,7 @@ function setEditMode(on) {
   }
   if (!on && S.editView) { Object.assign(S, S.editView); S.editView = null; S.loadedKey = null; changed(); }
   if (!on) S.editSel = null;
-  $("#btn-edit").innerHTML = icon(on ? "check" : "pencil"); $("#btn-edit").setAttribute("aria-label", on ? "Gotowe" : "Popraw nuty");
+  syncEditButton(on);
   if (on && playState) stopPlayback(true);
   selectNote(S.editSel);
 }
@@ -892,7 +892,7 @@ function selectNote(sel) {
   S.editSel = sel; if (sel) S.editMode = true;
   const on = !!S.editMode;
   document.body.classList.toggle("editing", on); document.body.classList.toggle("editmode", on);
-  $("#btn-edit").setAttribute("aria-pressed", String(on)); $("#btn-edit").innerHTML = icon(on ? "check" : "pencil");
+  syncEditButton(on);
   $("#editbar").hidden = !on;
   $$("#pages g.nsel").forEach(g => g.classList.remove("nsel"));
   $("#ed-undo").disabled = !(S.undo && S.undo.length); syncRedo();
@@ -1368,6 +1368,10 @@ $("#bar-addbefore").addEventListener("click", () => barOp("addbefore"));
 $("#bar-del").addEventListener("click", () => barOp("del"));
 [["#bar-bpm-down", -4], ["#bar-bpm-up", 4]].forEach(([s, d]) => $(s).addEventListener("click", () => { setBpm(curBpm() + d); $("#bar-bpm").textContent = String(curBpm()); }));
 $("#btn-edit").addEventListener("click", () => setEditMode(!S.editMode));
+/* a labelled mode, like forScore/Freeform: "Edytuj" opens it, "Gotowe" closes it (every change is already saved);
+   undo/redo sit in the top bar while editing */
+function syncEditButton(on) { const b = $("#btn-edit"); b.setAttribute("aria-pressed", String(on)); b.innerHTML = `<span>${on ? "Gotowe" : "Edytuj"}</span>`; }
+$$("#ed-undo, #ed-redo").forEach(b => b.addEventListener("click", () => editNote(b.dataset.ed)));
 function afterEdit() {
   /* the rhythm check follows the edit: fixed bars lose their red, broken ones get it */
   const other = (S.piece.issues || []).filter(t => !/wartości rytmicznych/.test(t));
@@ -2272,7 +2276,7 @@ function buildShareSheet() {
   const many = S.parts.length > 1; $("#share-parts").hidden = !many; if (!many) { exportParts = []; return; }
   exportParts = exportParts.filter(id => S.parts.some(p => p.id === id));
   $("#share-chips").innerHTML = `<button class="ichip" data-all aria-pressed="${!exportParts.length}">Partytura</button>` +
-    S.parts.map(p => `<button class="ichip" data-p="${p.id}" aria-pressed="${exportParts.includes(p.id)}">${esc(partName(p.id))}</button>`).join("");
+    S.parts.map(p => `<button class="ichip" ${hueStyle(instrOfPart(p.id))} data-p="${p.id}" aria-pressed="${exportParts.includes(p.id)}">${esc(partName(p.id))}</button>`).join("");
 }
 $("#share-chips").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
@@ -3418,7 +3422,7 @@ const darkMq = matchMedia("(prefers-color-scheme: dark)");
 function applyTheme() {
   const v = store.get("theme"), t = v === "dark" || (v === "auto" && darkMq.matches) ? "dark" : "light";
   document.documentElement.setAttribute("data-theme", t);
-  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#16131C" : "#FBF6EC");
+  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#0E0E11" : "#F7F7F9");
   const cs = document.querySelector('meta[name="color-scheme"]'); if (cs) cs.setAttribute("content", t);
 }
 darkMq.addEventListener?.("change", () => { if (store.get("theme") === "auto") applyTheme(); });
@@ -4086,7 +4090,7 @@ const nm = { instr: null, time: "4/4", key: 0, bpm: 90, title: "" };
 function buildNewSheet() {
   const p = profile(); nm.instr = nm.instr || p.main;
   const ids = [...new Set([...p.instruments, nm.instr])];
-  $("#new-instr").innerHTML = ids.map(id => `<button data-i="${id}" aria-pressed="${id === nm.instr}">${esc(instrById(id).name)}</button>`).join("") +
+  $("#new-instr").innerHTML = ids.map(id => `<button class="ichip" ${hueStyle(id)} data-i="${id}" aria-pressed="${id === nm.instr}">${esc(instrById(id).name)}</button>`).join("") +
     `<button data-more aria-label="Inny instrument">${icon("plus")}</button>`;
   $$("#new-time button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === nm.time)));
   $("#new-key").value = String(nm.key); $("#new-bpm").textContent = String(nm.bpm);
@@ -4142,8 +4146,8 @@ function renderPartStrip() {
   const only = S.only;
   box.innerHTML = S.parts.map((p, k) => {
     const nm = partLabel(p);
-    /* each part keeps one of the seven slide-position colours, as a dot on its chip */
-    return `<button style="--pc:var(--pos-${(k % 7) + 1})" class="pchip${only === p.id ? " only" : ""}${pb.mute.has(p.id) ? " muted" : ""}${p.keep ? "" : " off"}" data-pid="${p.id}">${icon(p.staves > 1 || PIANO_RE.test(nm) ? "piano" : "trombone")}<span>${esc(nm)}</span></button>`;
+    /* the chip wears its instrument family's colour (brass amber, strings coral…); no icon: the name says it */
+    return `<button ${hueStyle(instrOfPart(p.id))} class="pchip${only === p.id ? " only" : ""}${pb.mute.has(p.id) ? " muted" : ""}${p.keep ? "" : " off"}" data-pid="${p.id}" aria-pressed="${p.keep}"><span>${esc(nm)}</span></button>`;
   }).join("") + `<button class="pchip add" data-sheet="addpart" aria-label="Dodaj partię">${icon("plus")}</button>`;
 }
 /* a tap shows only that part (again: all of them); a long press opens what can be done with it */
@@ -4244,7 +4248,7 @@ function apStep2(id) {
   /* with several parts: which one the new part follows */
   ap.src = ap.src && S.parts.some(p => p.id === ap.src) ? ap.src : melodyPart();
   $("#ap-srcbox").hidden = S.parts.length < 2;
-  $("#ap-src").innerHTML = S.parts.map(p => `<button class="ichip" data-src="${p.id}" aria-pressed="${p.id === ap.src}">${esc(partLabel(p))}</button>`).join("");
+  $("#ap-src").innerHTML = S.parts.map(p => `<button class="ichip" ${hueStyle(instrOfPart(p.id))} data-src="${p.id}" aria-pressed="${p.id === ap.src}">${esc(partLabel(p))}</button>`).join("");
   $("#ap-step1").hidden = true; $("#ap-step2").hidden = false; $("#ap-back").hidden = false;
   syncAp();
 }

@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="light">
 <title>Solo</title>
 <meta name="description" content="Nuty ze zdjęcia: sama partia solowa, w Twoim kluczu i tonacji.">
-<meta name="theme-color" content="#FBF6EC">
+<meta name="theme-color" content="#F7F7F9">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Solo">
@@ -154,11 +154,13 @@
 <!-- =============== SCORE =============== -->
 <section id="score" class="view" hidden>
   <header class="sbar">
-    <button class="pill round" id="btn-back" aria-label="Wróć"><svg class="i"><use href="#left"/></svg></button>
+    <div class="sbar-l"><button class="pill round" id="btn-back" aria-label="Wróć"><svg class="i"><use href="#left"/></svg></button>
+    <button class="pill round ed-only" data-ed="undo" id="ed-undo" aria-label="Cofnij"><svg class="i"><use href="#undo"/></svg></button>
+    <button class="pill round ed-only" data-ed="redo" id="ed-redo" aria-label="Ponów" disabled><svg class="i" style="transform:scaleX(-1)"><use href="#undo"/></svg></button></div>
     <div class="stitle"><div class="a" id="s-title"></div><div class="b" id="s-sub"></div></div>
     <div class="sbar-r">
-    <button class="pill round" id="btn-edit" aria-pressed="false" aria-label="Popraw nuty" title="Popraw nuty"><svg class="i"><use href="#pencil"/></svg></button>
-    <button class="pill round" id="btn-tools" data-sheet="more" aria-label="Narzędzia" title="Narzędzia"><svg class="i"><use href="#tools"/></svg></button>
+    <button class="pill text" id="btn-edit" aria-pressed="false"><span>Edytuj</span></button>
+    <button class="pill round" id="btn-tools" data-sheet="more" aria-label="Więcej" title="Więcej"><svg class="i"><use href="#more"/></svg></button>
     </div>
     <div class="pstrip" id="pstrip" role="toolbar" aria-label="Partie"></div>
   </header>
@@ -224,9 +226,6 @@
       <button role="tab" data-tab-ed="note" aria-selected="false" aria-label="Nuta: przesuń, powiel, usuń"><svg class="i"><use href="#music"/></svg><span>Nuta</span></button>
       <button role="tab" data-tab-ed="marks" aria-selected="false" aria-label="Oznaczenia: dynamika, artykulacja, łuki"><svg class="i"><use href="#marks"/></svg><span>Dynamika</span></button>
       <button data-ed="bar" aria-label="Takt: metrum, klucz, znaki"><svg class="i"><use href="#bar"/></svg><span>Takt</span></button>
-      <i class="ed-sep"></i>
-      <button data-ed="undo" id="ed-undo" aria-label="Cofnij"><svg class="i"><use href="#undo"/></svg><span>Cofnij</span></button>
-      <button data-ed="redo" id="ed-redo" aria-label="Ponów" disabled><svg class="i" style="transform:scaleX(-1)"><use href="#undo"/></svg><span>Ponów</span></button>
     </div>
   </div>
   <div class="loopbar" id="loopbar" hidden>
