@@ -642,7 +642,7 @@ async function doRender() {
   stopPlayback();
   const box = $("#pages");
   const width = Math.min(960, box.parentElement.clientWidth) - 28;
-  /* A4 pages, as on paper (Tata 14:16), on every screen; "Dopasuj do ekranu" is the option for bigger notes */
+  /* A4 pages, as on paper on every screen; "Dopasuj do ekranu" is the option for bigger notes */
   const mode = S.page === "screen" ? "reflow" : "pages";
   try {
     const xml = processedXml();
@@ -1817,7 +1817,7 @@ function buildKeySheet() {
   $("#preset-hint").textContent = `Nuty na „${solo ? solo.name : ""}”? Wybierz „Trąbka, klarnet”.`;
   syncKeySheet();
 }
-/* quick named intervals (Tata: "o sekundę, tercję albo kwartę w górę lub w dół") */
+/* quick named intervals: a second, third, fourth or fifth up or down */
 const IVS = [["sekunda", 1, 2], ["tercja", 2, 4], ["kwarta", 3, 5], ["kwinta", 4, 7]];
 (() => {
   const box = $("#ivs");
@@ -3106,9 +3106,10 @@ $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
     const me = instrById(instrOfPart(melodyPart()));
     let r = addPart(S.piece.xml, me.id, "voice2"), xml = r.xml, ids = [r.id];
     if (b.dataset.quick === "trio") {
-      /* trombones: Puzon I–III, the third a bass trombone (the usual section); other instruments: a bass line */
-      if (["puzon", "puzon-alt"].includes(me.id)) { const r2 = addPart(xml, "puzon-b", "voice3"); xml = r2.xml; ids.push(r2.id); }
-      else { const bass = ["eufonium", "puzon-b"].includes(me.id) ? "tuba" : "puzon"; const r2 = addPart(xml, bass, "bass"); xml = r2.xml; ids.push(r2.id); }
+      /* a trio of the piece's own instrument: violins → three violins, trumpet → three trumpets; in a trombone
+         section the third is the bass trombone (Puzon I–III) */
+      const third = ["puzon", "puzon-alt"].includes(me.id) ? "puzon-b" : me.id;
+      const r2 = addPart(xml, third, "voice3"); xml = r2.xml; ids.push(r2.id);
     }
     pushUndo(); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać partii"); }
