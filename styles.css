@@ -2072,3 +2072,8 @@ svg.cl.g{height:27px!important;margin:-3px 0!important}
 /* clef choice: an even 2×2 grid, every chip the same size */
 .bar-pane .clefchips{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .bar-pane .clefchips button{width:100%;justify-content:center;margin:0!important}
+/* the play button in the exact centre: two tools on the left take the same room as the tempo on the right */
+.dock.transport{display:grid!important;grid-template-columns:1fr 1fr auto 2fr;justify-items:center;align-items:center;gap:0!important}
+.dock.transport #btn-restart{grid-column:1}.dock.transport #btn-loop{grid-column:2}
+.dock.transport #btn-play{grid-column:3;margin:0 10px}.dock.transport #btn-tempo{grid-column:4}
+@media (min-width:600px){.dock.transport{grid-template-columns:1fr 72px 72px auto 144px 1fr}.dock.transport #btn-restart{grid-column:2}.dock.transport #btn-loop{grid-column:3}.dock.transport #btn-play{grid-column:4}.dock.transport #btn-tempo{grid-column:5}}
