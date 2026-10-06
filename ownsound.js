@@ -51,7 +51,9 @@ function makeSample(raw, sr, targetMidi) {
   const rate = sr / k;
   /* the pitch as actually played (its small error is kept, so playback is tuned exactly) */
   const mid = Math.floor(n / 2), f = detectPitch(x.subarray(Math.max(0, mid - 2048), mid + 2048), rate, 30, 1500);
-  let midi = f > 0 ? 69 + 12 * Math.log2(f / 440) : targetMidi; if (Math.abs(midi - targetMidi) > 1.5) midi = targetMidi;
+  let midi = f > 0 ? 69 + 12 * Math.log2(f / 440) : targetMidi;
+  midi -= 12 * Math.round((midi - targetMidi) / 12);                 // an octave mistake of the detector is not the player's
+  if (Math.abs(midi - targetMidi) > 1) midi = targetMidi;
   /* same loudness for every note: RMS to about −18 dBFS */
   let rms = 0; for (let i = 0; i < n; i++) rms += x[i] * x[i]; rms = Math.sqrt(rms / n) || 1;
   const g = 0.125 / rms; for (let i = 0; i < n; i++) x[i] = Math.max(-1, Math.min(1, x[i] * g));
@@ -107,19 +109,22 @@ function listenLoop(t) {
   const target = of.targets[of.step], buf = lastAudio(0.09);
   let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v));
   const f = detectPitch(buf.length >= 4096 ? buf.subarray(buf.length - 4096) : buf, of.sr, 30, 1500), ok = f > 0 && detectPitch.clarity > 0.88;
-  let cents = null, hint = "Zagraj i trzymaj";
+  let cents = null, hint = "Zagraj i trzymaj", played = null;
   if (peak > 0.97) hint = "Za głośno, odsuń telefon";
   else if (ok) {
-    const midi = 69 + 12 * Math.log2(f / tuner.a4), d = midi - target;
-    if (Math.abs(d) > 0.6) { const l = noteLabel(Math.round(midi)), want = noteLabel(target); hint = `To ${l.name}. Zagraj ${want.name}`; }
-    else { cents = d * 100; hint = Math.abs(cents) <= OWN_TOL ? "Trzymaj…" : cents > 0 ? "Trochę za wysoko" : "Trochę za nisko"; }
+    /* the tuner: what is being played, big. The octave does not count (a phone mic often hears a low
+       trombone note an octave up), the step does. */
+    const midi = 69 + 12 * Math.log2(f / tuner.a4), near = Math.round(midi), d = midi - target, dm = d - 12 * Math.round(d / 12);
+    played = { midi: near, c: (midi - near) * 100 };
+    if (Math.abs(dm) > 0.5) { const l = noteLabel(near), want = noteLabel(target); hint = `Grasz ${l.name}. Zagraj ${want.name}`; }
+    else { cents = dm * 100; hint = Math.abs(cents) <= OWN_TOL ? "Trzymaj…" : cents > 0 ? "Trochę za wysoko" : "Trochę za nisko"; }
   }
   /* the ring fills while the note stays clean and steady; it empties as soon as it wobbles */
   if (cents !== null && Math.abs(cents) <= OWN_TOL) { of.reads.push(cents); if (!of.holdFrom) of.holdFrom = t; }
   else { of.holdFrom = 0; of.reads = []; }
   if (of.reads.length > 8) { const m = of.reads.reduce((a, b) => a + b, 0) / of.reads.length, sd = Math.sqrt(of.reads.reduce((a, b) => a + (b - m) ** 2, 0) / of.reads.length); if (sd > 8) { of.holdFrom = t; of.reads = of.reads.slice(-3); } }
   const prog = of.holdFrom ? Math.min(1, (t - of.holdFrom) / OWN_HOLD) : 0;
-  drawRing(prog, cents, hint);
+  drawRing(prog, cents, hint, played);
   if (prog >= 1) capture();
 }
 function capture() {
@@ -127,12 +132,15 @@ function capture() {
   const smp = makeSample(lastAudio(OWN_HOLD / 1000 + 0.15), of.sr, of.targets[of.step]);
   of.done[of.step] = smp; renderOwn();
 }
-function drawRing(prog, cents, hint) {
+function drawRing(prog, cents, hint, played) {
   const r = $("#of-ring"); if (!r) return;
   r.style.strokeDashoffset = String(691 * (1 - prog));
-  const dot = $("#of-dot"), state = cents === null ? "off" : Math.abs(cents) <= OWN_TOL ? "ok" : Math.abs(cents) <= 30 ? "near" : "far";
-  $("#of-note").dataset.st = state;
-  if (dot) dot.style.transform = `translateX(${cents === null ? 0 : Math.max(-50, Math.min(50, cents)) * 1.2}px)`;
+  const c = cents !== null ? cents : played ? played.c : null;
+  const state = !played ? "off" : cents === null ? "far" : Math.abs(cents) <= OWN_TOL ? "ok" : Math.abs(cents) <= 30 ? "near" : "far";
+  const box = $("#of-note"); box.dataset.st = state;
+  if (played) { const l = noteLabel(played.midi); box.innerHTML = `<b>${l.name}</b><span>${esc(l.oct)}</span>`; }
+  else box.innerHTML = `<b class="dim">–</b><span></span>`;
+  const dot = $("#of-dot"); if (dot) dot.style.transform = `translateX(${c === null ? 0 : Math.max(-50, Math.min(50, c)) * 1.2}px)`;
   $("#of-hint").textContent = hint;
 }
 /* ---------------- screens ---------------- */
@@ -146,10 +154,11 @@ function renderOwn() {
   } else if (of.state === "listen" || of.state === "got") {
     const tg = of.targets[of.step], l = noteLabel(tg), pos = m.id.startsWith("puzon") && POS_PUZON[tg] ? POS_PUZON[tg] : "";
     body.innerHTML = `<p class="of-step">${of.step + 1} z ${n}</p>
+      <p class="of-target">Zagraj <b>${l.name}</b> ${esc(l.oct)}${pos ? ` · ${pos}` : ""}</p>
       <div class="of-ringbox"><svg viewBox="0 0 240 240" class="of-svg"><circle cx="120" cy="120" r="110" class="of-track"/><circle cx="120" cy="120" r="110" class="of-fill" id="of-ring" style="stroke-dasharray:691;stroke-dashoffset:${of.state === "got" ? 0 : 691}"/></svg>
-        <div class="of-note" id="of-note" data-st="${of.state === "got" ? "ok" : "off"}">${of.state === "got" ? icon("check") : `<b>${l.name}</b><span>${esc(l.oct)}</span>`}</div></div>
+        <div class="of-note" id="of-note" data-st="${of.state === "got" ? "ok" : "off"}">${of.state === "got" ? icon("check") : `<b class="dim">–</b><span></span>`}</div></div>
       <div class="of-meter"><i class="of-zone"></i><i class="of-dot" id="of-dot"></i></div>
-      <p class="of-hint" id="of-hint">${of.state === "got" ? "Czysto!" : "Zagraj i trzymaj"}</p>${pos && of.state !== "got" ? `<p class="of-pos">${pos}</p>` : ""}`;
+      <p class="of-hint" id="of-hint">${of.state === "got" ? "Czysto!" : "Zagraj i trzymaj"}</p>`;
     if (of.state === "got") {
       acts.innerHTML = `<div class="of-row"><button class="btn tinted" id="of-again">${icon("undo")}<span>Jeszcze raz</span></button><button class="btn tinted" id="of-hear">${icon("play")}<span>Posłuchaj</span></button></div><button class="btn primary wide" id="of-next"><span>${of.step + 1 < n ? "Dalej" : "Gotowe"}</span></button>`;
       $("#of-again").addEventListener("click", () => { of.done[of.step] = null; of.holdFrom = 0; of.reads = []; of.state = "listen"; renderOwn(); });
