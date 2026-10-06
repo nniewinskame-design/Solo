@@ -508,7 +508,13 @@ function loadState(piece, settings) {
 /* the music must sit on the staff: if most notes of the part being read are far off it (an old setting, a wrong
    octave), the octave that fits is taken and the player is told */
 /* the instrument a part is written for, only when its name (or the piece) says so; null when unknown */
+/* the instrument a part declares (<score-instrument>, written by Solo for every part it adds or changes) */
+function declaredOf(pid) {
+  if (!S.piece) return null; if (declaredOf.xml !== S.piece.xml) { declaredOf.xml = S.piece.xml; declaredOf.map = {}; [...parseXml(S.piece.xml).getElementsByTagName("score-part")].forEach(sp => { const i = declaredInstr(sp); if (i) declaredOf.map[sp.getAttribute("id")] = i; }); }
+  return declaredOf.map[pid] || null;
+}
 function namedInstr(pid) {
+  const dec = declaredOf(pid); if (dec) return dec;
   const p = S.parts && S.parts.find(x => x.id === pid); if (!p || p.staves > 1 || PIANO_RE.test(p.name)) return null;
   const names = [(typeof partLabel === "function" ? partLabel(p) : p.name) || "", S.piece && S.piece.instrument || ""].map(n => n.replace(/ (I|II|III|IV|V)$/, "").trim().toLowerCase());
   for (const n of names) { const hit = n && INSTRUMENTS.find(i => i.name.toLowerCase() === n); if (hit) return hit; }
@@ -2759,6 +2765,7 @@ $("#t-a-up").addEventListener("click", () => setA4(tuner.a4 + 1));
 function buildTunerSheet() { $("#tuner-sheet-host").appendChild($("#tuner-ui")); syncTuner(); syncOwn(); if (!tuner.on) tunerStart(); }
 /* which instrument a part is: its name (Puzon II → Puzon), a piano by its two staves, the melody by the piece's instrument */
 function instrOfPart(pid) {
+  const dec = declaredOf(pid); if (dec) return dec.id;
   const p = S.parts && S.parts.find(x => x.id === pid); if (!p) return mainInstr().id;
   if (p.staves > 1 || PIANO_RE.test(p.name)) return "fortepian";
   const name = (typeof partLabel === "function" ? partLabel(p) : p.name || "").replace(/ (I|II|III|IV|V)$/, "").trim().toLowerCase();
@@ -2904,6 +2911,17 @@ $$("#new-time button").forEach(b => b.addEventListener("click", () => { nm.time 
 $("#new-key").addEventListener("change", e => { nm.key = +e.target.value; });
 $("#new-title").addEventListener("input", e => { nm.title = e.target.value; });
 [["#new-bpm-down", -5], ["#new-bpm-up", 5]].forEach(([s, d]) => $(s).addEventListener("click", () => { nm.bpm = Math.max(30, Math.min(240, nm.bpm + d)); $("#new-bpm").textContent = String(nm.bpm); }));
+/* a ready tune written for the chosen instrument (its octave, transposition, clef) with the piano under it */
+$("#new-ready").addEventListener("click", e => {
+  const b = e.target.closest("[data-t]"); if (!b) return;
+  const ins = instrById(nm.instr), t = READY_TUNES[b.dataset.t], base = readyTuneXml(b.dataset.t);
+  let xml = makePart(base, "P1", { role: "melody", instr: ins });
+  xml = makePart(xml, "P1", { role: "chords", instr: instrById("fortepian") });
+  const d = parseXml(xml), root = d.documentElement;
+  kids(root, "part").find(p => p.getAttribute("id") === "P1").remove(); kids(kid(root, "part-list"), "score-part").find(p => p.getAttribute("id") === "P1").remove();
+  xml = new XMLSerializer().serializeToString(d);
+  closeSheetThen(() => { openPiece({ xml, sourceType: "own", title: t.title, composer: t.composer, instrument: ins.name }); S.dirty = true; savePiece(); });
+});
 $("#new-go").addEventListener("click", () => {
   const ins = instrById(nm.instr), [beats, bt] = nm.time.split("/").map(Number);
   const xml = blankXml(4, { clef: ins.clef, beats, beatType: bt, fifths: nm.key, tempo: nm.bpm, title: nm.title || "Nowa melodia", part: ins.name });
@@ -2952,12 +2970,21 @@ function buildPartSheet() {
   $("#pp-only").setAttribute("aria-pressed", String(S.only === pid));
   $("#pp-del").disabled = S.parts.length < 2; $("#pp-only").disabled = S.parts.length < 2;
   $("#pp-only span").textContent = S.only === pid ? "Wszystkie" : "Tylko ta";
+  $("#pp-instr").disabled = (S.parts.find(p => p.id === pid) || {}).staves > 1;
 }
 $("#pp-only").addEventListener("click", () => { closeSheet(); showOnly(S.only === partSheetId ? null : partSheetId); });
 $("#pp-mute").addEventListener("click", () => { const id = partSheetId; if (pb.mute.has(id)) pb.mute.delete(id); else pb.mute.add(id); buildPartSheet(); renderPartStrip(); if (playState) play(playPos()); });
 async function withOnly(pid, fn) { const prev = S.only; showOnly(pid); await new Promise(r => setTimeout(r, 300)); try { await fn(); } finally { showOnly(prev); } }
 $("#pp-print").addEventListener("click", () => closeSheetThen(() => withOnly(partSheetId, printScore)));
 $("#pp-send").addEventListener("click", () => closeSheetThen(async () => { const keep = exportParts; exportParts = [partSheetId]; try { await savePdf(true); } finally { exportParts = keep; } }));
+/* the same notes on another instrument (a bassoon line as the 2nd trombone); an octave up or down */
+$("#pp-instr").addEventListener("click", () => { const pid = partSheetId; closeSheetThen(() => pickInstrument("Jaki instrument?", id => {
+  pushUndo(); applyNewXml(orchestrateXml(changePartInstr(S.piece.xml, pid, instrById(instrOfPart(pid)), instrById(id)), pid), pid); hudUndo(`Teraz: ${instrById(id).name}`);
+})); });
+$$("#pp-up, #pp-down").forEach(b => b.addEventListener("click", () => {
+  const pid = partSheetId, dir = b.id === "pp-up" ? 1 : -1, ins = S.parts.find(p => p.id === pid)?.staves > 1 ? null : instrById(instrOfPart(pid));
+  pushUndo(); applyNewXml(orchestrateXml(shiftPartOctave(S.piece.xml, pid, dir, ins)), pid);   /* keeps its number */ hudUndo(dir > 0 ? "Oktawę wyżej" : "Oktawę niżej");
+}));
 $("#pp-del").addEventListener("click", () => {
   const id = partSheetId, doc = parseXml(S.piece.xml), root = doc.documentElement;
   kids(root, "part").forEach(p => { if (p.getAttribute("id") === id) p.remove(); });
@@ -2978,6 +3005,18 @@ function hudUndo(msg) {
   const h = $("#toast"); const b = document.createElement("button"); b.className = "toast-act"; b.textContent = "Cofnij";
   b.addEventListener("click", () => { if (S.undo && S.undo.length) { applyNewXml(S.undo.pop(), null); h.classList.remove("show"); } });
   h.appendChild(b);
+}
+/* sections numbered and the score in orchestra order (arrange.js orchestrate); a part's instrument: the one it
+   declares, else its name, else (the melody) the piece's instrument */
+function orchestrateXml(xml, newId = null) {
+  const plain = n => (n || "").replace(/ (I|II|III|IV|V|VI|\d)$/, "").trim().toLowerCase();
+  const first = analyseXml(xml).parts.find(p => !(p.staves > 1 || PIANO_RE.test(p.name)));
+  return orchestrate(xml, sp => {
+    const dec = declaredInstr(sp); if (dec) return dec;
+    const n = plain(txt(sp, "part-name")), hit = INSTRUMENTS.find(i => i.name.toLowerCase() === n); if (hit) return hit;
+    if (first && sp.getAttribute("id") === first.id && S.piece && S.piece.instrument) return INSTRUMENTS.find(i => i.name.toLowerCase() === plain(S.piece.instrument)) || null;
+    return null;
+  }, newId);
 }
 /* parts are numbered when an instrument appears twice: Puzon → Puzon I, the new one Puzon II */
 function numberParts(xml, base) {
@@ -3021,7 +3060,7 @@ $$("#ap-int button").forEach(b => b.addEventListener("click", () => { ap.int = +
 $$("#ap-show button").forEach(b => b.addEventListener("click", () => { ap.show = b.dataset.show; syncAp(); }));
 /* the melody part: the first kept one that is not a piano */
 const melodyPart = () => (S.parts.find(p => p.keep && !(p.staves > 1 || PIANO_RE.test(p.name))) || S.parts[0]).id;
-function partLabel(p) { const own = partName(p.id) || p.name, solo = S.parts.find(x => !(x.staves > 1 || PIANO_RE.test(x.name))); return p === solo && S.piece.instrument && !/ (I|II|III|IV)$/.test(own) ? S.piece.instrument : own; }
+function partLabel(p) { if (declaredOf(p.id)) return partName(p.id) || p.name; const own = partName(p.id) || p.name, solo = S.parts.find(x => !(x.staves > 1 || PIANO_RE.test(x.name))); return p === solo && S.piece.instrument && !/ (I|II|III|IV)$/.test(own) ? S.piece.instrument : own; }
 /* how far a part is written above how it sounds: only for a part named for a transposing instrument */
 function partTr(pid) { try { const i = namedInstr(pid); return i ? i.tr || 0 : 0; } catch { return 0; } }
 /* the notes of one voice of a part as they sound (written pitch minus the instrument's transposition) */
@@ -3051,11 +3090,7 @@ function addPart(xml, instrId, role, opts = {}) {
   let out = makePart(xml, src, { role, instr: ins, interval: opts.int || 0, keepClef: sameInstr && ["voice2", "voice3", "melody"].includes(role), v2Midi, srcTr: partTr(src) });
   const newId = analyseXml(out).parts.map(p => p.id).find(id => !before.has(id));
   if (opts.same && newId) return { xml: mergeAsVoice2(out, src, newId), id: null };
-  /* the first melody part takes the instrument's name before numbering (so "Puzon" becomes "Puzon I") */
-  const d = parseXml(out), sp = [...d.getElementsByTagName("score-part")].find(x => x.getAttribute("id") === src);
-  const base = ins.name; if (sp && sameInstr) kid(sp, "part-name").textContent = base;
-  out = numberParts(new XMLSerializer().serializeToString(d), base);
-  return { xml: out, id: newId };
+  return { xml: orchestrateXml(out, newId), id: newId };
 }
 $("#ap-go").addEventListener("click", () => {
   try {
@@ -3070,7 +3105,11 @@ $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
   try {
     const me = instrById(instrOfPart(melodyPart()));
     let r = addPart(S.piece.xml, me.id, "voice2"), xml = r.xml, ids = [r.id];
-    if (b.dataset.quick === "trio") { const bass = ["puzon", "eufonium", "puzon-b"].includes(me.id) ? "tuba" : "puzon"; const r2 = addPart(xml, bass, "bass"); xml = r2.xml; ids.push(r2.id); }
+    if (b.dataset.quick === "trio") {
+      /* trombones: Puzon I–III, the third a bass trombone (the usual section); other instruments: a bass line */
+      if (["puzon", "puzon-alt"].includes(me.id)) { const r2 = addPart(xml, "puzon-b", "voice3"); xml = r2.xml; ids.push(r2.id); }
+      else { const bass = ["eufonium", "puzon-b"].includes(me.id) ? "tuba" : "puzon"; const r2 = addPart(xml, bass, "bass"); xml = r2.xml; ids.push(r2.id); }
+    }
     pushUndo(); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać partii"); }
 }));

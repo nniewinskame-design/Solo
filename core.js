@@ -958,3 +958,26 @@ function attachTexts(xml, pages) {
     return added ? new XMLSerializer().serializeToString(doc) : xml;
   } catch (e) { console.warn(e); return xml; }
 }
+
+/* ---------------- ready tunes (public domain only) ----------------
+   Notes at concert pitch, durations in sixteenths; Solo writes them for the chosen instrument (its octave,
+   transposition and clef) and adds the piano, like the example. Copyrighted children's songs are never shipped. */
+const READY_TUNES = {
+  kotek: { title: "Wlazł kotek na płotek", composer: "Melodia ludowa", fifths: 0, time: [3, 4], tempo: 112,
+    bars: "G4:4 E4:4 E4:4|F4:4 D4:4 D4:4|C4:2 E4:2 G4:8|G4:4 E4:4 E4:4|F4:4 D4:4 D4:4|C4:2 E4:2 C4:8" },
+  janie: { title: "Panie Janie", composer: "Melodia ludowa", fifths: -1, time: [4, 4], tempo: 100,
+    bars: "F4:4 G4:4 A4:4 F4:4|F4:4 G4:4 A4:4 F4:4|A4:4 Bb4:4 C5:8|A4:4 Bb4:4 C5:8|C5:2 D5:2 C5:2 Bb4:2 A4:4 F4:4|C5:2 D5:2 C5:2 Bb4:2 A4:4 F4:4|F4:4 C4:4 F4:8|F4:4 C4:4 F4:8" },
+  oda: { title: "Oda do radości", composer: "Ludwig van Beethoven", fifths: 2, time: [4, 4], tempo: 100,
+    bars: "F#4:4 F#4:4 G4:4 A4:4|A4:4 G4:4 F#4:4 E4:4|D4:4 D4:4 E4:4 F#4:4|F#4:6 E4:2 E4:8|F#4:4 F#4:4 G4:4 A4:4|A4:4 G4:4 F#4:4 E4:4|D4:4 D4:4 E4:4 F#4:4|E4:6 D4:2 D4:8" }
+};
+function readyTuneXml(id) {
+  const t = READY_TUNES[id], typ = { 2: "eighth", 3: "eighth", 4: "quarter", 6: "quarter", 8: "half", 12: "half", 16: "whole" };
+  let s = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><work><work-title>${xesc(t.title)}</work-title></work><identification><creator type="composer">${xesc(t.composer)}</creator></identification><part-list><score-part id="P1"><part-name>Melodia</part-name></score-part></part-list><part id="P1">`;
+  t.bars.split("|").forEach((b, i) => {
+    s += `<measure number="${i + 1}">` + (i ? "" : `<attributes><divisions>4</divisions><key><fifths>${t.fifths}</fifths></key><time><beats>${t.time[0]}</beats><beat-type>${t.time[1]}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><direction placement="above"><direction-type><words></words></direction-type><sound tempo="${t.tempo}"/></direction>`);
+    b.trim().split(/\s+/).forEach(tok => { const [p, d] = tok.split(":"), m = p.match(/^([A-G])(#|b)?(\d)$/), dd = +d;
+      s += `<note><pitch><step>${m[1]}</step>${m[2] ? `<alter>${m[2] === "#" ? 1 : -1}</alter>` : ""}<octave>${m[3]}</octave></pitch><duration>${dd}</duration><voice>1</voice><type>${typ[dd]}</type>${[3, 6, 12].includes(dd) ? "<dot/>" : ""}</note>`; });
+    s += `</measure>`;
+  });
+  return s + `</part></score-partwise>`;
+}

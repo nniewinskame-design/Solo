@@ -249,7 +249,7 @@ function makePart(xml, srcId, { role = "melody", instr, interval = 0, keepClef =
   const id = "P" + n, np = doc.importNode(wp, true); np.setAttribute("id", id);
   root.appendChild(np);
   const pl = kid(root, "part-list"), sp = doc.createElement("score-part"); sp.setAttribute("id", id);
-  sp.innerHTML = `<part-name>${xesc(instr.name)}</part-name>`; pl.appendChild(sp);
+  sp.innerHTML = `<part-name>${xesc(instr.name)}</part-name>`; pl.appendChild(sp); setDeclared(doc, sp, instr);
   return new XMLSerializer().serializeToString(addAccidentals(doc));
 }
 /* chords or bass: one per bar, as long as the bar, in the key's main triads (chordsForBars) */
@@ -617,4 +617,84 @@ function pianoPartXml(one, srcId) {
     add(R + `<backup><duration>${cap}</duration></backup>` + L);
   });
   return new XMLSerializer().serializeToString(doc);
+}
+
+/* ---------------- the score as an orchestra ----------------
+   Each part remembers its instrument (MusicXML <score-instrument><instrument-name>), so "Puzon III" can be a bass
+   trombone. Parts of one section keep the numbers they have; a new or changed part takes the next one, the bass
+   trombone (and a bass instrument of a section) is always last, an alto trombone first; the score
+   follows the usual order: woodwinds, brass, percussion, harp and guitars, keyboards, voices, strings. */
+const SCORE_ORDER = ["piccolo", "flet", "flet-a", "flet-p", "oboj", "rozek", "klarnet-es", "klarnet", "klarnet-a", "klarnet-bas", "fagot", "kontrafagot",
+  "sax-s", "sax-a", "sax-t", "sax-b", "waltornia", "trabka", "trabka-c", "kornet", "flugelhorn", "sakshorn-a", "sakshorn-t", "puzon-alt", "puzon", "puzon-b",
+  "eufonium", "baryton", "tuba", "suzafon", "dzwonki", "ksylofon", "marimba", "wibrafon", "harfa", "gitara", "ukulele", "mandolina", "gitara-bas",
+  "fortepian", "organy", "akordeon", "keyboard", "sopran", "alt", "tenor", "bas", "skrzypce", "altowka", "wiolonczela", "kontrabas"];
+const SECTION = { puzon: "Puzon", "puzon-alt": "Puzon", "puzon-b": "Puzon", trabka: "Trąbka", "trabka-c": "Trąbka" };
+const SECTION_RANK = { "puzon-alt": 0, puzon: 1, "puzon-b": 2 };
+const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
+function declaredInstr(sp) { const n = sp && sp.getElementsByTagName("instrument-name")[0]; return n ? INSTRUMENTS.find(i => i.name === n.textContent.trim()) || null : null; }
+function setDeclared(doc, sp, instr) {
+  kids(sp, "score-instrument").forEach(x => x.remove());
+  const si = doc.createElement("score-instrument"); si.setAttribute("id", sp.getAttribute("id") + "-I1");
+  const nm = doc.createElement("instrument-name"); nm.textContent = instr.name; si.appendChild(nm);
+  const before = kids(sp, "midi-device")[0] || kids(sp, "midi-instrument")[0] || kids(sp, "player")[0];
+  before ? sp.insertBefore(si, before) : sp.appendChild(si);
+}
+/* instrOf(sp, partEl) → the part's instrument or null; staves > 1 (piano) keep their name */
+function orchestrate(xml, instrOf, newId = null) {
+  const doc = parseXml(xml), root = doc.documentElement, pl = kid(root, "part-list"); if (!pl) return xml;
+  const sps = kids(pl, "score-part"), partEl = id => kids(root, "part").find(p => p.getAttribute("id") === id);
+  const info = sps.map((sp, k) => {
+    const p = partEl(sp.getAttribute("id")), two = p && /<staves>[2-9]<\/staves>/.test(new XMLSerializer().serializeToString(p).slice(0, 4000));
+    const ins = instrOf(sp, p); if (ins && !two) setDeclared(doc, sp, ins);
+    const ps = p ? partPitches(p).map(m => m - (ins ? ins.tr || 0 : 0)) : [];
+    const num = ROMAN.indexOf((txt(sp, "part-name").match(/ (I|II|III|IV|V|VI)$/) || [])[1]);
+    return { sp, p, ins, two, k, med: ps.length ? median(ps) : 0, num: num < 0 ? 98 : num, isNew: sp.getAttribute("id") === newId };
+  });
+  /* sections: two or more parts of one family get numbers, highest first, the bass trombone last */
+  const fam = {}; info.forEach(x => { if (!x.ins || x.two) return; const f = SECTION[x.ins.id] || x.ins.name; (fam[f] = fam[f] || []).push(x); });
+  Object.entries(fam).forEach(([f, list]) => {
+    list.sort((a, b) => (SECTION_RANK[a.ins.id] ?? 1) - (SECTION_RANK[b.ins.id] ?? 1) || a.isNew - b.isNew || a.num - b.num || a.k - b.k);
+    list.forEach((x, i) => { x.sec = i; kid(x.sp, "part-name").textContent = list.length > 1 ? `${f} ${ROMAN[i] || i + 1}` : x.ins.name; });
+  });
+  /* score order */
+  const rank = x => { const id = x.ins ? x.ins.id : x.two ? "fortepian" : null; const r = id ? SCORE_ORDER.indexOf(id) : -1; return r < 0 ? 999 : r; };
+  const famRank = x => x.ins ? Math.min(...(fam[SECTION[x.ins.id] || x.ins.name] || [x]).map(rank)) : rank(x);
+  const sorted = [...info].sort((a, b) => famRank(a) - famRank(b) || (a.sec ?? 0) - (b.sec ?? 0) || a.k - b.k);
+  const groups = kids(pl, "part-group"), starts = groups.filter(g => g.getAttribute("type") === "start"), stops = groups.filter(g => g.getAttribute("type") === "stop");
+  groups.forEach(g => g.remove());
+  sorted.forEach(x => pl.appendChild(x.sp));
+  starts.reverse().forEach(g => pl.insertBefore(g, pl.firstChild)); stops.forEach(g => pl.appendChild(g));
+  sorted.forEach(x => { if (x.p) root.appendChild(x.p); });
+  return new XMLSerializer().serializeToString(doc);
+}
+/* the clef a part is read in: of the instrument's clefs, the fewest ledger lines (its usual clef a little preferred) */
+function fitClef(part, instr) {
+  if (/<staves>[2-9]<\/staves>/.test(new XMLSerializer().serializeToString(part).slice(0, 4000))) return;
+  const idx = partIdx(part); if (!idx.length) return;
+  let best = ledgerCost(idx, instr.clef) - 0.5, name = instr.clef;
+  clefsOf(instr).filter(c => c !== instr.clef).forEach(c => { const v = ledgerCost(idx, c); if (v < best) { best = v; name = c; } });
+  [...part.getElementsByTagName("clef")].forEach((c, i) => { if (i === 0) c.innerHTML = PART_CLEF[name] || PART_CLEF.treble; else c.remove(); });
+}
+function swapPart(xml, pid, fn) {
+  const doc = parseXml(xml), root = doc.documentElement, part = kids(root, "part").find(p => p.getAttribute("id") === pid); if (!part) return xml;
+  const np = fn(soloScore(doc, part)); if (!np) return xml;
+  const imp = doc.importNode(np, true); imp.setAttribute("id", pid); part.replaceWith(imp);
+  return new XMLSerializer().serializeToString(doc);
+}
+/* the same notes for another instrument: same sound (its transposition, its clef); an octave moves only if the
+   notes would leave the new instrument's range */
+function changePartInstr(xml, pid, from, to) {
+  const out = swapPart(xml, pid, one => {
+    const p0 = kids(parseXml(one).documentElement, "part")[0], f = parseInt(txt(p0.getElementsByTagName("key")[0] || p0, "fifths") || "0", 10) || 0;
+    const tf = TR_IV[from.tr] || TR_IV[0], tt = TR_IV[to.tr] || TR_IV[0], ps = partPitches(p0).map(m => m - (from.tr || 0));
+    const oct = ps.some(m => m < to.lo || m > to.hi) ? octaveFor(ps, to, partIdx(p0).map(i => i - tf.d)) : 0;
+    const w = kids(parseXml(transposeXmlString(one, fixEnharmonic({ d: tt.d - tf.d + 7 * oct, s: tt.s - tf.s + 12 * oct }, f))).documentElement, "part")[0];
+    fitClef(w, to); return w;
+  });
+  const d = parseXml(out), sp = [...d.getElementsByTagName("score-part")].find(x => x.getAttribute("id") === pid);
+  if (sp) { setDeclared(d, sp, to); kid(sp, "part-name").textContent = to.name; }
+  return new XMLSerializer().serializeToString(d);
+}
+function shiftPartOctave(xml, pid, dir, instr) {
+  return swapPart(xml, pid, one => { const w = kids(parseXml(transposeXmlString(one, { d: 7 * dir, s: 12 * dir })).documentElement, "part")[0]; if (instr) fitClef(w, instr); return w; });
 }

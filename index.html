@@ -542,9 +542,12 @@
 <div class="sheet" id="sh-new" role="dialog" aria-modal="true" aria-labelledby="sh-new-t" hidden>
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-new-t">Nowa melodia</h2><button class="done ghost" data-close>Anuluj</button></div>
-  <div class="list fields first"><label class="li"><span class="fk">Tytuł</span><input id="new-title" type="text" autocomplete="off" placeholder="Nowa melodia"></label></div>
-  <h3 class="lbl">Instrument <small id="new-clef"></small></h3>
+  <h3 class="lbl first">Instrument <small id="new-clef"></small></h3>
   <div class="chips" id="new-instr"></div>
+  <h3 class="lbl">Gotowe</h3>
+  <div class="chips" id="new-ready"><button data-t="kotek">Wlazł kotek</button><button data-t="janie">Panie Janie</button><button data-t="oda">Oda do radości</button></div>
+  <h3 class="lbl">Własna</h3>
+  <div class="list fields"><label class="li"><span class="fk">Tytuł</span><input id="new-title" type="text" autocomplete="off" placeholder="Nowa melodia"></label></div>
   <h3 class="lbl">Metrum</h3>
   <div class="seg three" id="new-time"><button data-v="4/4">4/4</button><button data-v="3/4">3/4</button><button data-v="2/4">2/4</button><button data-v="6/8">6/8</button><button data-v="2/2">2/2</button><button data-v="3/8">3/8</button></div>
   <h3 class="lbl">Tonacja</h3>
@@ -654,6 +657,9 @@
   <div class="tiles three first">
     <button class="tile" id="pp-only"><svg class="i"><use href="#eye"/></svg><span>Tylko ta</span></button>
     <button class="tile" id="pp-mute" aria-pressed="false"><svg class="i"><use href="#mute"/></svg><span>Wycisz</span></button>
+    <button class="tile" id="pp-instr"><svg class="i"><use href="#trombone"/></svg><span>Instrument</span></button>
+    <button class="tile" id="pp-up"><svg class="i"><use href="#octave"/></svg><span>Wyżej</span></button>
+    <button class="tile" id="pp-down"><svg class="i"><use href="#octave-down"/></svg><span>Niżej</span></button>
     <button class="tile" id="pp-change"><svg class="i"><use href="#swap"/></svg><span>Zmień</span></button>
     <button class="tile" id="pp-print"><svg class="i"><use href="#print"/></svg><span>Drukuj</span></button>
     <button class="tile" id="pp-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
