@@ -194,7 +194,9 @@ function ctl(el) {
 function presentSheet(el, switching) {
   scrim.hidden = false; el.hidden = false;
   if (isWide() || !canAnimate()) {
-    el.style.transform = ""; scrim.style.opacity = "";
+    /* a phone without animation (page in the background, reduced motion): the sheet still has to come up */
+    const c = sheetCtl.get(el); if (c) c.spring.stop();
+    el.style.transform = isWide() ? "" : "translate3d(0,0,0)"; scrim.style.opacity = "";
     el.classList.remove("out"); el.classList.add("pre");
     if (!switching) { scrim.classList.remove("out"); scrim.classList.add("pre"); }
     void el.offsetWidth;
@@ -223,7 +225,7 @@ function openSheet(name) {
   const el = $("#sh-" + name); if (!el) return;
   const switching = !!openSheetId;
   if (switching) hideSheet(true, true); else history.pushState({ v: S.view, sheet: true }, "");
-  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, voice: buildVoiceSheet, partfor: buildPartForSheet })[name]?.();
+  ({ clef: buildClefSheet, key: buildKeySheet, more: buildMoreSheet, orig: buildOrigSheet, pages: preparePages, tools: buildToolsSheet, voice: buildVoiceSheet, partfor: buildPartForSheet, bar: buildBarSheet })[name]?.();
   openSheetId = name;
   presentSheet(el, switching);
   if (name === "key") placeHandle(true);
@@ -342,7 +344,7 @@ document.addEventListener("click", e => {
   if (a) {
     const act = a.dataset.act;
     if (act === "example") { hideWelcome(); openPiece({ xml: exampleXml(), sourceType: "example", title: "", composer: null, instrument: "Puzon" }); }
-    if (act === "blank") { hideWelcome(); openPiece({ xml: blankXml(), sourceType: "own", title: "Moje nuty", composer: "", instrument: "Puzon" }); S.dirty = true; savePiece(); hud("Dotknij pauzy, potem „Nuta”, i przesuwaj ją w górę lub w dół", 4000); }
+    if (act === "blank") { hideWelcome(); openPiece({ xml: blankXml(), sourceType: "own", title: "Moje nuty", composer: "", instrument: "Puzon" }); S.dirty = true; savePiece(); setEditMode(true); whenDrawn(() => openSheet("bar")); }
     if (act === "camera") { if (a.id === "w-camera") store.set("welcomed", "1"); openCamera(); }
     if (act === "print") closeSheetThen(printScore);
     if (act === "pdf") closeSheetThen(savePdf);
@@ -478,7 +480,7 @@ function openPiece(piece, settings) {
     $("#notice-text").textContent = n ? `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
   }
   updateTitles();
-  $("#peek").hidden = true; S.undo = []; S.editSel = null; S.keepSel = null; $("#editbar").hidden = true; document.body.classList.remove("editing");
+  $("#peek").hidden = true; S.undo = []; S.editSel = null; S.keepSel = null; S.editMode = false; $("#editbar").hidden = true; document.body.classList.remove("editing", "editmode"); $("#btn-edit").setAttribute("aria-pressed", "false");
   $("#pages").innerHTML = `<div class="loading-page"><span class="spinner"></span></div>`;
   $("#scroller").scrollTop = 0;
   if (S.view !== "score") go("score");
@@ -606,81 +608,290 @@ let lastW = window.innerWidth;
 window.addEventListener("resize", () => { if (Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; render(); } });
 /* ---------------- T18: correcting notes by tapping ---------------- */
 const ED_TYPES = ["16th", "eighth", "quarter", "half", "whole"], ED_LEN = { "16th": .25, eighth: .5, quarter: 1, half: 2, whole: 4 };
-function soloPartId() { const k = S.parts.filter(p => p.keep); return k.length === 1 ? k[0].id : null; }
-/* the drawn note -> the MusicXML <note>: same bar, same position among notes and rests */
+/* the drawn note -> the MusicXML <note>: same bar, same staff (= part), same position among notes and rests.
+   Any part can be corrected, except a piano (two staves: its notes are not in drawing order). */
+const NOTE_SEL = "g.note, g.rest, g.mRest";
+function staffSlots() {
+  const out = [];
+  S.parts.filter(p => p.keep).forEach(p => { const n = p.staves || 1; for (let k = 0; k < n; k++) out.push({ pid: p.id, multi: n > 1 }); });
+  return out;
+}
+const staffsOf = m => [...m.children].filter(c => c.classList && c.classList.contains("staff"));
 function locateNote(el) {
   const m = el.closest("g.measure"); if (!m) return null;
   const di = [...$$("#pages g.measure")].indexOf(m), bar = drawnBars(processedXml())[di];
-  const i = [...m.querySelectorAll("g.note, g.rest, g.mRest")].indexOf(el);
-  return bar && i >= 0 ? { bar, i, di } : null;
+  const st = el.closest("g.staff"), si = Math.max(0, staffsOf(m).indexOf(st)), slot = staffSlots()[si];
+  if (!slot) return null;
+  if (slot.multi) return { piano: true };
+  const i = [...(st || m).querySelectorAll(NOTE_SEL)].indexOf(el);
+  return bar && i >= 0 ? { bar, i, di, si, pid: slot.pid } : null;
+}
+function drawnNote(sel) {
+  const m = $$("#pages g.measure")[sel.di], st = m && (staffsOf(m)[sel.si] || m);
+  return st ? [...st.querySelectorAll(NOTE_SEL)][sel.i] : null;
+}
+/* in correcting mode a finger does not have to hit the note head: the closest note or rest is taken */
+function nearestNote(x, y) {
+  let best = null, bd = Infinity;
+  $$("#pages " + NOTE_SEL.split(", ").join(", #pages ")).forEach(g => {
+    const r = g.getBoundingClientRect(); if (!r.width && !r.height) return;
+    const dx = Math.max(r.left - x, 0, x - r.right), dy = Math.max(r.top - y, 0, y - r.bottom), d = dx * dx + 2 * dy * dy;
+    if (d < bd) { bd = d; best = g; }
+  });
+  return bd < 90 * 90 ? best : null;
 }
 function xmlNoteAt(doc, sel) {
-  const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === soloPartId()); if (!part) return null;
+  const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === sel.pid); if (!part) return null;
   const m = kids(part, "measure")[sel.bar - 1]; if (!m) return null;
   return { part, m, n: kids(m, "note")[sel.i] || null };
 }
-function selectNote(sel) {
-  S.editSel = sel; document.body.classList.toggle("editing", !!sel); $("#editbar").hidden = !sel;
-  $$("#pages g.nsel").forEach(g => g.classList.remove("nsel"));
-  if (!sel) return;
-  const m = $$("#pages g.measure")[sel.di], el = m && [...m.querySelectorAll("g.note, g.rest, g.mRest")][sel.i];
-  if (el) el.classList.add("nsel");
-  const at = xmlNoteAt(parseXml(S.piece.xml), sel);
-  $("#ed-rest-t").textContent = at && at.n && kid(at.n, "rest") ? "Nuta" : "Pauza";
-  $("#ed-undo").disabled = !(S.undo && S.undo.length);
+/* run once the music is on the screen (the first drawing loads the engine and can take a few seconds) */
+function whenDrawn(fn, tries = 40) { if ($("#pages g.measure")) setTimeout(fn, 250); else if (tries) setTimeout(() => whenDrawn(fn, tries - 1), 200); }
+function setEditMode(on) {
+  S.editMode = !!on; $("#btn-edit").setAttribute("aria-pressed", String(S.editMode));
+  if (!S.editMode) S.editSel = null;
+  selectNote(S.editSel);
 }
-function divisionsAt(part, m) {
-  let div = 1;
-  for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div; }); if (mm === m) break; }
-  return div;
+function selectNote(sel) {
+  S.editSel = sel; if (sel) S.editMode = true;
+  const on = !!S.editMode;
+  document.body.classList.toggle("editing", on); document.body.classList.toggle("editmode", on);
+  $("#btn-edit").setAttribute("aria-pressed", String(on));
+  $("#editbar").hidden = !on; $("#ed-hint").hidden = !!sel; $("#ed-tools").hidden = !sel;
+  $$("#pages g.nsel").forEach(g => g.classList.remove("nsel"));
+  $("#ed-undo").disabled = !(S.undo && S.undo.length);
+  if (!sel) return;
+  const el = drawnNote(sel); if (el) el.classList.add("nsel");
+  const at = xmlNoteAt(parseXml(S.piece.xml), sel);
+  const isRest = !!(at && at.n && kid(at.n, "rest"));
+  $("#ed-rest-t").textContent = isRest ? "Nuta" : "Pauza"; $("#ed-rest-i").textContent = isRest ? "♩" : "▬";
+}
+/* divisions and the length of a full bar (in divisions) at a bar */
+function barCap(part, m) {
+  let div = 1, beats = 4, bt = 4;
+  for (const mm of kids(part, "measure")) {
+    kids(mm, "attributes").forEach(a => {
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+    });
+    if (mm === m) break;
+  }
+  return { div, cap: div * 4 * beats / bt };
+}
+const divisionsAt = (part, m) => barCap(part, m).div;
+function restNote(doc, dur, type, voice) {
+  const r = doc.createElement("note");
+  r.innerHTML = `<rest/><duration>${dur}</duration><voice>${voice || 1}</voice>` + (type ? `<type>${type}</type>` : "");
+  return r;
+}
+/* after a note gets shorter or longer the bar still adds up: the rests right after it are taken away
+   and the gap is filled again, each rest starting on its beat (as printed music does); simple one-voice bars only */
+function fitBar(doc, part, m, after) {
+  if (kids(m, "backup").length) return;
+  const { div, cap } = barCap(part, m), len = n => (kid(n, "chord") || kid(n, "grace")) ? 0 : (parseFloat(txt(n, "duration")) || 0);
+  for (let nx = after.nextElementSibling; nx && !(nx.tagName === "note" && !kid(nx, "rest"));) {
+    const next = nx.nextElementSibling; if (nx.tagName === "note" && !kid(nx, "chord")) nx.remove(); nx = next;
+  }
+  let total = kids(m, "note").reduce((a, n) => a + len(n), 0);
+  for (let nx = after.nextElementSibling; total > cap + 1e-6 && nx;) {           // still too long: rests further on go
+    const next = nx.nextElementSibling;
+    if (nx.tagName === "note" && kid(nx, "rest") && !kid(nx, "chord")) { total -= len(nx); nx.remove(); }
+    nx = next;
+  }
+  let pos = 0; for (const n of kids(m, "note")) { pos += len(n); if (n === after) break; }
+  let gap = cap - total, at = after;
+  while (gap > 1e-6) {
+    const t = ["whole", "half", "quarter", "eighth", "16th"].find(t => { const d = ED_LEN[t] * div; return d <= gap + 1e-6 && Math.abs(pos / d - Math.round(pos / d)) < 1e-6; });
+    if (!t) break;
+    const d = ED_LEN[t] * div, r = restNote(doc, d, t, txt(after, "voice")); at.after(r); at = r; gap -= d; pos += d;
+  }
+}
+function pushUndo() {
+  S.undo = S.undo || []; S.undo.push(S.piece.xml); if (S.undo.length > 60) S.undo.shift();
+  if (!S.piece.origXml) S.piece.origXml = S.undo[0];
 }
 function editNote(op) {
-  if (op === "done") { selectNote(null); return; }
-  if (op === "undo") { if (!S.undo || !S.undo.length) return; S.piece.xml = S.undo.pop(); afterEdit(); return; }
+  if (op === "done") { setEditMode(false); return; }
+  if (op === "bar") { openSheet("bar"); return; }
+  if (op === "undo") { if (!S.undo || !S.undo.length) return; S.piece.xml = S.undo.pop(); refreshInfo(); afterEdit(); return; }
   const sel = S.editSel; if (!sel) return;
   const doc = parseXml(S.piece.xml), at = xmlNoteAt(doc, sel); if (!at || !at.n) return;
-  const n = at.n, p = kid(n, "pitch"), fifths = S.srcKey ? S.srcKey.fifths : 0;
+  const n = at.n, p = kid(n, "pitch"), fifths = keyAt(at.part, at.m);
   const dropAcc = () => kids(n, "accidental").forEach(a => a.remove());
   const setAlter = v => { if (!p) return; let al = kid(p, "alter"); if (v) { if (!al) { al = doc.createElement("alter"); p.insertBefore(al, kid(p, "octave")); } al.textContent = String(v); } else if (al) al.remove(); dropAcc(); };
   const move = d => { if (!p) return; const idx = parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")] + d, st = STEP_N[((idx % 7) + 7) % 7]; kid(p, "step").textContent = st; kid(p, "octave").textContent = String(Math.floor(idx / 7)); setAlter(keyAlter(fifths, st)); };
+  const toNote = () => {
+    const r = kid(n, "rest"), prev = [...at.part.getElementsByTagName("pitch")].filter(x => x.compareDocumentPosition(n) & 4).pop();
+    const np = doc.createElement("pitch"), clef = clefAt(at.part, at.m), mid = (CLEF_BOTTOM[clef] ?? 18) + 4;
+    np.innerHTML = prev ? prev.innerHTML : `<step>${STEP_N[mid % 7]}</step><octave>${Math.floor(mid / 7)}</octave>`;
+    if (!prev) { const a = keyAlter(fifths, STEP_N[mid % 7]); if (a) np.insertBefore(Object.assign(doc.createElement("alter"), { textContent: String(a) }), np.lastChild); }
+    const whole = r.getAttribute("measure") === "yes";
+    n.replaceChild(np, r);
+    if (whole) {        // an empty bar: the new note is a quarter note, rests fill the bar
+      const { div } = barCap(at.part, at.m); kid(n, "duration").textContent = String(div);
+      let ty = kid(n, "type"); if (!ty) { ty = doc.createElement("type"); kid(n, "voice") ? kid(n, "voice").after(ty) : kid(n, "duration").after(ty); }
+      ty.textContent = "quarter"; fitBar(doc, at.part, at.m, n);
+    }
+  };
   if (op === "up") move(1); else if (op === "down") move(-1);
   else if (op === "octup") move(7); else if (op === "octdown") move(-7);
   else if (op === "flat") setAlter(-1); else if (op === "sharp") setAlter(1); else if (op === "natural") setAlter(0);
   else if (op === "shorter" || op === "longer") {
-    const div = divisionsAt(at.part, at.m), cur = txt(n, "type") || ED_TYPES.find(t => Math.abs(ED_LEN[t] * div - parseFloat(txt(n, "duration"))) < .01) || "quarter";
+    const div = divisionsAt(at.part, at.m), r = kid(n, "rest");
+    let cur = txt(n, "type") || ED_TYPES.find(t => Math.abs(ED_LEN[t] * div - parseFloat(txt(n, "duration"))) < .01) || "quarter";
+    if (r && r.getAttribute("measure") === "yes") cur = "whole";
     const ni = Math.max(0, Math.min(ED_TYPES.length - 1, ED_TYPES.indexOf(cur) + (op === "longer" ? 1 : -1))), nt = ED_TYPES[ni];
     kids(n, "dot").forEach(d => d.remove());
-    const r = kid(n, "rest"); if (r) r.removeAttribute("measure");
+    if (r) r.removeAttribute("measure");
     kid(n, "duration").textContent = String(ED_LEN[nt] * div);
-    let ty = kid(n, "type"); if (!ty) { ty = doc.createElement("type"); n.insertBefore(ty, kid(n, "duration").nextSibling.nextSibling || null); }
+    let ty = kid(n, "type"); if (!ty) { ty = doc.createElement("type"); kid(n, "voice") ? kid(n, "voice").after(ty) : kid(n, "duration").after(ty); }
     ty.textContent = nt;
+    fitBar(doc, at.part, at.m, n);
   } else if (op === "rest") {
-    if (p) { const r = doc.createElement("rest"); n.replaceChild(r, p); dropAcc(); kids(n, "stem").forEach(s => s.remove()); }
-    else {
-      const prev = [...at.part.getElementsByTagName("pitch")].filter(x => x.compareDocumentPosition(n) & 4).pop();
-      const np = doc.createElement("pitch"); np.innerHTML = prev ? prev.innerHTML : (S.srcClef === "bass" ? "<step>B</step><octave>3</octave>" : "<step>B</step><octave>4</octave>");
-      const r = kid(n, "rest"); if (r && r.getAttribute("measure") === "yes" && !kid(n, "type")) { const ty = doc.createElement("type"); ty.textContent = "whole"; n.appendChild(ty); }
-      n.replaceChild(np, r);
-    }
+    if (p) { n.replaceChild(doc.createElement("rest"), p); dropAcc(); kids(n, "stem").forEach(s => s.remove()); kids(n, "beam").forEach(s => s.remove()); }
+    else toNote();
   } else if (op === "add") {
-    /* a copy of the note right after it (a bar that was only a rest becomes a note): then move it where it belongs */
-    if (kid(n, "rest") && kid(n, "rest").getAttribute("measure") === "yes") { editNote("rest"); return; }
-    const c = n.cloneNode(true); kids(c, "chord").forEach(x => x.remove()); n.parentNode.insertBefore(c, n.nextSibling);
-    S.editSel = { ...sel, i: sel.i + 1 };
+    /* a rest becomes a note; a note gets a copy right after it (taking the place of the rests that follow) */
+    if (kid(n, "rest")) toNote();
+    else {
+      const c = n.cloneNode(true); kids(c, "chord").forEach(x => x.remove()); n.after(c);
+      fitBar(doc, at.part, at.m, c); S.editSel = { ...sel, i: sel.i + 1 };
+    }
   } else if (op === "delete") {
-    if (kids(at.m, "note").length > 1) { n.remove(); S.editSel = null; }
-    else { const r = doc.createElement("rest"); r.setAttribute("measure", "yes"); if (p) n.replaceChild(r, p); }
+    /* a note leaves a rest of the same length (the bar still adds up); a rest goes away */
+    if (p) { n.replaceChild(doc.createElement("rest"), p); dropAcc(); kids(n, "stem").forEach(s => s.remove()); kids(n, "beam").forEach(s => s.remove()); }
+    else if (kids(at.m, "note").length > 1) { n.remove(); S.editSel = null; }
   }
-  S.undo = S.undo || []; S.undo.push(S.piece.xml); if (S.undo.length > 60) S.undo.shift();
-  if (!S.piece.origXml) S.piece.origXml = S.undo[0];
+  pushUndo();
   S.piece.xml = new XMLSerializer().serializeToString(doc);
   afterEdit();
 }
+function keyAt(part, m) { let f = 0; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const k = kid(a, "key"); if (k) f = parseInt(txt(k, "fifths"), 10) || 0; }); if (mm === m) break; } return f; }
+function clefAt(part, m) { let c = "G"; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => kids(a, "clef").forEach(x => c = clefId(x))); if (mm === m) break; } return CLEF_BOTTOM[c] != null ? c : "G"; }
+function timeAt(part, m) { const { div, cap } = barCap(part, m); let t = null; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const x = kid(a, "time"); if (x) t = `${txt(x, "beats")}/${txt(x, "beat-type")}`; }); if (mm === m) break; } return t || (cap / div === 4 ? "4/4" : ""); }
+/* key, clef and parts are read again after a change to the music itself */
+function refreshInfo() {
+  const info = analyseXml(S.piece.xml); S.srcKey = info.key;
+  S.parts.forEach(p => { const q = info.parts.find(x => x.id === p.id); if (q) Object.assign(p, { clef: q.clef, staves: q.staves }); });
+  const first = S.parts.find(p => p.keep) || S.parts[0]; if (first) S.srcClef = first.clef;
+}
+/* ---------------- the bar sheet: metre, clef, key signature, adding and removing bars, tempo ---------------- */
+function barTarget() {
+  if (S.editSel) return { bar: S.editSel.bar, pid: S.editSel.pid };
+  const b = S.fromBar >= 0 ? drawnBars(processedXml())[S.fromBar] : null;
+  const first = S.parts.find(p => p.keep && !(p.staves > 1)) || S.parts.find(p => p.keep);
+  return { bar: b || 1, pid: first && first.id };
+}
+function attrsOf(doc, m) {
+  let a = kid(m, "attributes");
+  if (!a) { a = doc.createElement("attributes"); const pr = kid(m, "print"); pr ? pr.after(a) : m.insertBefore(a, m.firstChild); }
+  return a;
+}
+const ATTR_ORDER = ["footnote", "level", "divisions", "key", "time", "staves", "part-symbol", "instruments", "clef"];
+function putAttr(a, el) {
+  kids(a, el.tagName).forEach(x => x.remove());
+  const after = ATTR_ORDER.indexOf(el.tagName), nx = [...a.children].find(c => ATTR_ORDER.indexOf(c.tagName) > after);
+  a.insertBefore(el, nx || null);
+}
+function buildBarSheet() {
+  const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml);
+  const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || doc.getElementsByTagName("part")[0];
+  const m = part && kids(part, "measure")[bar - 1]; if (!m) return;
+  $("#sh-bar-t").textContent = `Takt ${bar}`;
+  $("#bar-note").textContent = bar === 1 ? "Metrum, klucz i znaki zmieniają się w całym utworze." : `Metrum, klucz i znaki zmieniają się od taktu ${bar} do końca.`;
+  const t = timeAt(part, m), c = clefAt(part, m), k = keyAt(part, m);
+  $$("#bar-time button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === t)));
+  $$("#bar-clef button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c)));
+  $("#bar-key").value = String(k);
+  $("#bar-del").disabled = kids(part, "measure").length < 2;
+  $("#bar-bpm").textContent = String(curBpm());
+}
+function barOp(op, val) {
+  const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml), parts = [...doc.getElementsByTagName("part")];
+  const later = (part, from) => kids(part, "measure").slice(from);          // this bar and all after it
+  if (op === "time") {
+    const [b, bt] = val.split("/");
+    parts.forEach(part => {
+      const ms = kids(part, "measure"); if (!ms[bar - 1]) return;
+      later(part, bar).forEach(mm => kids(mm, "attributes").forEach(a => kids(a, "time").forEach(x => x.remove())));
+      const t = doc.createElement("time"); t.innerHTML = `<beats>${b}</beats><beat-type>${bt}</beat-type>`; putAttr(attrsOf(doc, ms[bar - 1]), t);
+      later(part, bar - 1).forEach(mm => {                       // empty bars take the new length
+        const ns = kids(mm, "note"); const r = ns.length === 1 && kid(ns[0], "rest");
+        if (r && r.getAttribute("measure") === "yes") kid(ns[0], "duration").textContent = String(barCap(part, mm).cap);
+      });
+    });
+  } else if (op === "clef" || op === "key") {
+    parts.filter(p => op === "key" || p.getAttribute("id") === pid).forEach(part => {
+      const ms = kids(part, "measure"); if (!ms[bar - 1]) return;
+      const oldClef = clefAt(part, ms[bar - 1]), shift = op === "clef" ? CLEF_BOTTOM[val] - CLEF_BOTTOM[oldClef] : 0;
+      let oldKey = keyAt(part, ms[bar - 1]); const newKey = op === "key" ? +val : null;
+      later(part, bar - 1).forEach((mm, j) => {
+        kids(mm, "attributes").forEach(a => {
+          const k = kid(a, "key"); if (k) oldKey = parseInt(txt(k, "fifths"), 10) || 0;
+          if (j > 0) kids(a, op).forEach(x => x.remove());
+        });
+        const nk = newKey ?? oldKey;
+        kids(mm, "note").forEach(n => {
+          const p = kid(n, "pitch"); if (!p) return;
+          const st = txt(p, "step"), off = (parseFloat(txt(p, "alter")) || 0) - keyAlter(oldKey, st);
+          const idx = parseInt(txt(p, "octave"), 10) * 7 + STEP_I[st] + shift, ns = STEP_N[((idx % 7) + 7) % 7];
+          kid(p, "step").textContent = ns; kid(p, "octave").textContent = String(Math.floor(idx / 7));
+          const al = keyAlter(nk, ns) + off; let a = kid(p, "alter");
+          if (al) { if (!a) { a = doc.createElement("alter"); p.insertBefore(a, kid(p, "octave")); } a.textContent = String(al); } else if (a) a.remove();
+          kids(n, "accidental").forEach(x => x.remove());
+        });
+      });
+      const a = attrsOf(doc, ms[bar - 1]);
+      if (op === "clef") {
+        const c = doc.createElement("clef"); c.innerHTML = val.startsWith("C") ? `<sign>C</sign><line>${val.slice(1)}</line>` : `<sign>${val}</sign><line>${val === "F" ? 4 : 2}</line>`;
+        putAttr(a, c);
+      } else { const k = doc.createElement("key"); k.innerHTML = `<fifths>${val}</fifths>`; putAttr(a, k); }
+    });
+  } else if (op === "add" || op === "addbefore") {
+    parts.forEach(part => {
+      const m = kids(part, "measure")[bar - 1]; if (!m) return;
+      const nm = doc.createElement("measure"), r = restNote(doc, barCap(part, m).cap, "", 1);
+      kid(r, "rest").setAttribute("measure", "yes"); nm.appendChild(r);
+      if (op === "add") m.after(nm);
+      else {          // the new first bar takes over the key, metre and clef
+        const a = kid(m, "attributes"); if (a) nm.insertBefore(a, nm.firstChild);
+        const pr = kid(m, "print"); if (pr) nm.insertBefore(pr, nm.firstChild);
+        m.before(nm);
+      }
+    });
+  } else if (op === "del") {
+    parts.forEach(part => {
+      const ms = kids(part, "measure"), m = ms[bar - 1], nx = ms[bar]; if (!m || ms.length < 2) return;
+      kids(m, "attributes").forEach(a => {            // what was set in the removed bar carries on in the next one
+        if (!nx) return; const na = attrsOf(doc, nx);
+        [...a.children].forEach(c => { if (!kid(na, c.tagName)) putAttr(na, c.cloneNode(true)); });
+      });
+      m.remove();
+    });
+    S.editSel = null;
+  }
+  parts.forEach(part => kids(part, "measure").forEach((m, i) => m.setAttribute("number", String(i + 1))));
+  pushUndo();
+  S.piece.xml = new XMLSerializer().serializeToString(doc);
+  if (op !== "time" && op !== "clef" && op !== "key") S.editSel = null;
+  refreshInfo(); afterEdit();
+  hud({ time: `Metrum ${val}`, clef: "Zmieniono klucz", key: "Zmieniono znaki przy kluczu", add: "Dodano takt", addbefore: "Dodano takt", del: "Usunięto takt" }[op], 1600);
+  if (op === "del" || op === "add" || op === "addbefore") closeSheet(); else buildBarSheet();
+}
+$$("#bar-time button").forEach(b => b.addEventListener("click", () => barOp("time", b.dataset.v)));
+$$("#bar-clef button").forEach(b => b.addEventListener("click", () => barOp("clef", b.dataset.v)));
+$("#bar-key").addEventListener("change", e => barOp("key", e.target.value));
+$("#bar-add").addEventListener("click", () => barOp("add"));
+$("#bar-addbefore").addEventListener("click", () => barOp("addbefore"));
+$("#bar-del").addEventListener("click", () => barOp("del"));
+[["#bar-bpm-down", -4], ["#bar-bpm-up", 4]].forEach(([s, d]) => $(s).addEventListener("click", () => { setBpm(curBpm() + d); $("#bar-bpm").textContent = String(curBpm()); }));
+$("#btn-edit").addEventListener("click", () => { setEditMode(!S.editMode); if (S.editMode) hud("Dotknij nuty, którą chcesz zmienić", 2200); });
 function afterEdit() {
   /* the rhythm check follows the edit: fixed bars lose their red, broken ones get it */
   const other = (S.piece.issues || []).filter(t => !/wartości rytmicznych/.test(t));
   S.piece.issues = [...barIssues(S.piece.xml), ...other].sort((a, b) => parseInt(a.slice(5), 10) - parseInt(b.slice(5), 10));
   S.keepSel = S.editSel; changed();
+  $("#ed-undo").disabled = !(S.undo && S.undo.length);
   $("#btn-restore").hidden = !S.piece.origXml;
   const nums = doubtfulBars(S.piece.issues);
   if (!$("#notice").hidden || nums.length) { $("#notice").hidden = !nums.length; if (nums.length) { $("#notice-title").textContent = `${nums.length} ${plural(nums.length, "takt", "takty", "taktów")} do sprawdzenia`; $("#notice-text").textContent = `Zaznaczone na czerwono: ${nums.slice(0, 8).join(", ")}${nums.length > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.`; } }
@@ -694,11 +905,14 @@ $("#btn-restore").addEventListener("click", () => {
 
 /* tap a note: correct it; tap a bar elsewhere: it is selected and ▶ plays from there; tap again (or outside the bars) to clear */
 $("#pages").addEventListener("click", e => {
-  const ne = e.target.closest("g.note, g.rest, g.mRest");
-  if (ne && S.piece && soloPartId()) {
+  if (!S.piece) return;
+  const hit = e.target.closest(NOTE_SEL), ne = hit || (S.editMode ? nearestNote(e.clientX, e.clientY) : null);
+  if (ne) {
     const sel = locateNote(ne);
-    if (sel) { if (S.editSel && S.editSel.di === sel.di && S.editSel.i === sel.i) selectNote(null); else selectNote(sel); return; }
+    if (sel && sel.piano) { hud("Partii fortepianu nie poprawisz tutaj. Ukryj ją w „Więcej → Partie”, żeby poprawiać melodię.", 4000); return; }
+    if (sel) { if (S.editSel && S.editSel.di === sel.di && S.editSel.si === sel.si && S.editSel.i === sel.i) selectNote(null); else selectNote(sel); return; }
   }
+  if (S.editMode) return;
   const m = e.target.closest("g.measure");
   if (!m) { if (S.fromMs) clearFromBar(); else if (e.target.closest(".page")) document.body.classList.toggle("immersive"); return; }
   if (m.classList.contains("sel")) { clearFromBar(); return; }
@@ -1818,7 +2032,8 @@ $("#in-backup").addEventListener("change", async e => {
   } catch { $("#backup-status").textContent = "To nie jest kopia zapasowa Solo."; }
 });
 
-const NEWS = { "3.7": ["Kilka pytań przed czytaniem: klucz, metrum i znaki przy kluczu poprawiają odczyt.",
+const NEWS = { "3.7": ["Przycisk „Popraw”: dotknij w pobliżu nuty, żeby ją zmienić. „Takt”: metrum, klucz, znaki, dodawanie i usuwanie taktów, tempo.",
+  "Kilka pytań przed czytaniem: klucz, metrum i znaki przy kluczu poprawiają odczyt.",
   "Takty, które się nie zgadzają, są zaznaczone na czerwono, z licznikiem do sprawdzenia.",
   "Pauzy wielotaktowe nie zasłaniają już kolejnych taktów.",
   "Nuty od 50 do 200%, rozciąganie dwoma palcami, wielkość zapamiętana dla utworu.",
@@ -1972,7 +2187,8 @@ $$("#t-instr button").forEach(b => b.addEventListener("click", () => { tuner.tr 
 
 /* ---------------- T24 tutorial: five steps over the real screen, skippable ---------------- */
 const TOUR = [
-  ["#pages", "Nuty", "Dotknij nuty, żeby ją poprawić. Dotknij taktu, żeby grać od niego i zobaczyć tę linię ze zdjęcia."],
+  ["#pages", "Nuty", "Dotknij taktu, żeby grać od niego i zobaczyć tę linię ze zdjęcia."],
+  ["#btn-edit", "Popraw", "Włącz i dotknij w pobliżu nuty, żeby ją zmienić. Przycisk „Takt” ustawia metrum, klucz i znaki oraz dodaje lub usuwa takty."],
   ['#dock [data-sheet="clef"]', "Klucz", "Zmień klucz: basowy, tenorowy, altowy albo wiolinowy."],
   ['#dock [data-sheet="key"]', "Tonacja", "Przenieś nuty wyżej lub niżej, o tercję, kwartę, kwintę albo na inny instrument."],
   ["#btn-play", "Posłuchaj", "Odtwarzanie z kolorem granej nuty. Tempo zmienisz w Więcej."],

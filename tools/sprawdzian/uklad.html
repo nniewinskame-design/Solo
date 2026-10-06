@@ -73,7 +73,7 @@ async function check(w) {
   const ms = D.querySelectorAll("#pages g.measure"), last = ms[ms.length - 1];
   const under = last && last.getBoundingClientRect().bottom > dock.getBoundingClientRect().top - 4;
   row(w, "Ostatnia linia nad paskiem", !under, under ? "ostatni takt pod paskiem" : "–");
-  for (const sh of ["clef", "key", "more", "tools", "share"]) {
+  for (const sh of ["clef", "key", "more", "tools", "share", "bar"]) {
     W.openSheet(sh); await wait(900);
     const el = D.getElementById("sh-" + sh);
     o = overlaps(D, el); const r = el.getBoundingClientRect();

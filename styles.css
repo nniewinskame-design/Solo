@@ -124,7 +124,7 @@ svg.mark{width:.82em;height:1.02em;fill:currentColor;flex:none;margin-bottom:.06
 .sort{position:relative;display:flex;align-items:center;height:44px;border-radius:99px;background:var(--fill);flex:none}
 .sort select{appearance:none;-webkit-appearance:none;border:0;background:none;height:44px;padding:0 38px 0 16px;font-size:15px;font-weight:600;cursor:pointer;outline:none}
 .sort svg.i{position:absolute;right:12px;width:18px;height:18px;pointer-events:none}
-@media (max-width:560px){ .libtools{flex-basis:100%;justify-content:stretch} .search{flex:1 1 auto} }
+@media (max-width:560px){ .libtools{flex-basis:100%;justify-content:stretch;flex-wrap:wrap} .search{flex:1 1 150px} }
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:22px 18px}
 @media (max-width:560px){ .grid{grid-template-columns:1fr 1fr;gap:20px 14px} }
 .card{display:block;text-align:left;border-radius:10px;min-width:0}
@@ -814,3 +814,14 @@ input.inl::selection{background:rgba(75,22,34,.20)}
 @media (prefers-reduced-motion:reduce){ .inl-box{animation:none} }
 html[data-env="test"]{--strip:22px;--safe-t:calc(env(safe-area-inset-top,0px) + var(--strip))}
 html[data-env="test"]::before{content:"WERSJA TESTOWA";position:fixed;left:0;right:0;top:0;z-index:9999;box-sizing:content-box;height:var(--strip);padding-top:env(safe-area-inset-top,0px);display:flex;align-items:center;justify-content:center;background:#FFC93C;color:#1E1B2E;font:700 12px/1 var(--sans);letter-spacing:.14em;pointer-events:none}
+/* editing mode: hint, tools, bar sheet */
+.ed-tools:not([hidden]){display:contents}
+.ed-hint{flex:1 1 auto;min-width:120px;display:flex;flex-direction:column;justify-content:center;padding:0 10px;font-size:14px;line-height:1.25;color:var(--ink-2)}
+.ed-hint b{color:var(--ink);font-size:15px}
+.ed-hint[hidden]{display:none}
+body.editmode #btn-edit{background:var(--primary);color:var(--on-primary);border-radius:14px}
+body.editmode #pages{cursor:crosshair}
+#sh-bar .seg{margin-bottom:4px}
+#sh-bar .seg button{min-height:44px}
+#sh-bar .seg:not(.three){grid-template-columns:1fr 1fr}
+#bar-bpm{font-size:20px}
