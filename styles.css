@@ -1263,3 +1263,20 @@ body:has(.loopbar:not([hidden])) .follow-pill{bottom:calc(var(--dock-h,70px) + 1
 .sheet .ask-row{background:var(--card);border-radius:var(--r-m);padding:8px 8px 8px 16px;min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 #score #s-sub{white-space:normal;display:block;line-height:1.35;-webkit-line-clamp:unset}   /* composer · clef · key wrap as whole words instead of "…" */
 .txt,.w-legal,#sh-doc .doc,.li small,.note{-webkit-user-select:text;user-select:text}   /* help text and contact details can be copied (K43) */
+
+/* ===== "+" sheet: four big tiles, ready tunes right under them (V15) ===== */
+#sh-add .addlist{display:grid;grid-template-columns:1fr 1fr;gap:10px;background:none;box-shadow:none;padding:0}
+#sh-add .addlist .li{flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:10px;min-height:118px;border-radius:var(--r-l);background:var(--card);box-shadow:var(--shadow-1);padding:16px 10px}
+#sh-add .addlist .li::after{display:none}
+#sh-add .addlist .ic{width:52px;height:52px;border-radius:16px;background:var(--cherry-tint);color:var(--cherry)}
+#sh-add .addlist .ic svg.i{width:28px;height:28px}
+#sh-add .addlist .li b{font:650 17px var(--display)}
+#sh-add .addlist .li small{display:none}
+#sh-add .addlist .li:nth-child(2) .ic{background:color-mix(in srgb,var(--pos-2) 14%,transparent);color:var(--pos-2)}
+#sh-add .addlist .li:nth-child(3) .ic{background:color-mix(in srgb,var(--pos-4) 14%,transparent);color:var(--pos-4)}
+#sh-add .addlist .li:nth-child(4) .ic{background:color-mix(in srgb,var(--pos-5) 14%,transparent);color:var(--pos-5)}
+.add-ready{justify-content:center}
+/* primary buttons have a small lip that presses down (a tactile, not flat, button) */
+.btn.primary{box-shadow:0 3px 0 var(--cherry-deep);transition:transform var(--spring-press-d) var(--spring-press),box-shadow var(--spring-press-d) var(--spring-press)}
+.btn.primary:active{transform:translateY(2px);box-shadow:0 1px 0 var(--cherry-deep);transition-duration:80ms}
+.empty .empty-copy{text-align:center}.empty .row-btns{justify-content:center}

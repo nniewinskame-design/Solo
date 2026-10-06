@@ -2920,8 +2920,11 @@ $("#new-key").addEventListener("change", e => { nm.key = +e.target.value; });
 $("#new-title").addEventListener("input", e => { nm.title = e.target.value; });
 [["#new-bpm-down", -5], ["#new-bpm-up", 5]].forEach(([s, d]) => $(s).addEventListener("click", () => { nm.bpm = Math.max(30, Math.min(240, nm.bpm + d)); $("#new-bpm").textContent = String(nm.bpm); }));
 /* a ready tune written for the chosen instrument (its octave, transposition, clef) with the piano under it */
-$("#new-ready").addEventListener("click", e => {
-  const b = e.target.closest("[data-t]"); if (!b) return;
+$("#new-ready").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) openReadyTune(b.dataset.t); });
+/* straight from "+": for the player's main instrument */
+$("#add-ready").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) { nm.instr = nm.instr || profile().main; openReadyTune(b.dataset.t); } });
+function openReadyTune(tid) {
+  const b = { dataset: { t: tid } };
   const ins = instrById(nm.instr), t = READY_TUNES[b.dataset.t], base = readyTuneXml(b.dataset.t);
   let xml = makePart(base, "P1", { role: "melody", instr: ins });
   xml = makePart(xml, "P1", { role: "chords", instr: instrById("fortepian") });
@@ -2932,7 +2935,7 @@ $("#new-ready").addEventListener("click", e => {
     const names = new Set((await DB.all().catch(() => [])).map(p => p.title)); let title = t.title, k = 2; while (names.has(title)) title = `${t.title} ${k++}`;
     openPiece({ xml, sourceType: "own", title, composer: t.composer, instrument: ins.name }); S.dirty = true; savePiece();
   });
-});
+}
 $("#new-go").addEventListener("click", () => {
   const ins = instrById(nm.instr), [beats, bt] = nm.time.split("/").map(Number);
   const xml = blankXml(4, { clef: ins.clef, beats, beatType: bt, fifths: nm.key, tempo: nm.bpm, title: nm.title || "Nowa melodia", part: ins.name });
