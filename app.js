@@ -1317,7 +1317,7 @@ function buildBarSheet() {
   const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml);
   const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || doc.getElementsByTagName("part")[0];
   const m = part && kids(part, "measure")[bar - 1]; if (!m) return;
-  $("#sh-bar-t").innerHTML = `Utwór <small>· klucz i metrum od taktu ${bar} (dotknij taktu w nutach, żeby wybrać inny)</small>`;
+  $("#sh-bar-t").textContent = "";
   /* the bar Takt works on is marked in the music */
   markBarSel();
   $("#bar-note").textContent = bar === 1 ? "Metrum, klucz i znaki zmieniają się w całym utworze." : `Metrum, klucz i znaki zmieniają się od taktu ${bar} do końca.`;

@@ -1960,3 +1960,4 @@ body.editmode .ed-info:has(+ .bar-pane:not([hidden])){display:none}
 .ed-tabs{background:#fff;border-radius:999px;padding:4px!important}
 .ed-info{color:var(--text-2)}
 .bar-pane .chips>button:not([aria-pressed="true"]){background:#fff}
+.bar-pane .bp-title{display:none!important}.bar-pane h3.lbl:first-of-type{margin-top:2px!important}
