@@ -1,2 +1,128 @@
 /* Solo · listening screens (design v2 §3b, §4, §5): the orb stage shared by the tuner and the own-sound recording,
    and the "Brzmienia" tiles in Ja. Tokens from the v2 palette with the current ones as fallback. */
+
+/* ---------- tokens (v2 names first, the 4.0 ones as fallback) ---------- */
+:root{
+  --lx-canvas:var(--canvas,var(--paper,#F7F7F9)); --lx-surface:var(--surface,var(--card,#FFFFFF)); --lx-surface-2:var(--surface-2,var(--fill,#F0F0F4));
+  --lx-text:var(--text,var(--ink,#16161D)); --lx-text-2:var(--text-2,var(--ink-2,#5B5B6B)); --lx-text-3:var(--text-3,var(--ink-3,#6B6B7B));
+  --lx-brand:var(--brand,var(--primary,#D11A4A)); --lx-brand-ink:var(--brand-ink,var(--primary,#B0123F));
+  --lx-lime:var(--lime-solid,var(--lime,#527A00)); --lx-lime-ink:var(--lime-ink,#4A6B00); --lx-lime-tint:var(--lime-tint,#ECF6D9);
+  --lx-ok:var(--green-solid,var(--green,#187D46)); --lx-ok-ink:var(--green-ink,#18703F);
+  --lx-sky:var(--sky-solid,var(--sky,#0A6FA8));
+  --lx-on-solid:var(--on-solid,#FFFFFF);
+  --lx-sh-1:var(--sh-1,0 1px 2px rgba(16,16,32,.04),0 1px 1px rgba(16,16,32,.03));
+  --lx-spring-smooth:var(--spring-smooth,linear(0,.063,.198,.352,.498,.624,.727,.806,.866,.91,.941,.962,.977,.986,.992,.996,.998,1,1,1.001,1)); --lx-dur-smooth:var(--dur-smooth,500ms);
+  --lx-spring-bouncy:linear(0,.14,.422,.703,.914,1.038,1.089,1.092,1.07,1.042,1.018,1.002,.993,.991,.992,.995,.997,.999,1,1.001,1); --lx-dur-bouncy:600ms;
+  --lx-spring-snappy:linear(0,.068,.216,.385,.543,.677,.783,.861,.917,.955,.979,.993,1.001,1.005,1.006,1.006,1.005,1.004,1.003,1.002,1); --lx-dur-snappy:320ms;
+  --lx-ease-out:cubic-bezier(.2,.8,.2,1);
+}
+:root[data-theme="dark"]{
+  --lx-canvas:var(--canvas,var(--paper,#0E0E11)); --lx-surface:var(--surface,var(--card,#17171B)); --lx-surface-2:var(--surface-2,var(--fill,#1F1F24));
+  --lx-lime:var(--lime-solid,var(--lime,#BFE07A)); --lx-lime-ink:var(--lime-ink,#BFE07A); --lx-lime-tint:var(--lime-tint,#1F2A0C);
+  --lx-ok:var(--green-solid,var(--green,#7FDBA6)); --lx-ok-ink:var(--green-ink,#7FDBA6);
+  --lx-sky:var(--sky-solid,var(--sky,#86C9F2)); --lx-on-solid:var(--on-solid,#111114);
+}
+@supports not (transition-timing-function:linear(0,1)){
+  :root{--lx-spring-smooth:cubic-bezier(.22,1,.36,1);--lx-spring-bouncy:cubic-bezier(.34,1.4,.5,1);--lx-spring-snappy:cubic-bezier(.25,1.1,.4,1)}
+}
+
+/* ---------- the shared listening stage ---------- */
+.lx{isolation:isolate}                    /* .ownf stays position:fixed (.overlay); the tuner sets relative below */
+.lx-glow{position:absolute;pointer-events:none;z-index:-1}
+.lx-stage{position:relative;flex:none;width:min(72vw,300px,40dvh);aspect-ratio:1;margin:0 auto;transition:width var(--lx-dur-smooth) var(--lx-spring-smooth)}
+.lx-stage[hidden]{display:none}
+.lx-orb{position:absolute;left:-10%;top:-10%;width:120%;height:120%;display:block;pointer-events:none}
+@keyframes lx-breathe{from{opacity:.7}to{opacity:1}}
+@keyframes lx-in{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+@keyframes lx-pop{from{transform:scale(.4)}to{transform:scale(1)}}
+@keyframes lx-fade{from{opacity:0}to{opacity:1}}
+
+/* ---------- recording your instrument's sound: full screen, one function ---------- */
+.ownf.lx{background:var(--lx-canvas);color:var(--lx-text);overflow:hidden}
+.ownf.lx .lx-glow{inset:0;background:radial-gradient(60% 45% at 50% 46%,color-mix(in oklab,var(--lx-lime) 12%,transparent),transparent 70%);animation:lx-breathe 4s ease-in-out infinite alternate}
+.ownf.lx:not([hidden]) .ownf-panel{animation:lx-in var(--lx-dur-smooth) var(--lx-spring-smooth) both}
+.ownf.lx .ownf-panel{position:relative;max-width:560px}
+.lx-top{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:8px;min-height:44px}
+.lx-count{font:600 14px/1 var(--sans);color:var(--lx-text-3);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lx-dots{display:flex;gap:10px;justify-content:center;align-items:center}
+.lx-dots i{position:relative;width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 1.5px color-mix(in oklab,var(--lx-text-3) 55%,transparent);display:flex;align-items:center;justify-content:center;transition:transform var(--lx-dur-snappy) var(--lx-spring-snappy),background-color 180ms var(--lx-ease-out)}
+.lx-dots i.on{box-shadow:inset 0 0 0 2px var(--lx-brand);transform:scale(1.25)}
+.lx-dots i.on::after{content:"";width:4px;height:4px;border-radius:50%;background:var(--lx-brand)}
+.lx-dots i.done{width:18px;height:18px;margin:-3px;background:var(--lx-lime);box-shadow:none;color:var(--lx-on-solid)}
+.lx-dots i .i{width:12px;height:12px;stroke-width:3}
+.lx-dots i.pop{animation:lx-pop var(--lx-dur-bouncy) var(--lx-spring-bouncy) both}
+.ownf.lx .ownf-body{justify-content:center;gap:10px;overflow-y:auto;overscroll-behavior:contain;padding:8px 0;min-height:0}
+.lx-head{display:flex;flex-direction:column;align-items:center;gap:2px}
+.lx-kicker{margin:0;font:600 15px/1.3 var(--sans);color:var(--lx-text-2)}
+.lx-title{margin:0;font:700 34px/1.1 var(--display,var(--sans));letter-spacing:-.02em}
+.lx-target{margin:0;line-height:1}
+.lx-target b{font:700 clamp(64px,22vw,96px)/1 var(--display,var(--sans));letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.lx-sub{margin:4px 0 0;font:500 15px/1.3 var(--sans);color:var(--lx-text-3);min-height:1.3em}
+.lx-foot{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+.lx-lead{margin:0;font-size:15px;color:var(--lx-text-2)}
+.lx-note{margin:0;font-size:14px;color:var(--lx-text-3)}
+.ownf.lx .lx-stage.small{width:min(36vw,140px)}
+.lx-stage::before{content:"";position:absolute;inset:4.2%;border-radius:50%;box-shadow:inset 0 0 0 3px color-mix(in oklab,var(--lx-text-3) 14%,transparent);pointer-events:none}
+#ownf[data-st="intro"] .lx-stage::before,#tuner2 .lx-stage::before{display:none}
+.lx-prog{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);pointer-events:none}
+.lx-prog-fill{fill:none;stroke:var(--lx-lime);stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset 120ms linear}
+.lx-stage .of-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.lx-stage .of-note .i{width:72px;height:72px;color:#fff;stroke-width:2.6;filter:drop-shadow(0 2px 8px rgba(0,0,0,.25));animation:lx-pop var(--lx-dur-bouncy) var(--lx-spring-bouncy) both}
+.ownf.lx .of-hint{margin:0;font:600 20px/1.3 var(--sans);min-height:26px;text-align:center}
+.ownf.lx .lx-stage[data-st="ok"] + .lx-foot .of-hint{color:var(--lx-ok-ink)}
+.ownf.lx .of-instr{justify-content:center;max-width:480px}
+.of-picker{width:100%;max-height:38dvh;overflow:auto;text-align:left;border-radius:16px;background:var(--lx-surface);padding:8px 12px}
+.of-picker[hidden]{display:none}
+.ownf.lx .ownf-acts{width:100%;max-width:420px;margin:0 auto}
+.of-row.one{grid-template-columns:1fr}
+.ownf.lx .of-tiles{max-width:420px}
+.ownf.lx .of-tile{background:var(--lx-surface-2);border-radius:16px;transition:transform var(--lx-dur-snappy) var(--lx-spring-snappy)}
+.ownf.lx .of-tile:active{transform:scale(.96)}
+.ownf.lx .of-tile.ok{background:var(--lx-lime-tint);color:var(--lx-lime-ink)}
+
+/* ---------- Ja → BRZMIENIA: tiles, the dashed "+" ---------- */
+.lx-over{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:600;color:var(--lx-text-3)}
+.snd-row{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -16px;padding:2px 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.snd-row::-webkit-scrollbar{display:none}
+.snd-tile{--h:var(--lx-text-3);--h-ink:var(--lx-text-2);--h-tint:var(--lx-surface-2);flex:none;width:112px;min-height:120px;padding:12px 10px 10px;border-radius:16px;background:var(--lx-surface);box-shadow:var(--lx-sh-1);display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;color:var(--lx-text);scroll-snap-align:start;cursor:pointer;border:0;font:inherit;transition:transform var(--lx-dur-snappy) var(--lx-spring-snappy)}
+.snd-tile:active{transform:scale(.96);transition-duration:90ms}
+.snd-sq{position:relative;width:40px;height:40px;border-radius:12px;background:color-mix(in oklab,var(--h) 14%,transparent);color:var(--h-ink);display:flex;align-items:center;justify-content:center;margin-bottom:6px;flex:none}
+.snd-sq b{font:700 18px/1 var(--display,var(--sans))}
+.snd-wave{position:absolute;right:-5px;bottom:-5px;width:18px;height:18px;padding:3px;border-radius:50%;background:var(--lx-lime);color:var(--lx-on-solid);stroke:currentColor;stroke-width:1.8;stroke-linecap:round;fill:none;box-shadow:0 0 0 2px var(--lx-surface)}
+.snd-name{font:600 14px/1.25 var(--sans);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.snd-st{font-size:12px;line-height:1.3;color:var(--lx-lime-ink);white-space:nowrap}
+.snd-tile.add{background:transparent;box-shadow:none;outline:1.5px dashed color-mix(in oklab,var(--lx-text-3) 50%,transparent);outline-offset:-1.5px;justify-content:center;align-items:center;text-align:center}
+.snd-tile.add .snd-sq{background:var(--lx-surface-2);color:var(--lx-text-2);border-radius:50%;margin-bottom:4px}
+.snd-tile.add .snd-name{color:var(--lx-text-2);font-weight:500}
+.snd-sub{margin:2px 4px 0;font-size:14px;color:var(--lx-text-3)}
+.snd-sub[hidden]{display:none}
+.snd-sheet-st{margin:0 4px 12px;font-size:14px;color:var(--lx-text-2)}
+.snd-tile[data-h="amber"]{--h:var(--amber-solid,var(--amber,#9E5F00));--h-ink:var(--amber-ink,#8A5300);--h-tint:var(--amber-tint,#FFF1D6)}
+.snd-tile[data-h="green"]{--h:var(--green-solid,var(--green,#187D46));--h-ink:var(--green-ink,#18703F);--h-tint:var(--green-tint,#E2F5EA)}
+.snd-tile[data-h="coral"]{--h:var(--coral-solid,var(--coral,#C7400C));--h-ink:var(--coral-ink,#A8370F);--h-tint:var(--coral-tint,#FFEBE3)}
+.snd-tile[data-h="blue"]{--h:var(--blue-solid,var(--blue,#3358E0));--h-ink:var(--blue-ink,#2546B8);--h-tint:var(--blue-tint,#E6EDFF)}
+.snd-tile[data-h="violet"]{--h:var(--violet-solid,var(--violet,#7044E0));--h-ink:var(--violet-ink,#5B32B4);--h-tint:var(--violet-tint,#EFE9FF)}
+.snd-tile[data-h="pink"]{--h:var(--pink-solid,var(--pink,#BC2496));--h-ink:var(--pink-ink,#9C1F7E);--h-tint:var(--pink-tint,#FBE7F6)}
+.snd-tile[data-h="teal"]{--h:var(--teal-solid,var(--teal,#0B7A79));--h-ink:var(--teal-ink,#0B6B6B);--h-tint:var(--teal-tint,#DDF4F3)}
+.snd-tile[data-h="lime"]{--h:var(--lime-solid,var(--lime,#527A00));--h-ink:var(--lime-ink,#4A6B00);--h-tint:var(--lime-tint,#ECF6D9)}
+.snd-tile[data-h="sky"]{--h:var(--sky-solid,var(--sky,#0A6FA8));--h-ink:var(--sky-ink,#0B5E8E);--h-tint:var(--sky-tint,#E0F1FC)}
+.snd-tile[data-h="slate"]{--h:var(--slate-solid,var(--slate,#59627A));--h-ink:var(--slate-ink,#3F4757);--h-tint:var(--slate-tint,#ECEEF2)}
+:root[data-theme="dark"] .snd-tile[data-h="amber"]{--h:var(--amber-solid,var(--amber,#FFCB6B));--h-ink:var(--amber-ink,#FFCB6B);--h-tint:var(--amber-tint,#33240A)}
+:root[data-theme="dark"] .snd-tile[data-h="green"]{--h:var(--green-solid,var(--green,#7FDBA6));--h-ink:var(--green-ink,#7FDBA6);--h-tint:var(--green-tint,#0E2A1B)}
+:root[data-theme="dark"] .snd-tile[data-h="coral"]{--h:var(--coral-solid,var(--coral,#FFAE8F));--h-ink:var(--coral-ink,#FFAE8F);--h-tint:var(--coral-tint,#3B1709)}
+:root[data-theme="dark"] .snd-tile[data-h="blue"]{--h:var(--blue-solid,var(--blue,#A5B8FF));--h-ink:var(--blue-ink,#A5B8FF);--h-tint:var(--blue-tint,#141C3D)}
+:root[data-theme="dark"] .snd-tile[data-h="violet"]{--h:var(--violet-solid,var(--violet,#C3AEFF));--h-ink:var(--violet-ink,#C3AEFF);--h-tint:var(--violet-tint,#211743)}
+:root[data-theme="dark"] .snd-tile[data-h="pink"]{--h:var(--pink-solid,var(--pink,#F5A6E0));--h-ink:var(--pink-ink,#F5A6E0);--h-tint:var(--pink-tint,#36112E)}
+:root[data-theme="dark"] .snd-tile[data-h="teal"]{--h:var(--teal-solid,var(--teal,#6FD6D2));--h-ink:var(--teal-ink,#6FD6D2);--h-tint:var(--teal-tint,#0A2828)}
+:root[data-theme="dark"] .snd-tile[data-h="lime"]{--h:var(--lime-solid,var(--lime,#BFE07A));--h-ink:var(--lime-ink,#BFE07A);--h-tint:var(--lime-tint,#1F2A0C)}
+:root[data-theme="dark"] .snd-tile[data-h="sky"]{--h:var(--sky-solid,var(--sky,#86C9F2));--h-ink:var(--sky-ink,#86C9F2);--h-tint:var(--sky-tint,#0B2433)}
+:root[data-theme="dark"] .snd-tile[data-h="slate"]{--h:var(--slate-solid,var(--slate,#C3C9D4));--h-ink:var(--slate-ink,#C3C9D4);--h-tint:var(--slate-tint,#20232A)}
+
+/* ---------- reduced motion: fades only, no breathing, no pops ---------- */
+@media (prefers-reduced-motion:reduce){
+  .ownf.lx .lx-glow,.tuner2.lx > .lx-glow{animation:none}
+  .ownf.lx:not([hidden]) .ownf-panel{animation:lx-fade 150ms var(--lx-ease-out) both}
+  .lx-dots i,.lx-dots i.pop,.lx-stage .of-note .i,.snd-tile,.lx-set > summary .chev,.lx-stage,.ownf.lx .of-tile{animation:none;transition:opacity 150ms var(--lx-ease-out)}
+  .lx-dots i.on{transform:none}
+  .snd-tile:active,.ownf.lx .of-tile:active{transform:none;opacity:.7}
+}
