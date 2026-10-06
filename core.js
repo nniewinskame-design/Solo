@@ -1080,10 +1080,6 @@ function readyTuneXml(id) {
   return s + `</part></score-partwise>`;
 }
 
-/* a live mini-scene instead of a photo: a staff where the notes land one by one and the playhead follows */
-const STAGE_SVG = `<svg class="stage" viewBox="0 0 320 120" aria-hidden="true"><g class="st-lines"><path d="M10 34H310M10 46H310M10 58H310M10 70H310M10 82H310"/></g>
-  <g class="st-notes"><g style="--d:0s"><ellipse cx="70" cy="76" rx="8" ry="6" style="fill:var(--amber)"/><path d="M77 74V36" style="stroke:var(--amber)"/></g>
-  <g style="--d:.35s"><ellipse cx="130" cy="64" rx="8" ry="6" style="fill:var(--coral)"/><path d="M137 62V24" style="stroke:var(--coral)"/></g>
-  <g style="--d:.7s"><ellipse cx="190" cy="52" rx="8" ry="6" style="fill:var(--green)"/><path d="M183 54V92" style="stroke:var(--green)"/></g>
-  <g style="--d:1.05s"><ellipse cx="250" cy="40" rx="8" ry="6" style="fill:var(--blue)"/><path d="M243 42V80" style="stroke:var(--blue)"/></g></g>
-  <rect class="st-head" x="40" y="22" width="3" height="72" rx="1.5"/></svg>`;
+/* the Solo "aura": a clean wash of neighbouring colours (blue, violet, a touch of pink), never mixed into grey; used on
+   the start screen, the first-run welcome and above the library instead of pictures */
+const STAGE_SVG = `<div class="aura" aria-hidden="true"></div>`;

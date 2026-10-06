@@ -90,7 +90,7 @@ def apply_overlay(dest, build):
     # theme.js and app.js reset theme-color when the look changes: keep it yellow
     for js in ("theme.js", "app.js"):
         p = dest / js
-        p.write_text(sub_once(r't === "dark" \? "#0E0E11" : "#F7F7F9"', f'"{YELLOW}"', p.read_text(), f"theme colour in {js}"))
+        p.write_text(sub_once(r't === "dark" \? "#0B0E1A" : "#F5F7FD"', f'"{YELLOW}"', p.read_text(), f"theme colour in {js}"))
     mp = dest / "manifest.webmanifest"
     m = json.loads(mp.read_text())
     m.update(name="Solo TEST", short_name="Solo TEST", theme_color=YELLOW)

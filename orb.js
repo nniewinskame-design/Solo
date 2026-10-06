@@ -18,12 +18,12 @@
 
 /* spec hexes (§1.2–1.3): light solid, dark solid; the CSS variables win when the stylesheet defines them */
 const ORB_HUES = {
-  amber: ["#9E5F00", "#FFCB6B"], green: ["#187D46", "#7FDBA6"], coral: ["#C7400C", "#FFAE8F"], blue: ["#3358E0", "#A5B8FF"],
-  violet: ["#7044E0", "#C3AEFF"], pink: ["#BC2496", "#F5A6E0"], teal: ["#0B7A79", "#6FD6D2"], lime: ["#527A00", "#BFE07A"],
-  sky: ["#0A6FA8", "#86C9F2"], slate: ["#59627A", "#C3C9D4"], brand: ["#D11A4A", "#FF9DB5"]
+  amber: ["#FFB21E", "#FFC75A"], green: ["#1CCB82", "#5BE3A6"], coral: ["#FF7B5C", "#FF9E86"], blue: ["#2E8DFF", "#8DB8FF"],
+  violet: ["#A070FF", "#C6A8FF"], pink: ["#FF70C8", "#FF9AD8"], teal: ["#1BD3C6", "#5DE6DB"], lime: ["#B9E62E", "#C9EE5E"],
+  sky: ["#4CCBFF", "#7FD6FF"], slate: ["#8E98B5", "#C3C9DC"], brand: ["#3D5BFF", "#7C8CFF"]
 };
 /* the second, neighbouring colour of each orb (brass glows amber and coral) */
-const ORB_PAIR = { amber: "coral", green: "teal", coral: "pink", blue: "violet", violet: "blue", pink: "violet", teal: "sky", lime: "green", sky: "blue", slate: "sky", brand: "pink" };
+const ORB_PAIR = { amber: "coral", green: "teal", coral: "pink", blue: "violet", violet: "blue", pink: "violet", teal: "sky", lime: "green", sky: "blue", slate: "sky", brand: "violet" };
 /* an instrument family (INSTR group) as its hue: one colour = one meaning, app-wide */
 const FAMILY_HUE = { "Dęte blaszane": "amber", "Dęte drewniane": "green", "Smyczkowe": "coral", "Klawiszowe": "blue", "Szarpane": "violet", "Perkusyjne": "teal", "Głos": "pink" };
 const orbHueOfGroup = g => FAMILY_HUE[g] || "slate";

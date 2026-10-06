@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="light">
 <title>Solo</title>
 <meta name="description" content="Nuty ze zdjęcia: sama partia solowa, w Twoim kluczu i tonacji.">
-<meta name="theme-color" content="#F7F7F9">
+<meta name="theme-color" content="#F5F7FD">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Solo">
@@ -23,6 +23,7 @@
 <script src="theme.js"></script>
 </head>
 <body>
+<div id="splash" aria-hidden="true"><div class="aura"></div><div class="sp-tile"><svg class="mark"><use href="#note"/></svg></div><div class="sp-word">Solo</div></div>
 
 <svg width="0" height="0" class="sprite" aria-hidden="true">
   <symbol id="note" viewBox="28 22 46 57"><ellipse cx="43" cy="66" rx="12" ry="8.6" transform="rotate(-22 43 66)" fill="currentColor"/><rect x="51.4" y="27" width="5" height="40" rx="2.5" fill="currentColor"/><path d="M54 29.5c1.2 6.5 5.6 9.6 10.6 12.6 4.8 2.9 6.6 8.6 3.9 14.4" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></symbol>
@@ -105,13 +106,12 @@
 <!-- =============== HOME / LIBRARY =============== -->
 <main id="home" class="view">
   <div class="wrap">
-    <!-- the masthead: a stave with one note per slide position (the seven Solo colours), not a stock photo -->
+    <!-- the masthead: the Solo aura (soft moving colour light) behind the greeting -->
     <header class="mast" id="hero">
+      <div class="aura" aria-hidden="true"></div>
       <div class="brand"><svg class="mark"><use href="#note"/></svg><span>Solo</span></div>
       <h1 class="h-xl">Co dziś gramy?</h1>
-      <svg class="mast-stave" viewBox="0 0 320 56" preserveAspectRatio="none" aria-hidden="true"><g class="lines"><path d="M0 8H320M0 18H320M0 28H320M0 38H320M0 48H320"/></g>
-        <g class="heads"><ellipse cx="40" cy="43" rx="6.4" ry="4.6" style="fill:var(--pos-1)"/><ellipse cx="80" cy="38" rx="6.4" ry="4.6" style="fill:var(--pos-2)"/><ellipse cx="120" cy="33" rx="6.4" ry="4.6" style="fill:var(--pos-3)"/><ellipse cx="160" cy="28" rx="6.4" ry="4.6" style="fill:var(--pos-4)"/><ellipse cx="200" cy="23" rx="6.4" ry="4.6" style="fill:var(--pos-5)"/><ellipse cx="240" cy="18" rx="6.4" ry="4.6" style="fill:var(--pos-6)"/><ellipse cx="280" cy="13" rx="6.4" ry="4.6" style="fill:var(--pos-7)"/></g></svg>
-    </header>
+          </header>
 
     <section class="lib" id="lib">
       <div class="libhead">
@@ -259,16 +259,6 @@
     <div class="snd-row" id="own-list" role="group" aria-labelledby="snd-t"></div>
     <p class="snd-sub" id="own-st"></p>
 
-    <h3 class="lbl">Wygląd</h3>
-    <div class="group">
-      <div class="li col">
-        <div class="seg three" id="themeseg">
-          <button data-theme="light">Jasny</button>
-          <button data-theme="dark">Ciemny</button>
-          <button data-theme="auto">Auto</button>
-        </div>
-      </div>
-    </div>
 
     <h3 class="lbl">Biblioteka</h3>
     <div class="group">

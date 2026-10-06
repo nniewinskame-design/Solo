@@ -1287,25 +1287,25 @@ function buildBarSheet() {
   $("#bar-del").disabled = kids(part, "measure").length < 2;
   $("#bar-bpm").textContent = String(curBpm());
 }
-/* any metre (Nat, 7 Oct: "czasem metrum może być bardzo dziwne"): the usual ones one tap away, "Inne" for any top
-   number, an additive one (3+2+2) included, over 1, 2, 4, 8, 16 or 32 */
-const METERS = ["4/4", "3/4", "2/4", "2/2", "6/8", "3/8", "5/4", "6/4", "5/8", "7/8", "9/8", "12/8"], METER_BT = [1, 2, 4, 8, 16, 32];
+/* any metre (Nat, 7 Oct): four common ones one tap away, and a small field shaped like a chip to type any other:
+   the top number 1-32 (an additive 3+2+2 too: the phone keypad has "+"), the bottom one 1, 2, 4, 8, 16 or 32 */
+const METERS = ["4/4", "3/4", "2/4", "6/8"], METER_BT = [1, 2, 4, 8, 16, 32];
 function meterPicker(box, cur, pick) {
-  const [top0, bt0] = String(cur || "4/4").split("/"), other = !METERS.includes(cur);
-  box.innerHTML = `<div class="chips mt-chips">${METERS.map(v => `<button type="button" data-v="${v}" aria-pressed="${v === cur}">${v}</button>`).join("")}<button type="button" class="mt-other" aria-pressed="${other}" aria-expanded="${other}">Inne</button></div>
-    <div class="mt-own" ${other ? "" : "hidden"}><input class="mt-top" inputmode="text" autocomplete="off" aria-label="Górna liczba (np. 7 albo 3+2+2)" value="${esc(top0)}"><span class="mt-line" aria-hidden="true"></span>
-    <div class="mt-bt" role="group" aria-label="Dolna liczba">${METER_BT.map(n => `<button type="button" data-b="${n}" aria-pressed="${String(n) === bt0}">${n}</button>`).join("")}</div></div>`;
-  const own = $(".mt-own", box), top = $(".mt-top", box);
-  const sel = v => $$(".mt-chips [data-v]", box).forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
-  const ownVal = () => { const t = top.value.replace(/\s/g, ""), b = $(".mt-bt [aria-pressed=true]", box)?.dataset.b || "4"; return /^\d{1,2}(\+\d{1,2})*$/.test(t) && beatsOf(t) >= 1 && beatsOf(t) <= 32 ? `${t}/${b}` : null; };
-  const send = () => { const v = ownVal(); top.classList.toggle("bad", !v); if (v) { sel(v); pick(v); } };
-  box.onclick = e => {
-    const c = e.target.closest("[data-v]"), b = e.target.closest("[data-b]"), o = e.target.closest(".mt-other");
-    if (c) { own.hidden = true; $(".mt-other", box).setAttribute("aria-pressed", "false"); $(".mt-other", box).setAttribute("aria-expanded", "false"); sel(c.dataset.v); pick(c.dataset.v); }
-    else if (o) { own.hidden = false; sel(null); o.setAttribute("aria-pressed", "true"); o.setAttribute("aria-expanded", "true"); top.focus(); top.select(); }
-    else if (b) { $$(".mt-bt button", box).forEach(x => x.setAttribute("aria-pressed", String(x === b))); send(); }
+  const [t0, b0] = String(cur || "4/4").split("/"), common = METERS.includes(cur);
+  box.innerHTML = `<div class="chips mt-chips">${METERS.map(v => `<button type="button" data-v="${v}" aria-pressed="${v === cur}">${v}</button>`).join("")}
+    <label class="mt-own${common ? "" : " on"}"><input class="mt-top" inputmode="tel" autocomplete="off" maxlength="8" placeholder="7" aria-label="Metrum: górna liczba" value="${common ? "" : esc(t0)}"><i>/</i><input class="mt-bt" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="8" aria-label="Metrum: dolna liczba" value="${common ? "" : esc(b0)}"></label></div>
+    <p class="note mt-hint" hidden>Dolna liczba: 2, 4, 8 lub 16.</p>`;
+  const own = $(".mt-own", box), top = $(".mt-top", box), bot = $(".mt-bt", box), hint = $(".mt-hint", box);
+  const okTop = t => /^\d{1,2}(\+\d{1,2})*$/.test(t) && beatsOf(t) >= 1 && beatsOf(t) <= 32, okBot = b => METER_BT.includes(+b) && /^\d+$/.test(b);
+  const mark = v => { $$(".mt-chips [data-v]", box).forEach(c => c.setAttribute("aria-pressed", String(c.dataset.v === v))); own.classList.toggle("on", !!v && !METERS.includes(v)); };
+  box.onclick = e => { const c = e.target.closest("[data-v]"); if (!c) return; top.value = bot.value = ""; hint.hidden = true; own.classList.remove("bad"); mark(c.dataset.v); pick(c.dataset.v); };
+  const check = final => {
+    const t = top.value.replace(/\s/g, ""), b = bot.value.trim();
+    const bad = (t && !okTop(t)) || (b && !okBot(b)); own.classList.toggle("bad", !!bad); hint.hidden = !(b && !okBot(b));
+    if (final && t && b && !bad) { const v = `${t}/${b}`; mark(v); pick(v); }
   };
-  top.onchange = send; top.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); top.blur(); } };
+  [top, bot].forEach(x => { x.oninput = () => check(false); x.onchange = () => check(true); x.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); x === top ? bot.focus() : bot.blur(); } }; });
+  top.addEventListener("input", () => { if (/^\d{2}$/.test(top.value) && +top.value > 3 && !top.value.includes("+")) bot.focus(); });
 }
 function barOp(op, val) {
   const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml), parts = [...doc.getElementsByTagName("part")];
@@ -3426,8 +3426,6 @@ function syncSettings() {
   syncInstall();
   const items = NEWS[VERSION] || [];
   $("#news").innerHTML = `<p class="txt"><b>Wersja ${esc(VERSION)}</b></p><ul class="news">${items.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
-  const th = ["dark", "auto"].includes(store.get("theme")) ? store.get("theme") : "light";
-  $$("#themeseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.theme === th)));
   $("#ver").textContent = BUILD ? `${VERSION} · test ${BUILD}` : VERSION;
   DB.all().then(all => {
     $("#store-count").textContent = all.length ? `${all.length} ${plural(all.length, "utwór", "utwory", "utworów")} w bibliotece` : "Biblioteka jest pusta";
@@ -3438,24 +3436,16 @@ function syncSettings() {
     $("#store-size").textContent = `Zajęte: ${(e.usage / 1048576).toFixed(1).replace(".", ",")} MB${store.get("modelReady") ? ", w tym ok. 150 MB to program do czytania nut" : ""}${kept ? ". Chronione przed usunięciem" : ""}`;
   }).catch(e => console.warn(e));
 }
-$$("#themeseg button").forEach(b => b.addEventListener("click", () => {
-  store.set("theme", b.dataset.theme);
-  const root = document.documentElement; root.classList.add("theming"); setTimeout(() => root.classList.remove("theming"), 400);
-  applyTheme(); syncSettings();
-}));
-/* "Auto" follows the system (and changes with it, e.g. at night) */
-const darkMq = matchMedia("(prefers-color-scheme: dark)");
+/* Solo is light only (Nat, 7 Oct); "t" stays for the test build's theme-colour overlay (tools/deploy.py) */
 function applyTheme() {
-  const v = store.get("theme"), t = v === "dark" || (v === "auto" && darkMq.matches) ? "dark" : "light";
+  const t = "light";
   document.documentElement.setAttribute("data-theme", t);
-  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#0E0E11" : "#F7F7F9");
-  const cs = document.querySelector('meta[name="color-scheme"]'); if (cs) cs.setAttribute("content", t);
+  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "dark" ? "#0B0E1A" : "#F5F7FD");
 }
-darkMq.addEventListener?.("change", () => { if (store.get("theme") === "auto") applyTheme(); });
 /* The backup: one JSON file (older versions of Solo read it too) with the pieces and their photos, collections,
    favourites, the profile and settings, and "Twój dźwięk". It is put together piece by piece as a Blob, so the
    library is never one giant string in memory. */
-const BACKUP_PREFS = ["profile", "recentInstr", "theme", "sort", "libCol", "click", "metroBeats", "metroBpm", "ownUse", "tunerA4", "tunerTol", "tunerTr", "zoom2", "homrPrefer", "tourDone", "welcomed"];
+const BACKUP_PREFS = ["profile", "recentInstr", "sort", "libCol", "click", "metroBeats", "metroBpm", "ownUse", "tunerA4", "tunerTol", "tunerTr", "zoom2", "homrPrefer", "tourDone", "welcomed"];
 async function saveBackup() {
   let chunks, cur, size, n;
   const reset = () => { chunks = []; cur = []; size = 0; n = 0; }, flush = () => { if (cur.length) { chunks.push(new Blob(cur)); cur = []; size = 0; } };
@@ -3561,13 +3551,13 @@ $("#in-backup").addEventListener("change", async e => {
   syncSettings(); if (prefs && typeof renderProfile === "function") renderProfile();
 });
 
-const NEWS = { "4.0": ["Nowy, jasny wygląd. Każda rodzina instrumentów ma swój kolor.",
+const NEWS = { "4.0": ["Nowy, świeży wygląd: czyste kolory i gradienty, ekran startowy, mniejsze napisy. Każda rodzina instrumentów ma swój kolor.",
   "Edytuj i Gotowe zamiast ołówka i ptaszka. Cofnij i ponów na górze.",
   "Twoje brzmienia są w zakładce Ja: plus dodaje nowe. Nagrywanie i stroik z kulą, która słucha.",
   "Odsłuch nuty przy edycji gra jak w zapisie: tonacja, długość, dynamika, instrument.",
   "Mikrofon włącza się dopiero, gdy go potrzebujesz, i gaśnie po wyjściu ze stroika.",
   "Duplikuj utwór. Partia: zmień instrument, oktawa, rola jednym dotknięciem.",
-  "Na telefonie nuty są duże i czytelne; strona A4 zostaje do wyboru i do druku.",
+  "Nuty jako strona A4, cztery takty w linii. Dowolne metrum, np. 5/4, 7/8 albo 3+2+2/8.",
   "Metronom ze stukaniem tempa i akcentami. Stroik z wielką nutą.",
   "Tonacje molowe z właściwymi akordami. Przedtakt wyrównany we wszystkich partiach.",
   "Partie dla instrumentów transponujących brzmią poprawnie, także po eksporcie.",
@@ -3698,8 +3688,9 @@ function syncTuner() {
   $$("#t-tol button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tol === tuner.tol)));
   $("#t-a").textContent = String(tuner.a4);
   const z = tuner.tol, pc = v => 50 + v;            // the meter spans −50…+50 cents
-  $("#t-zones").style.background = `linear-gradient(90deg, var(--tn-far) 0%, var(--tn-far) ${pc(-15)}%, var(--tn-near) ${pc(-15)}%, var(--tn-near) ${pc(-z)}%, var(--tn-ok) ${pc(-z)}%, var(--tn-ok) ${pc(z)}%, var(--tn-near) ${pc(z)}%, var(--tn-near) ${pc(15)}%, var(--tn-far) ${pc(15)}%)`;
-  $("#t-zones").style.opacity = ".28";
+  /* one smooth gradient (no hard bands): coral far off, amber near, green inside the tolerance */
+  $("#t-zones").style.background = `linear-gradient(90deg, var(--tn-far) 0%, var(--tn-near) ${pc(-15)}%, var(--tn-ok) ${pc(-z)}%, var(--tn-ok) ${pc(z)}%, var(--tn-near) ${pc(15)}%, var(--tn-far) 100%)`;
+  $("#t-zones").style.opacity = ".55";
   $("#t-go").innerHTML = `${icon(tuner.on ? "stop" : "mic")}<span>${tuner.on ? "Wyłącz stroik" : "Włącz stroik"}</span>`;
   const letterPc = ((tuner.tr % 12) + 12) % 12, sum = $("#t-set-sum");
   if (sum) sum.textContent = `Strój ${({ 0: "C", 2: "B", 9: "Es", 7: "F" })[letterPc] || "C"} · ±${tuner.tol} ¢ · A ${tuner.a4} Hz`;
@@ -3898,7 +3889,7 @@ function writtenName(midi, tr = tuner.tr) {
 /* the listening orb behind the note (orb.js): sky, leaning flat/sharp, green with a ring once in tune
    (enter at the chosen accuracy, leave 3 cents wider, "locked" after 300 ms, so it does not flicker) */
 function tnOrb() {
-  if (!tn.orb && typeof createOrb === "function" && $("#t-orb")) tn.orb = createOrb($("#t-orb"), { hue: "sky", drift: "x", hollow: true });
+  if (!tn.orb && typeof createOrb === "function" && $("#t-orb")) tn.orb = createOrb($("#t-orb"), { hue: "brand", drift: "x", hollow: true });
   return tn.orb;
 }
 function tnOrbFrame(t, held, live, c) {
@@ -4513,3 +4504,10 @@ function markRange() {
     });
   } catch (e) { console.warn(e); }
 }
+
+/* the start screen: stays at least 0.9 s from launch (long enough to read, short enough not to wait), then lifts away */
+(() => {
+  const sp = $("#splash"); if (!sp) return;
+  const t0 = performance.timeOrigin ? Date.now() - performance.timeOrigin : performance.now();
+  setTimeout(() => { sp.classList.add("out"); setTimeout(() => sp.remove(), 600); }, Math.max(0, 900 - t0));
+})();
