@@ -38,6 +38,8 @@
   <symbol id="clef-f" viewBox="-30 -335 760 1000"><path transform="scale(1,-1)" d="M582 -120c0 32 26 58 58 58s58 -26 58 -58s-26 -58 -58 -58s-58 26 -58 58zM582 120c0 32 26 58 58 58s58 -26 58 -58s-26 -58 -58 -58s-58 26 -58 58zM158 96c51 0 73 -14 88 -49l16 -39c0 -17 -2 -30 -7 -40c-3 -11 -10 -21 -19 -31c-17 -18 -49 -43 -84 -43 c-55 0 -77 13 -112 44c-24 21 -35 55 -35 100c0 46 14 81 32 112c30 52 71 79 137 93l36 6l26 2c154 0 235 -68 274 -182c11 -32 18 -68 18 -107c0 -103 -26 -182 -68 -250c-89 -145 -234 -230 -412 -288l-30 -5c-9 0 -14 3 -14 8c3 10 5 11 10 16c35 15 70 30 96 44l78 43 c96 57 162 136 197 258c9 33 17 60 22 100c3 22 5 35 6 39c-7 69 -16 115 -23 140s-4 22 -16 40c-8 12 -19 23 -31 34c-24 21 -62 44 -118 44c-48 0 -84 -8 -113 -28c-28 -19 -42 -44 -42 -73v-16c2 -5 3 -9 4 -11c24 22 52 39 84 39z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="clef-c" viewBox="-30 -550 670 1100"><path transform="scale(1,-1)" d="M175 502h43v-456c10 5 18 12 37 29c16 19 22 27 27 38s8 24 14 49c3 22 5 43 5 62c7 -34 31 -54 73 -60c73 18 99 61 100 165c0 46 -10 78 -31 100c-18 23 -41 35 -69 35c-40 0 -65 -32 -66 -84c6 12 11 16 39 24c5 0 2 1 16 -4l17 -10l10 -14l7 -18 c-4 -32 -23 -48 -56 -48c-51 0 -77 33 -77 98c10 35 16 47 30 61c9 9 15 14 23 17c3 3 22 9 27 11l34 3l35 2c123 0 192 -64 192 -178l1 -33c0 -52 -20 -97 -60 -134c-18 -15 -42 -28 -74 -39c-30 -9 -63 -13 -101 -13l-93 -88v-34l93 -88c38 0 71 -4 101 -13 c32 -11 56 -24 74 -39c40 -37 60 -82 60 -134l-3 -33c0 -115 -68 -178 -190 -178l-35 2l-34 3c-5 2 -24 8 -27 11c-26 11 -40 32 -53 78c0 65 26 98 77 98c33 0 52 -16 56 -48l-7 -18l-10 -14l-17 -10c-14 -5 -11 -4 -16 -4c-28 8 -33 12 -39 24c1 -52 26 -84 66 -84 c28 0 51 12 69 35c21 22 31 54 31 100c-1 104 -27 147 -100 165c-42 -6 -66 -26 -73 -60c0 19 -2 40 -5 62c-6 25 -9 38 -14 49s-11 19 -27 38c-19 17 -27 24 -37 29v-456h-43v1004zM0 502h118v-1004h-118v1004z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="barline" viewBox="0 0 24 24"><path d="M12 3v18M4 7h5M4 12h5M4 17h5M15 7h5M15 12h5M15 17h5"/></symbol>
+  <symbol id="barline-x" viewBox="0 0 24 24"><path d="M12 3v18" stroke-dasharray="2 3"/><path d="M4 9l6 6M10 9l-6 6M14 9l6 6M20 9l-6 6"/></symbol>
   <symbol id="beam" viewBox="0 0 24 24"><ellipse cx="6.5" cy="18" rx="3" ry="2.2" transform="rotate(-20 6.5 18)" fill="currentColor" stroke="none"/><ellipse cx="17" cy="16" rx="3" ry="2.2" transform="rotate(-20 17 16)" fill="currentColor" stroke="none"/><path d="M9 17.5V6.5M19.5 15.5V4.5"/><path d="M9 6.5l10.5-2v3l-10.5 2z" fill="currentColor"/></symbol>
   <symbol id="dur" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M10 2.5h4M18.5 6.5l1.2-1.2"/></symbol>
   <symbol id="star" viewBox="0 0 24 24"><path d="M12 3.5l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z"/></symbol>
@@ -205,6 +207,8 @@
   <div class="list">
     <button class="li tap" id="bar-add"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt za</b></span></button>
     <button class="li tap" id="bar-addbefore"><span class="ic"><svg class="i"><use href="#plus"/></svg></span><span class="grow"><b>Takt przed</b></span></button>
+    <button class="li tap" id="bar-join"><span class="ic"><svg class="i"><use href="#bar"/></svg></span><span class="grow"><b>Połącz z następnym taktem</b><small>Gdy kreska taktowa jest w złym miejscu</small></span></button>
+    <button class="li tap" id="bar-split"><span class="ic"><svg class="i"><use href="#bar"/></svg></span><span class="grow"><b>Nowy takt od zaznaczonej nuty</b><small>Najpierw dotknij nuty w nutach</small></span></button>
     <button class="li tap danger" id="bar-del"><span class="ic"><svg class="i"><use href="#trash"/></svg></span><span class="grow"><b>Usuń ten takt</b></span></button>
   </div>
   <h3 class="lbl">Tempo odsłuchu</h3>
@@ -212,11 +216,16 @@
     <div class="li stepper"><button class="pill round" id="bar-bpm-down" aria-label="Wolniej"><svg class="i"><use href="#minus"/></svg></button><span class="grow step-val"><svg class="q"><use href="#quarter"/></svg> = <b id="bar-bpm">120</b></span><button class="pill round" id="bar-bpm-up" aria-label="Szybciej"><svg class="i"><use href="#plus"/></svg></button></div>
   </div>
     </div>
-    <div class="ed-pane" data-pane="pitch" hidden>
+    <div class="ed-pane wrap2" data-pane="pitch" hidden>
       <button data-ed="up" aria-label="W górę"><svg class="i"><use href="#up"/></svg></button>
       <button data-ed="down" aria-label="W dół"><svg class="i"><use href="#down"/></svg></button>
       <button data-ed="octup" aria-label="Oktawę wyżej"><svg class="i"><use href="#octave"/></svg></button>
       <button data-ed="octdown" aria-label="Oktawę niżej"><svg class="i"><use href="#octave-down"/></svg></button>
+      <button data-ed="left" aria-label="Przesuń w lewo"><svg class="i"><use href="#left"/></svg></button>
+      <button data-ed="right" aria-label="Przesuń w prawo"><svg class="i"><use href="#right"/></svg></button>
+      <button data-ed="flat" aria-label="Bemol"><svg class="i"><use href="#flat"/></svg></button>
+      <button data-ed="natural" aria-label="Kasownik"><svg class="i"><use href="#natural"/></svg></button>
+      <button data-ed="sharp" aria-label="Krzyżyk"><svg class="i"><use href="#sharp"/></svg></button>
     </div>
     <div class="ed-pane" data-pane="len" hidden>
       <button data-len="whole" aria-label="Cała nuta"><svg class="i"><use href="#n-whole"/></svg></button>
@@ -225,19 +234,15 @@
       <button data-len="eighth" aria-label="Ósemka"><svg class="i"><use href="#n-eighth"/></svg></button>
       <button data-len="16th" aria-label="Szesnastka"><svg class="i"><use href="#n-16th"/></svg></button>
       <button data-ed="dot" id="ed-dot" aria-label="Z kropką" aria-pressed="false"><svg class="i"><use href="#n-dot"/></svg></button>
-    </div>
-    <div class="ed-pane" data-pane="acc" hidden>
-      <button data-ed="flat" aria-label="Bemol"><svg class="i"><use href="#flat"/></svg></button>
-      <button data-ed="natural" aria-label="Kasownik"><svg class="i"><use href="#natural"/></svg></button>
-      <button data-ed="sharp" aria-label="Krzyżyk"><svg class="i"><use href="#sharp"/></svg></button>
+      <button type="button" id="ed-restmode" aria-label="Pauza zamiast nuty" aria-pressed="false"><svg class="i"><use href="#rest"/></svg></button>
+      <button type="button" id="ed-barin" aria-label="Kreska taktowa przed zaznaczoną nutą"><svg class="i"><use href="#barline"/></svg></button>
     </div>
     <div class="ed-pane" data-pane="note" hidden>
-      <button data-ed="left" aria-label="Przesuń w lewo"><svg class="i"><use href="#left"/></svg></button>
-      <button data-ed="right" aria-label="Przesuń w prawo"><svg class="i"><use href="#right"/></svg></button>
       <button data-ed="add" aria-label="Powiel nutę"><svg class="i"><use href="#plus"/></svg></button>
       <button data-ed="beam" id="ed-beam" aria-label="Połącz belką z następną nutą" aria-pressed="false"><svg class="i"><use href="#beam"/></svg></button>
       <button data-ed="rest" id="ed-rest" aria-label="Zamień na pauzę"><svg class="i"><use href="#rest"/></svg></button>
-      <button data-ed="delete" aria-label="Usuń"><svg class="i"><use href="#trash"/></svg></button>
+      <button type="button" id="ed-barout" aria-label="Usuń kreskę taktową za tym taktem"><svg class="i"><use href="#barline-x"/></svg></button>
+      <button data-ed="delete" class="ed-del" aria-label="Usuń"><svg class="i"><use href="#trash"/></svg></button>
     </div>
     <div class="ed-pane wrap2" data-pane="marks" hidden>
       <button data-ed="dyn:pp" class="dyn" aria-label="pianissimo">pp</button>
@@ -257,11 +262,10 @@
     </div>
     <div class="ed-tabs" role="tablist">
       <button role="tab" data-tab-ed="bar" class="ed-bar" aria-selected="false" aria-label="Utwór: tonacja, klucz, metrum, takty"><svg class="i"><use href="#bar"/></svg><span>Utwór</span></button>
-      <button role="tab" data-tab-ed="pitch" aria-selected="true" aria-label="Wysokość"><svg class="i"><use href="#drag"/></svg><span>Wysokość</span></button>
-      <button role="tab" data-tab-ed="len" aria-selected="false" aria-label="Długość"><svg class="i"><use href="#dur"/></svg><span>Długość</span></button>
-      <button role="tab" data-tab-ed="acc" aria-selected="false" aria-label="Znaki chromatyczne"><svg class="i"><use href="#sharp"/></svg><span>♯ ♭</span></button>
-      <button role="tab" data-tab-ed="note" aria-selected="false" aria-label="Nuta: przesuń, powiel, usuń"><svg class="i"><use href="#n-quarter"/></svg><span>Nuta</span></button>
-      <button role="tab" data-tab-ed="marks" aria-selected="false" aria-label="Oznaczenia: dynamika, artykulacja, łuki"><svg class="i"><use href="#marks"/></svg><span>Dynamika</span></button>
+      <button role="tab" data-tab-ed="len" aria-selected="false" aria-label="Wstaw nuty i pauzy"><svg class="i"><use href="#pencil"/></svg><span>Wstaw</span></button>
+      <button role="tab" data-tab-ed="pitch" aria-selected="false" aria-label="Przesuń: wysokość, oktawa, w bok, znaki chromatyczne"><svg class="i"><use href="#drag"/></svg><span>Przesuń</span></button>
+      <button role="tab" data-tab-ed="note" aria-selected="false" aria-label="Nuta: powiel, belka, pauza, usuń"><svg class="i"><use href="#n-quarter"/></svg><span>Nuta</span></button>
+      <button role="tab" data-tab-ed="marks" aria-selected="false" aria-label="Styl: dynamika, akcenty, łuki"><svg class="i"><use href="#marks"/></svg><span>Styl</span></button>
     </div>
   </div>
   <div class="loopbar" id="loopbar" hidden>
@@ -637,6 +641,8 @@
   <div id="layout-box" hidden>
     <h3 class="lbl">Linie</h3>
     <div class="seg" id="layoutseg"><button data-layout="orig">Jak w oryginale</button><button data-layout="fit">Automatycznie</button></div>
+    <h3 class="lbl">Metrum</h3>
+    <div class="seg" id="meterseg"><button data-m="1">W każdej linii</button><button data-m="0">Tylko na początku</button></div>
   </div>
   <h3 class="lbl">Opis</h3>
   <div class="list fields">
@@ -646,7 +652,8 @@
   </div>
   <h3 class="lbl">Plik</h3>
   <div class="list">
-    <button class="li tap" id="btn-share"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Wyślij</b></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" id="btn-save"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Zapisz</b><small>PDF na tym urządzeniu</small></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" id="btn-share"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Udostępnij</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-restore" hidden><span class="ic"><svg class="i"><use href="#undo"/></svg></span><span class="grow"><b>Przywróć odczyt</b></span></button>
     <button class="li tap" id="btn-report"><span class="ic"><svg class="i"><use href="#warn"/></svg></span><span class="grow"><b>Zgłoś problem</b></span><svg class="i chev"><use href="#right"/></svg></button>
@@ -752,11 +759,13 @@
   <div class="grab"></div>
   <div class="shead"><h2 class="h-m" id="sh-card-t"></h2><button class="done ghost" data-close>Anuluj</button></div>
   <div class="tiles first">
-    <button class="tile" id="cd-send"><svg class="i"><use href="#share"/></svg><span>Wyślij</span></button>
+    <button class="tile" id="cd-save"><svg class="i"><use href="#download"/></svg><span>Zapisz</span></button>
+    <button class="tile" id="cd-send"><svg class="i"><use href="#share"/></svg><span>Udostępnij</span></button>
+    <button class="tile" id="cd-print"><svg class="i"><use href="#print"/></svg><span>Drukuj</span></button>
     <button class="tile" id="cd-dup"><svg class="i"><use href="#copy"/></svg><span>Duplikuj</span></button>
     <button class="tile" id="cd-rename"><svg class="i"><use href="#pencil"/></svg><span>Nazwa</span></button>
     <button class="tile" id="cd-fav"><svg class="i"><use href="#heart"/></svg><span>Ulubione</span></button>
-    <button class="tile" id="cd-col"><svg class="i"><use href="#stack"/></svg><span>Kolekcja</span></button>
+    <button class="tile" id="cd-col"><svg class="i"><use href="#stack"/></svg><span>Porządkuj</span></button>
     <button class="tile danger" id="cd-del"><svg class="i"><use href="#trash"/></svg><span>Usuń</span></button>
   </div>
 </div>
@@ -769,7 +778,7 @@
 
 <div class="sheet" id="sh-addto" role="dialog" aria-modal="true" aria-labelledby="sh-addto-t" hidden>
   <div class="grab"></div>
-  <div class="shead"><h2 class="h-m" id="sh-addto-t">Kolekcja</h2><button class="done" data-close>Gotowe</button></div>
+  <div class="shead"><h2 class="h-m" id="sh-addto-t">Porządkuj</h2><button class="done" data-close>Gotowe</button></div>
   <div class="list first" id="addto-list"></div>
   <button class="btn tinted wide" id="addto-new"><svg class="i"><use href="#plus"/></svg><span>Nowa kolekcja</span></button>
 </div>
@@ -791,7 +800,7 @@
 
 <div class="sheet" id="sh-share" role="dialog" aria-modal="true" aria-labelledby="sh-share-t" hidden>
   <div class="grab"></div>
-  <div class="shead"><h2 class="h-m" id="sh-share-t">Wyślij</h2><button class="done ghost" data-close>Anuluj</button></div>
+  <div class="shead"><h2 class="h-m" id="sh-share-t">Udostępnij</h2><button class="done ghost" data-close>Anuluj</button></div>
   <div id="share-parts" hidden><h3 class="lbl first">Partie</h3><div class="ichips" id="share-chips"></div></div>
   <div class="tiles share-tiles">
     <button class="tile" data-act="send-pdf"><svg class="i"><use href="#file"/></svg><span>PDF</span></button>

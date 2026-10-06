@@ -191,7 +191,7 @@ function readingPartId() {
 /* the score as it is drawn; the same piece and settings give the same text, so taps and bar lookups do not parse,
    beam and serialise the whole score again */
 function processedXml() {
-  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff()].join("\u0001");
+  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff(), S.layout, S.meterLines].join("\u0001");
   if (processedXml.key === key) return processedXml.out;
   const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
 }
@@ -287,6 +287,17 @@ function processedXmlNow() {
     });
   }
   if (castsOff()) castOff(root);
+  /* a scan shown as in the original: the metre printed at the start of every line (exercise books do), unless turned off */
+  if (S.layout === "orig" && S.hasLines && S.meterLines !== false) kids(root, "part").forEach(part => {
+    let cur = null;
+    kids(part, "measure").forEach((m, i) => {
+      kids(m, "attributes").forEach(a => { const t = kid(a, "time"); if (t) cur = t; });
+      if (!i || !cur || !kids(m, "print").some(x => x.getAttribute("new-system") === "yes")) return;
+      if (kids(m, "attributes").some(a => kid(a, "time"))) return;
+      let a = kids(m, "attributes")[0]; if (!a) { a = doc.createElement("attributes"); const pr = kid(m, "print"); pr ? pr.after(a) : m.insertBefore(a, m.firstChild); }
+      a.insertBefore(cur.cloneNode(true), kid(a, "clef") || kid(a, "staves") || null);
+    });
+  });
   if (S.under && typeof withChords === "function") { const first = S.parts.find(p => p.keep && p.id === melodyId()) || S.parts.find(p => p.keep); withChords(doc, first && first.id, S.under, intervalFifths(S.iv)); }
   return new XMLSerializer().serializeToString(doc);
 }
@@ -576,7 +587,13 @@ function checkReading(xml, ans = {}) {
       const t0 = four || times[0]; want = [beatsOf(txt(t0, "beats")), parseInt(txt(t0, "beat-type"), 10)];
     }
     if (want && measures.length) {
+      /* the bars that carried a metre keep showing it (an exercise book prints 4/4 on every line; Tata: "identical") */
+      const shown = new Set(times.map(t => measures.indexOf(t.closest("measure"))).filter(i => i > 0));
       times.forEach(t => t.remove());
+      shown.forEach(i => {      /* a metre printed again at a line start ends an exercise: the line before ends with a final bar line */
+        const prev = measures[i - 1]; if (prev && !kids(prev, "barline").some(b => (b.getAttribute("location") || "right") === "right")) { const bl = doc.createElement("barline"); bl.setAttribute("location", "right"); bl.innerHTML = "<bar-style>light-heavy</bar-style>"; prev.appendChild(bl); }
+      });
+      shown.forEach(i => { const m = measures[i]; let a2 = kids(m, "attributes")[0]; if (!a2) { a2 = doc.createElement("attributes"); const pr = kid(m, "print"); pr ? pr.after(a2) : m.insertBefore(a2, m.firstChild); } const t2 = doc.createElement("time"); t2.innerHTML = `<beats>${want[0]}</beats><beat-type>${want[1]}</beat-type>`; a2.insertBefore(t2, kid(a2, "clef") || null); });
       let a = kids(measures[0], "attributes").find(x => kid(x, "key") || kid(x, "clef")) || kids(measures[0], "attributes")[0];
       if (!a) { a = doc.createElement("attributes"); measures[0].insertBefore(a, measures[0].firstChild); }
       const t = doc.createElement("time"); t.innerHTML = `<beats>${want[0]}</beats><beat-type>${want[1]}</beat-type>`;
@@ -641,6 +658,58 @@ function checkReading(xml, ans = {}) {
       const a = midis[k - 1].m, b = midis[k].m, c = midis[k + 1].m;
       if (Math.abs(b - a) >= 12 && Math.abs(b - c) >= 12 && Math.abs(a - c) <= 7) issues.push(`Takt ${midis[k].i + 1}: nuta może być o oktawę ${b < a ? "za nisko" : "za wysoko"}`);
     }
+  });
+  /* mechanical checks after reading (Tata: the result must look like the paper):
+     - a bar with rests only, filling the bar, is one whole-bar rest (drawn in the middle of the bar);
+     - a fermata over a rest inside the piece is almost always a pencil mark (a teacher's "V"): it goes, the bar is
+       marked to be checked */
+  parts.forEach(part => {
+    let dv = 1, bts = 4, btt = 4; const ms = kids(part, "measure");
+    ms.forEach((m, i) => {
+      kids(m, "attributes").forEach(a => { const d = kid(a, "divisions"); if (d) dv = parseFloat(d.textContent) || dv; const t = kid(a, "time"); if (t) { bts = beatsOf(txt(t, "beats")) || bts; btt = parseInt(txt(t, "beat-type"), 10) || btt; } });
+      const ns = kids(m, "note");
+      if (ns.length && !kids(m, "backup").length && ns.every(n => kid(n, "rest"))) {
+        const sum = ns.reduce((a, n) => a + (parseFloat(txt(n, "duration")) || 0), 0), full = dv * bts * 4 / btt;
+        if (Math.abs(sum - full) < 0.01 && !(ns.length === 1 && kid(ns[0], "rest").getAttribute("measure") === "yes")) {
+          const keep = ns[0]; ns.slice(1).forEach(n => n.remove());
+          const r = kid(keep, "rest"); r.setAttribute("measure", "yes"); [...r.children].forEach(c => c.remove());
+          kid(keep, "duration").textContent = String(Math.round(full)); ["type", "dot"].forEach(t => kids(keep, t).forEach(x => x.remove()));
+        }
+      }
+      if (i < ms.length - 1) kids(m, "note").filter(n => kid(n, "rest")).forEach(n => {
+        const f = n.getElementsByTagName("fermata"); if (!f.length) return;
+        [...f].forEach(x => { const no = x.parentNode; x.remove(); if (no && !no.children.length) no.remove(); });
+        issues.push(`Takt ${i + 1}: usunięto fermatę nad pauzą (pewnie znak ołówkiem)`);
+      });
+    });
+  });
+  /* notes far off the staff (more than 4 ledger lines) are often words under the staff read as notes ("f ess d" in
+     an exercise to fill in): in a line otherwise without notes they go, elsewhere the bar is marked */
+  parts.forEach(part => {
+    let clef = "G"; const ms = kids(part, "measure");
+    const pos = n => { const p = kid(n, "pitch"); if (!p) return null; return parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")] - (CLEF_BOTTOM[clef] ?? 30); };
+    const far = n => { const d = pos(n); return d != null && (d < -8 || d > 16); };
+    const off = n => { const d = pos(n); return d != null && (d < -1 || d > 9); };      // below the bottom line or above the top line
+    const lineOf = []; let line = 0; ms.forEach((m, i) => { if (i && kids(m, "print").some(x => x.getAttribute("new-system") === "yes")) line++; lineOf[i] = line; });
+    const farBy = new Map(), offBy = [];
+    ms.forEach((m, i) => {
+      kids(m, "attributes").forEach(a => kids(a, "clef").forEach(c => { const n = c.getAttribute("number"); if (!n || n === "1") clef = clefId(c); }));
+      const ns = kids(m, "note").filter(n => kid(n, "pitch") && !kid(n, "chord"));
+      const f = ns.filter(far); if (f.length) farBy.set(i, { all: f.length === ns.length, f });
+      offBy[i] = { n: ns.length, off: ns.filter(off).length };
+    });
+    const lines = new Map(); farBy.forEach((v, i) => { const L = lineOf[i]; if (!lines.has(L)) lines.set(L, []); lines.get(L).push(i); });
+    /* a line with a few notes only, all off the staff (the rest rests): words under or over the staff, not music */
+    new Set(lineOf).forEach(L => {
+      const idx = ms.map((m, i) => i).filter(i => lineOf[i] === L), n = idx.reduce((a, i) => a + offBy[i].n, 0), o = idx.reduce((a, i) => a + offBy[i].off, 0);
+      if (n && n === o && n <= 4 && idx.length >= 3) { const has = idx.filter(i => offBy[i].n); if (!lines.has(L)) lines.set(L, []); has.forEach(i => { if (!lines.get(L).includes(i)) lines.get(L).push(i); farBy.set(i, { all: true, f: [] }); }); }
+    });
+    lines.forEach((idxs, L) => {
+      const lineMs = ms.map((m, i) => i).filter(i => lineOf[i] === L);
+      const onlyFar = lineMs.every(i => { const ns = kids(ms[i], "note").filter(n => kid(n, "pitch")); return !ns.length || (farBy.get(i) && farBy.get(i).all); });
+      if (onlyFar) idxs.forEach(i => { const m = ms[i]; const ns = kids(m, "note"); const full = ns.reduce((a, n) => a + (kid(n, "chord") ? 0 : parseFloat(txt(n, "duration")) || 0), 0); ns.forEach(n => n.remove()); const r = doc.createElement("note"); r.innerHTML = `<rest measure="yes"/><duration>${Math.round(full)}</duration><voice>1</voice>`; const bl = kids(m, "barline").find(b => (b.getAttribute("location") || "right") === "right"); m.insertBefore(r, bl || null); issues.push(`Takt ${i + 1}: usunięto znaki pod pięciolinią (to pewnie podpisy, nie nuty)`); });
+      else idxs.forEach(i => issues.push(`Takt ${i + 1}: nuta daleko od pięciolinii, sprawdź`));
+    });
   });
   addAccidentals(doc);
   issues.sort((a, b) => parseInt(a.slice(5), 10) - parseInt(b.slice(5), 10));

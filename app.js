@@ -539,7 +539,7 @@ function loadState(piece, settings) {
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null; S.clefMine = false;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
-  S.layout = S.hasLines ? "orig" : "fit"; S.page = "a4"; S.pageMine = false; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
+  S.layout = S.hasLines ? "orig" : "fit"; S.meterLines = true; S.page = "a4"; S.pageMine = false; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
   if (settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
@@ -558,6 +558,7 @@ function loadState(piece, settings) {
     if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
     S.pageMine = !!settings.pageMine;
     S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
+    S.meterLines = settings.meterLines !== false;
   }
   /* clef and key chosen by hand for the view (before 4.0 test 44) are dropped: they are edited in the music now;
      the automatic clef/octave for the instrument (ensureOnStaff) still applies */
@@ -653,11 +654,12 @@ function openPiece(piece, settings) {
   S.dirty = refit && !!S.piece.id; S.thumbDirty = !piece.thumb || refit; S.loadedKey = null;
   S.piece.opened = Date.now();
   if (!store.get("tourDone")) setTimeout(() => { if (S.view === "score" && !openSheetId && !store.get("tourDone")) tourStart(); }, 1600);
-  $("#notice").hidden = !(S.piece.issues && S.piece.issues.length);
+  /* after a scan: which bars to check, short; once closed with ✕ it never comes back for this piece */
+  $("#notice").hidden = !(S.piece.issues && S.piece.issues.length) || !!S.piece.noticeOff;
   if (S.piece.issues && S.piece.issues.length) {
     const nums = doubtfulBars(S.piece.issues), n = nums.length;
     $("#notice-title").textContent = n ? `${n} ${plural(n, "takt", "takty", "taktów")} do sprawdzenia` : "Sprawdź ze zdjęciem";
-    $("#notice-text").textContent = n ? `Zaznaczone na fioletowo: ${nums.slice(0, 8).join(", ")}${n > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.` : "Odczyt może zawierać błędy.";
+    $("#notice-text").textContent = n ? `Fioletowe: ${nums.slice(0, 6).join(", ")}${n > 6 ? "…" : ""}` : "Odczyt może mieć błędy.";
   }
   updateTitles();
   S.only = null; S.keepBefore = null;              // "Tylko ta" belongs to the piece it was used in
@@ -687,7 +689,7 @@ function changed() {
   updateTitles(); render(); autosave();
   if (openSheetId === "key") syncKeySheet();
 }
-$("#notice-x").addEventListener("click", () => fadeOut($("#notice"), 180));
+$("#notice-x").addEventListener("click", () => { fadeOut($("#notice"), 180); if (S.piece) { S.piece.noticeOff = true; S.dirty = true; autosave(); } });
 
 /* ---------------- Saving ---------------- */
 function recordFromState() {
@@ -698,8 +700,8 @@ function recordFromState() {
     id: S.piece.id || (S.piece.id = "p" + now.toString(36) + Math.random().toString(36).slice(2, 7)),
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
-    issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, trShift: S.piece.trShift || 0, partRoles: S.piece.partRoles || null, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { melody: S.melody || null, keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing },
+    issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, trShift: S.piece.trShift || 0, partRoles: S.piece.partRoles || null, noticeOff: !!S.piece.noticeOff, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
+    settings: { melody: S.melody || null, keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing, meterLines: S.meterLines !== false },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -766,6 +768,14 @@ async function leaveScore() {
 /* ---------------- Rendering ---------------- */
 /* An A4 page. The SVG is always drawn at the page's width, so "bigger notes" means a smaller
    virtual page: the notes keep their size in Verovio units and the page shrinks around them. */
+/* the staff size of the original: staff height against line length on the photo, compared with Solo's A4 page
+   (7.2 mm staff on a 180 mm line); a little under it (the detected box is a bit taller than the five lines) */
+function scanZoom() {
+  const ls = (S.piece && S.piece.lines || []).filter(l => l.w > 0.3 && l.h > 0);
+  if (!ls.length) return 1;
+  const r = ls.map(l => (l.h * l.H) / (l.w * l.W)).sort((a, b) => a - b)[Math.floor(ls.length / 2)];
+  return Math.max(1, Math.min(1.35, r / 0.04 * 0.85));
+}
 function a4Options(extra, zoom = S.zoom) {
   const z = zoom, r = v => Math.round(v / z);
   return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: castsOff() ? "line" : S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
@@ -802,7 +812,12 @@ async function doRender() {
   try {
     const xml = processedXml();
     let opts;
-    if (mode === "pages") opts = a4Options({}, 1);
+    if (mode === "pages") {
+      /* a scan shown as in the original: its lines are filled to the full width, the last one too, and the staff gets
+         the size it has on the paper relative to the line's length (an exercise book prints big staves) */
+      const orig = S.layout === "orig" && S.hasLines;
+      opts = a4Options(orig ? { minLastJustification: 0 } : {}, orig ? scanZoom() : 1);
+    }
     else {
       const px = 38 * S.zoom;
       opts = { pageWidth: Math.round(width * 100 / px), pageHeight: 60000, adjustPageHeight: true, scale: Math.round(px), breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
@@ -821,6 +836,8 @@ async function doRender() {
     S.fromMs = 0; S.fromBar = -1;
     if (S.keepSel) { const k = S.keepSel; S.keepSel = null; selectNote(k); } else if (S.editSel) selectNote(null);
     S.mode = mode; S.loadedKey = "view"; applyPageZoom(); renderPartStrip(); markRange(); markBarSel();
+    /* no warning metre at the end of a line (the engine adds one when the next line starts with a metre; the paper has none) */
+    $$("#pages g.system").forEach(sys => { const r = sys.getBoundingClientRect(); sys.querySelectorAll("g.meterSig").forEach(m => { const b = m.getBoundingClientRect(); if (b.width && b.left > r.left + r.width * 0.85) m.style.display = "none"; }); });
     requestAnimationFrame(() => { drawLoop(); syncLoopUi(); });
     S.baseBpm = scoreBpm(); $("#tp-bpm").textContent = String(curBpm());
     if (openSheetId === "more") syncTempo();
@@ -928,7 +945,8 @@ function edTab(name) {
   $$("#editbar [data-tab-ed]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tabEd === name)));
   $$("#editbar .ed-pane").forEach(p => (p.hidden = p.dataset.pane !== name));
   S.edTab = name;
-  if (name === "bar") buildBarSheet(); else markBarSel();          // Takt sits in the tool panel like the other tools (the music stays in view)
+  if (name === "bar") buildBarSheet(); else markBarSel();
+  if (S.editMode && !edTab.busy) { edTab.busy = true; try { selectNote(S.editSel); } finally { edTab.busy = false; } }          // the hint line follows the tool          // Takt sits in the tool panel like the other tools (the music stays in view)
 }
 function selectNote(sel) {
   S.editSel = sel; if (sel && !S.editMode) { S.editMode = true; editSnap(); }
@@ -938,7 +956,7 @@ function selectNote(sel) {
   $("#editbar").hidden = !on;
   $$("#pages g.nsel").forEach(g => g.classList.remove("nsel"));
   $("#ed-undo").disabled = !(S.undo && S.undo.length); syncRedo();
-  if (S.edTab == null) edTab(null);          // editing opens with no tool open (Nat, 7 Oct); a tool opens when tapped
+  if (S.edTab == null && !edTab.busy) edTab(null);          // editing opens with no tool open (Nat, 7 Oct); a tool opens when tapped
   const at = sel ? xmlNoteAt(parseXml(S.piece.xml), sel) : null, n = at && at.n, isRest = !!(n && kid(n, "rest"));
   $$("#editbar .ed-pane:not([data-pane=len]):not([data-pane=bar]) button").forEach(b => (b.disabled = !n || (isRest && !["rest", "delete", "left", "right"].includes(b.dataset.ed))));
   const cur = n ? (txt(n, "type") || "whole") : (S.inLen || "quarter");
@@ -946,7 +964,7 @@ function selectNote(sel) {
   $("#ed-dot").setAttribute("aria-pressed", String(!!(n && kid(n, "dot"))));
   if (n) { const docB = parseXml(S.piece.xml), atB = xmlNoteAt(docB, sel), on = !!atB && beamJoined(docB, atB); $("#ed-beam").setAttribute("aria-pressed", String(on)); $("#ed-beam").setAttribute("aria-label", on ? "Rozdziel belkę z następną nutą" : "Połącz belką z następną nutą"); $("#ed-beam").disabled = isRest || !BEAMABLE[txt(n, "type")]; }
   $("#ed-rest").innerHTML = icon(isRest ? "n-quarter" : "rest"); $("#ed-rest").setAttribute("aria-label", isRest ? "Zamień na nutę" : "Zamień na pauzę");
-  if (!n) { $("#ed-info").innerHTML = `Dotknij pięciolinii, żeby dopisać nutę <svg class="i"><use href="#n-${cur === "16th" ? "16th" : cur}"/></svg>, albo wybierz narzędzie`; return; }
+  if (!n) { $("#ed-info").innerHTML = S.edTab === "len" ? `Dotknij pięciolinii, żeby dopisać ${S.inRest ? "pauzę" : "nutę"} <svg class="i"><use href="#n-${cur === "16th" ? "16th" : cur}"/></svg>` : "Dotknij nuty, żeby ją wybrać. Nowe nuty dopisujesz w Wstaw"; return; }
   const el = drawnNote(sel); if (el) el.classList.add("nsel");
   const p = kid(n, "pitch"), len = LEN_PL[txt(n, "type")] || "";
   if (p) {
@@ -988,6 +1006,8 @@ function pitchAtY(staff, y, part, m) {
 /* a tap in correcting mode: on (or right next to) a note → that note; elsewhere on a staff → a new note of the
    chosen length at that height, in place of the rest there (the bar keeps adding up) */
 function editTap(e) {
+  /* the clef, key, metre or tempo in the music open Utwór, where they are changed */
+  if (e.target.closest("g.clef, g.keySig, g.meterSig, g.tempo")) { edTab("bar"); return; }
   /* with Takt open a tap chooses the bar (and the part) Takt works on; it never writes a note */
   if (S.edTab === "bar") {
     const m = e.target.closest("g.measure") || measureAt(e.clientX, e.clientY); if (!m) return;
@@ -1002,11 +1022,13 @@ function editTap(e) {
   const restEl = e.target.closest("g.rest, g.mRest") || nearestNote(e.clientX, e.clientY, 60, "g.rest, g.mRest");
   if (!restEl) { const any = nearestNote(e.clientX, e.clientY, 90); if (any) selectNote(locateNote(any)); else selectNote(null); return; }
   const sel = locateNote(restEl); if (!sel || sel.piano) return;
+  /* a tap only chooses; notes (or rests) are written only with Długość open (Nat: "don't put a note where I tapped") */
+  if (S.edTab !== "len") { selectNote(sel); return; }
   const doc = parseXml(S.piece.xml), at = xmlNoteAt(doc, sel); if (!at || !at.n) return;
   const staff = restEl.closest("g.staff"), idx = staff && pitchAtY(staff, e.clientY, at.part, at.m); if (idx == null) return;
   const n = at.n, r = kid(n, "rest"), st = STEP_N[((idx % 7) + 7) % 7], oct = Math.floor(idx / 7), alt = keyAlter(keyAt(at.part, at.m), st);
-  const np = doc.createElement("pitch"); np.innerHTML = `<step>${st}</step>${alt ? `<alter>${alt}</alter>` : ""}<octave>${oct}</octave>`;
-  n.replaceChild(np, r);
+  if (S.inRest) r.removeAttribute("measure");          // "Pauza" chosen: a rest of the chosen length is written
+  else { const np = doc.createElement("pitch"); np.innerHTML = `<step>${st}</step>${alt ? `<alter>${alt}</alter>` : ""}<octave>${oct}</octave>`; n.replaceChild(np, r); }
   const { div, cap } = barCap(at.part, at.m), want = S.inLen || "quarter";
   const room = parseFloat(txt(n, "duration")) || cap, len = ED_LEN[want] * div <= room + 1e-6 ? want : ED_TYPES.slice().reverse().find(t => ED_LEN[t] * div <= room + 1e-6) || "16th";
   kid(n, "duration").textContent = String(ED_LEN[len] * div);
@@ -1022,10 +1044,14 @@ function editTap(e) {
     const fin = kids(last, "barline").find(b => (b.getAttribute("location") || "right") === "right" && !kid(b, "repeat")); if (fin) nm.appendChild(fin);
   });
   pushUndo(); S.piece.xml = new XMLSerializer().serializeToString(doc);
-  previewNote(n); S.editSel = sel; afterEdit();
+  if (!S.inRest) previewNote(n); S.editSel = sel; afterEdit();
 }
 $$("#editbar [data-tab-ed]").forEach(b => b.addEventListener("click", () => edTab(S.edTab === b.dataset.tabEd ? null : b.dataset.tabEd)));     // a second tap closes the tool
 $$("#editbar [data-len]").forEach(b => b.addEventListener("click", () => { S.inLen = b.dataset.len; if (S.editSel) editNote("len:" + b.dataset.len); else selectNote(null); }));
+/* Długość → "Pauza": what is written next is a rest of the chosen length */
+$("#ed-barin").addEventListener("click", () => { if (!S.editSel) { hud("Zaznacz nutę, przed którą ma być kreska"); return; } barOp("split"); });
+$("#ed-barout").addEventListener("click", () => { if (!S.editSel) { hud("Zaznacz nutę w takcie"); return; } barOp("join"); });
+$("#ed-restmode").addEventListener("click", () => { S.inRest = !S.inRest; $("#ed-restmode").setAttribute("aria-pressed", String(S.inRest)); selectNote(S.editSel); });
 /* divisions and the length of a full bar (in divisions) at a bar */
 function barCap(part, m) {
   let div = 1, beats = 4, bt = 4;
@@ -1465,6 +1491,25 @@ function barOp(op, val) {
         m.before(nm);
       }
     });
+  } else if (op === "join" || op === "split") {
+    /* fixing a misread bar line: two bars become one, or a bar is split at the chosen note (one voice only) */
+    const oneVoice = m => m && !kids(m, "backup").length && !kids(m, "forward").length;
+    if (op === "join") {
+      if (!parts.every(pt => { const ms = kids(pt, "measure"); return oneVoice(ms[bar - 1]) && oneVoice(ms[bar]); })) { hud("Łączyć można takty z jednym głosem"); return; }
+      parts.forEach(part => {
+        const ms = kids(part, "measure"), m = ms[bar - 1], nx = ms[bar]; if (!m || !nx) return;
+        const right = kids(m, "barline").filter(b => (b.getAttribute("location") || "right") === "right"); right.forEach(b => b.remove());
+        [...nx.children].forEach(c => { if (c.tagName === "print") return; m.appendChild(c); });
+        nx.remove();
+      });
+    } else {
+      const sel = S.editSel; if (!sel || sel.bar !== bar || parts.length > 1) { hud(parts.length > 1 ? "Dzielić takt można, gdy w nutach jest jedna partia" : "Zaznacz nutę, od której ma się zacząć nowy takt"); return; }
+      const part = parts[0], m = kids(part, "measure")[bar - 1]; if (!oneVoice(m)) { hud("Dzielić można takty z jednym głosem"); return; }
+      const n = kids(m, "note")[sel.i]; if (!n || n === kids(m, "note")[0]) { hud("Wybierz nutę dalej w takcie"); return; }
+      const nm = doc.createElement("measure"); let el = n; while (el) { const nx = el.nextElementSibling; if (el.tagName !== "attributes" || el !== kids(m, "attributes")[0]) nm.appendChild(el); el = nx; }
+      m.after(nm);
+    }
+    S.editSel = null;
   } else if (op === "del") {
     parts.forEach(part => {
       const ms = kids(part, "measure"), m = ms[bar - 1], nx = ms[bar]; if (!m || ms.length < 2) return;
@@ -1507,6 +1552,8 @@ $("#bar-key")?.addEventListener("change", e => barOp("key", e.target.value));
 $("#bar-add").addEventListener("click", () => barOp("add"));
 $("#bar-addbefore").addEventListener("click", () => barOp("addbefore"));
 $("#bar-del").addEventListener("click", () => barOp("del"));
+$("#bar-join").addEventListener("click", () => barOp("join"));
+$("#bar-split").addEventListener("click", () => barOp("split"));
 [["#bar-bpm-down", -4], ["#bar-bpm-up", 4]].forEach(([s, d]) => $(s).addEventListener("click", () => { setBpm(curBpm() + d); $("#bar-bpm").textContent = String(curBpm()); }));
 $("#btn-edit").addEventListener("click", () => setEditMode(!S.editMode));
 /* a labelled mode, like forScore/Freeform: "Edytuj" opens it, "Gotowe" closes it (every change is already saved);
@@ -1521,7 +1568,7 @@ function afterEdit() {
   $("#ed-undo").disabled = !(S.undo && S.undo.length); syncRedo();
   $("#btn-restore").hidden = !canRestore();
   const nums = doubtfulBars(S.piece.issues);
-  if (!$("#notice").hidden || nums.length) { $("#notice").hidden = !nums.length; if (nums.length) { $("#notice-title").textContent = `${nums.length} ${plural(nums.length, "takt", "takty", "taktów")} do sprawdzenia`; $("#notice-text").textContent = `Zaznaczone na fioletowo: ${nums.slice(0, 8).join(", ")}${nums.length > 8 ? " i inne" : ""}. Porównaj je ze zdjęciem.`; } }
+  if (!S.piece.noticeOff && (!$("#notice").hidden || nums.length)) { $("#notice").hidden = !nums.length; if (nums.length) { $("#notice-title").textContent = `${nums.length} ${plural(nums.length, "takt", "takty", "taktów")} do sprawdzenia`; $("#notice-text").textContent = `Fioletowe: ${nums.slice(0, 6).join(", ")}${nums.length > 6 ? "…" : ""}`; } }
 }
 $$("#editbar [data-ed]").forEach(b => b.addEventListener("click", () => editNote(b.dataset.ed)));
 /* asked first, and undoable: the corrections are one tap away from being gone */
@@ -2467,6 +2514,7 @@ async function shareXml() {
   download(name, xml, type);
 }
 $("#btn-share").addEventListener("click", () => openSheet("share"));
+$("#btn-save").addEventListener("click", () => closeSheetThen(() => savePdf(false)));
 $("#btn-print").addEventListener("click", () => closeSheetThen(printScore));
 
 
@@ -2671,7 +2719,9 @@ $("#oct-up").addEventListener("click", () => { const { k, oct } = kOct(); setKOc
 
 /* ---------------- More sheet ---------------- */
 $$("#layoutseg button").forEach(b => b.addEventListener("click", () => { S.layout = b.dataset.layout; syncLayout(); S.loadedKey = null; changed(); }));
+$$("#meterseg button").forEach(b => b.addEventListener("click", () => { S.meterLines = b.dataset.m === "1"; syncLayout(); S.loadedKey = null; changed(); }));
 function syncLayout() {
+  $$("#meterseg button").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.m === "1") === (S.meterLines !== false))));
   $("#layout-box").hidden = !S.hasLines; $$("#layoutseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.layout === S.layout)));
   $$("#pageseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.page === S.page)));
 }
@@ -2829,6 +2879,8 @@ function hudAct(msg, label, fn, ms = 4000) {
 let cardPiece = null, cardEl = null;
 function openCardSheet(p, el) { cardPiece = p; cardEl = el; $("#sh-card-t").textContent = p.title || "Bez tytułu"; openSheet("card"); }
 $("#cd-open")?.addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => openFromLibrary(p)); });
+$("#cd-save").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => savePdf(false)); }); });
+$("#cd-print").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(printScore); }); });
 $("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => openSheet("share")); }); });
 $("#cd-rename").addEventListener("click", () => { const el = cardEl, p = cardPiece; closeSheetThen(() => { const t = el && el.querySelector(".t"); if (t) inlineEdit(t, { value: p.title || "", placeholder: "Tytuł", onSave: v => renameInLibrary(p, "title", v) }); }); });
 $("#cd-del").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => askDelete(p, true)); });
@@ -4702,13 +4754,14 @@ $("#cd-fav").addEventListener("click", () => {
 $("#cd-col").addEventListener("click", () => closeSheetThen(() => openSheet("addto")));
 function buildAddtoSheet() {
   const id = cardPiece && cardPiece.id, all = cols();
-  $("#addto-list").innerHTML = all.length ? all.map(c => `<label class="li"><i class="cdot" style="background:${esc(c.color || "#8D8D8D")}"></i><span class="grow"><b>${esc(c.name)}</b></span><input type="checkbox" class="switch" data-c="${esc(c.id)}" ${c.items.includes(id) ? "checked" : ""}></label>`).join("") : `<p class="note">Nie masz jeszcze kolekcji.</p>`;
+  /* "Porządkuj": the piece in collections, one tap per collection (a check, not a switch: iOS switches buzz) */
+  $("#addto-list").innerHTML = all.length ? all.map(c => { const on = c.items.includes(id); return `<button type="button" class="li tap colrow" data-c="${esc(c.id)}" aria-pressed="${on}"><i class="cdot" style="background:${esc(c.color || "#8D8D8D")}"></i><span class="grow"><b>${esc(c.name)}</b><small>${c.items.length} ${plural(c.items.length, "utwór", "utwory", "utworów")}</small></span><span class="colcheck">${on ? icon("check") : ""}</span></button>`; }).join("") : `<p class="note" style="padding:12px 14px">Kolekcje to grupy utworów, np. „Ania” albo „Koncert”.</p>`;
 }
-$("#addto-list").addEventListener("change", e => {
-  const cid = e.target.dataset.c, id = cardPiece && cardPiece.id; if (!cid || !id) return;
-  const all = cols(), c = all.find(x => x.id === cid); if (!c) return;
-  c.items = e.target.checked ? [...new Set([...c.items, id])] : c.items.filter(x => x !== id);
-  saveCols(all); refreshLibrary();
+$("#addto-list").addEventListener("click", e => {
+  const b = e.target.closest("[data-c]"), id = cardPiece && cardPiece.id; if (!b || !id) return;
+  const all = cols(), c = all.find(x => x.id === b.dataset.c); if (!c) return;
+  c.items = c.items.includes(id) ? c.items.filter(x => x !== id) : [...new Set([...c.items, id])];
+  saveCols(all); refreshLibrary(); buildAddtoSheet();
 });
 $("#addto-new").addEventListener("click", () => { colTarget = null; colPiece = cardPiece && cardPiece.id; closeSheetThen(() => openSheet("col")); });
 
