@@ -1961,3 +1961,10 @@ body.editmode .ed-info:has(+ .bar-pane:not([hidden])){display:none}
 .ed-info{color:var(--text-2)}
 .bar-pane .chips>button:not([aria-pressed="true"]){background:#fff}
 .bar-pane .bp-title{display:none!important}.bar-pane h3.lbl:first-of-type{margin-top:2px!important}
+/* clef chips: the clef itself next to its name */
+.clefchips>button{gap:7px;padding-left:10px!important}
+.clefchips>button::before{display:none!important}
+svg.cl{flex:none;fill:currentColor}
+svg.cl.g{width:13px;height:30px;margin:-6px 0}
+svg.cl.f{width:15px;height:18px}
+svg.cl.c{width:13px;height:21px}

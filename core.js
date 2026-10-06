@@ -1138,3 +1138,146 @@ function readyTuneXml(id) {
 /* the Solo "aura": a clean wash of neighbouring colours (blue, violet, a touch of pink), never mixed into grey; used on
    the start screen, the first-run welcome and above the library instead of pictures */
 const STAGE_SVG = `<div class="aura" aria-hidden="true"></div>`;
+
+/* ---------------- re-barring after a metre change (Nat, 7 Oct: "the notes should adapt by themselves") ----------------
+   From the bar where the metre changes to the next metre change (or the end), every part's music flows into bars of the
+   new length, as notation programs do: a note that crosses a bar line is split into tied notes, lengths that cannot be
+   written as one note (5 eighths) become tied notes, rests are split without ties, the last bar is filled with rests.
+   Directions (dynamics, tempo words) and chord symbols travel with the note they stood before. Parts with two voices,
+   two staves, tuplets, repeats or voltas are not rewritten (the change then only marks the bars that do not add up). */
+const REBAR_Q = [[4, "whole", 0], [3, "half", 1], [2, "half", 0], [1.5, "quarter", 1], [1, "quarter", 0], [0.75, "eighth", 1], [0.5, "eighth", 0], [0.375, "16th", 1], [0.25, "16th", 0], [0.125, "32nd", 0]];
+function rebarSplit(d, div) {               // a length in divisions as written note values, longest first
+  const out = []; let left = d;
+  while (left > 1e-9) { const r = REBAR_Q.find(([q]) => q * div <= left + 1e-9 && Number.isInteger(Math.round(q * div * 1e6) / 1e6)); if (!r) return null; out.push(r); left -= r[0] * div; }
+  return out;
+}
+function rebarCan(part, from, to) {
+  const ms = kids(part, "measure").slice(from, to);
+  return ms.every(m => !m.getElementsByTagName("time-modification").length && !m.getElementsByTagName("repeat").length && !m.getElementsByTagName("ending").length);
+}
+function rebarScore(doc, parts, from, beats, bt) {
+  /* the stretch: to the next bar that sets a metre of its own */
+  const stopOf = part => { const ms = kids(part, "measure"); for (let i = from + 1; i < ms.length; i++) if (kids(ms[i], "attributes").some(a => kid(a, "time"))) return i; return ms.length; };
+  if (!parts.every(p => rebarCan(p, from, stopOf(p)))) return false;
+  const counts = parts.map(part => rebarPart(doc, part, from, stopOf(part), beats, bt));
+  if (counts.some(c => c == null)) return false;
+  /* every part ends with the same number of bars: shorter ones get whole-bar rests */
+  const max = Math.max(...counts);
+  parts.forEach((part, i) => {
+    for (let k = counts[i]; k < max; k++) {
+      const ms = kids(part, "measure"), last = ms[from + counts[i] - 1 + (k - counts[i])], div = divAt(part, last), cap = Math.round(div * 4 * beatsOf(beats) / bt);
+      const m = doc.createElement("measure"); m.innerHTML = `<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice></note>`;
+      last.after(m); const fin = kids(last, "barline").find(b => (b.getAttribute("location") || "right") === "right"); if (fin) m.appendChild(fin);
+    }
+  });
+  parts.forEach(part => kids(part, "measure").forEach((m, i) => m.setAttribute("number", String(i + 1))));
+  return true;
+}
+function divAt(part, m) { let d = 1; for (const mm of kids(part, "measure")) { kids(mm, "attributes").forEach(a => { const x = kid(a, "divisions"); if (x) d = parseFloat(x.textContent) || d; }); if (mm === m) break; } return d; }
+function rebarPart(doc, part, from, stop, beats, bt) {
+  const all = kids(part, "measure"), ms = all.slice(from, stop); if (!ms.length) return 0;
+  let div = divAt(part, ms[0]), cap = div * 4 * beatsOf(beats) / bt;
+  /* bars that cannot hold a whole number of divisions (7/8 with divisions 1): every length in the part doubles */
+  let k = 1; while (!Number.isInteger(Math.round(cap * k * 1e6) / 1e6) && k < 16) k *= 2;
+  if (k > 1) {
+    [...part.getElementsByTagName("divisions")].forEach(d => (d.textContent = String((parseFloat(d.textContent) || 1) * k)));
+    [...part.getElementsByTagName("duration")].forEach(d => (d.textContent = String(Math.round((parseFloat(d.textContent) || 0) * k))));
+    div *= k; cap *= k;
+  }
+  cap = Math.round(cap);
+  /* the music of the stretch, one stream per voice and staff (a piano: right hand, left hand, second voices) */
+  const firstAttrs = kids(ms[0], "attributes"), streams = new Map(); let pending = [], finalBar = null, lastKey = "1/1", lastItem = null;
+  const key = n => (txt(n, "voice") || "1") + "/" + (txt(n, "staff") || "1");
+  const stream = kk => { if (!streams.has(kk)) streams.set(kk, []); return streams.get(kk); };
+  ms.forEach((m, mi) => {
+    [...m.children].forEach(el => {
+      const t = el.tagName;
+      if (t === "attributes") { if (mi > 0) pending.push(el); return; }
+      if (t === "print" || t === "backup") return;
+      if (t === "barline") { if (mi === ms.length - 1 && (el.getAttribute("location") || "right") === "right") finalBar = el; return; }
+      if (t === "forward") {          // a gap in a voice: a rest of that length
+        const n = doc.createElement("note"); n.innerHTML = `<rest/><duration>${txt(el, "duration")}</duration>${kid(el, "voice") ? kid(el, "voice").outerHTML : ""}${kid(el, "staff") ? kid(el, "staff").outerHTML : ""}`;
+        el = n;
+      } else if (t !== "note") { pending.push(el); return; }
+      if (kid(el, "chord") && lastItem) { lastItem.els.push(el); return; }
+      const grace = !!kid(el, "grace"), kk = key(el);
+      lastItem = { pre: pending, els: [el], dur: grace ? 0 : Math.round(parseFloat(txt(el, "duration")) || 0), rest: !!kid(el, "rest"), grace, vs: kk };
+      stream(kk).push(lastItem); pending = []; lastKey = kk;
+    });
+  });
+  const tail = pending, hasStaff = ms.some(m => m.getElementsByTagName("staff").length);
+  if (!streams.size) stream("1/1");
+  /* each stream flows into bars of the new length */
+  const setLen = (n, d, r) => {
+    let du = kid(n, "duration"); if (!du) { du = doc.createElement("duration"); n.appendChild(du); } du.textContent = String(d);
+    kids(n, "type").forEach(x => x.remove()); kids(n, "dot").forEach(x => x.remove()); [...n.getElementsByTagName("beam")].forEach(x => x.remove());
+    const rest = kid(n, "rest"); if (rest) rest.removeAttribute("measure");
+    const ty = doc.createElement("type"); ty.textContent = r[1]; const after = kid(n, "voice") || du; after.after(ty);
+    if (r[2]) { const dt = doc.createElement("dot"); ty.after(dt); }
+  };
+  const tie = (n, type) => {
+    const t = doc.createElement("tie"); t.setAttribute("type", type); kid(n, "duration").after(t);
+    let no = kid(n, "notations"); if (!no) { no = doc.createElement("notations"); n.appendChild(no); }
+    const td = doc.createElement("tied"); td.setAttribute("type", type); no.appendChild(td);
+  };
+  const dropTies = n => { kids(n, "tie").forEach(x => x.remove()); const no = kid(n, "notations"); if (no) { kids(no, "tied").forEach(x => x.remove()); if (!no.children.length) no.remove(); } };
+  const restXml = (d, vs, r) => { const [v, st] = vs.split("/"); return `<note><rest${r ? "" : ' measure="yes"'}/><duration>${d}</duration><voice>${v}</voice>${r ? `<type>${r[1]}</type>${r[2] ? "<dot/>" : ""}` : ""}${hasStaff ? `<staff>${st}</staff>` : ""}</note>`; };
+  const barsOf = (list, vs) => {
+    const bars = [[]]; let room = cap;
+    for (const it of list) {
+      const bar = () => bars[bars.length - 1];
+      if (it.grace || !it.dur) { bar().push(...it.pre, ...it.els); continue; }
+      const hadStart = it.els.map(n => kids(n, "tie").some(t => t.getAttribute("type") === "start")), hadStop = it.els.map(n => kids(n, "tie").some(t => t.getAttribute("type") === "stop"));
+      const pieces = []; let left = it.dur;
+      while (left > 0) {
+        if (room === 0) { pieces.push("bar"); room = cap; }
+        const take = Math.min(left, room), sp = rebarSplit(take, div); if (!sp) return null;
+        sp.forEach(r => pieces.push(r)); left -= take; room -= take;
+      }
+      const last = pieces.filter(p => p !== "bar").length - 1; let idx = 0;
+      for (const p of pieces) {
+        if (p === "bar") { bars.push([]); continue; }
+        if (idx === 0) bar().push(...it.pre);
+        it.els.map(e => (idx === last ? e : e.cloneNode(true))).forEach((c, ci) => {
+          setLen(c, Math.round(p[0] * div), p);
+          if (!it.rest) {
+            dropTies(c);
+            if (idx > 0 || hadStop[ci]) tie(c, "stop");
+            if (idx < last || hadStart[ci]) tie(c, "start");
+            /* only the first piece keeps articulations, dynamics and lyrics; only the last one ends a slur */
+            if (idx > 0) { kids(c, "lyric").forEach(x => x.remove()); const no = kid(c, "notations"); if (no) [...no.children].filter(x => x.tagName !== "tied" && !(x.tagName === "slur" && x.getAttribute("type") === "stop")).forEach(x => x.remove()); }
+            if (idx < last) { const no = kid(c, "notations"); if (no) kids(no, "slur").filter(x => x.getAttribute("type") === "stop").forEach(x => x.remove()); }
+          }
+          bar().push(c);
+        });
+        idx++;
+      }
+    }
+    /* the last bar of the stream: rests to its end */
+    const used = cap - room;
+    if (used > 0 && used < cap) (rebarSplit(cap - used, div) || []).forEach(r => bars[bars.length - 1].push(parseXml(restXml(Math.round(r[0] * div), vs, r)).documentElement));
+    if (!used && bars.length > 1 && !bars[bars.length - 1].some(x => x.tagName === "note")) { const extra = bars.pop(); bars[bars.length - 1].push(...extra); }
+    return bars;
+  };
+  const per = [...streams].map(([vs, list]) => ({ vs, bars: barsOf(list, vs) }));
+  if (per.some(x => !x.bars)) return null;
+  const n = Math.max(...per.map(x => x.bars.length));
+  /* the bars, stream after stream with a backup between them */
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const m = doc.createElement("measure"); if (i === 0) firstAttrs.forEach(a => m.appendChild(a));
+    per.forEach((x, si) => {
+      if (si > 0) { const b = doc.createElement("backup"); b.innerHTML = `<duration>${cap}</duration>`; m.appendChild(b); }
+      let content = x.bars[i] || [];
+      const notes = content.filter(e => e.tagName === "note" && !kid(e, "chord") && !kid(e, "grace"));
+      if (!notes.length || notes.every(e => kid(e, "rest"))) content = [...content.filter(e => e.tagName !== "note"), parseXml(restXml(cap, x.vs, null)).documentElement];
+      content.forEach(e => m.appendChild(e.ownerDocument === doc ? e : doc.importNode(e, true)));
+    });
+    out.push(m);
+  }
+  tail.forEach(x => out[out.length - 1].appendChild(x));
+  if (finalBar) out[out.length - 1].appendChild(finalBar);
+  const anchor = all[stop] || null; ms.forEach(m => m.remove());
+  out.forEach(m => part.insertBefore(m, anchor));
+  return out.length;
+}

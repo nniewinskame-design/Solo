@@ -1325,13 +1325,14 @@ function buildBarSheet() {
   /* the metre is written when the choice settles (one change, one undo step), not at every tap */
   meterInline($("#bar-time"), t, v => { clearTimeout(buildBarSheet.t); buildBarSheet.t = setTimeout(() => barOp("time", v), 800); });
   $$("#bar-clef button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === c)));
-  $("#bar-clef-t").textContent = `Klucz · ${partLabel(S.parts.find(x => x.id === pid) || { id: pid, name: "" }) || "ta partia"}`;
+  /* the clef is offered only when the notes hold one instrument (Nat, 7 Oct) */
+  $("#bar-clefbox").hidden = S.parts.filter(p => p.keep).length > 1; $("#bar-clef-t").textContent = "Klucz";
   const mode = (() => { const k1 = kids(part, "measure")[0]?.getElementsByTagName("key")[0]; return k1 && txt(k1, "mode") === "minor" ? "minor" : S.srcKey?.mode || "major"; })();
   const k1 = keyAt(part, kids(part, "measure")[0]), n = Math.abs(k1);
   $("#bar-keyname").textContent = keyName(k1, mode);
   $("#bar-keysig").textContent = !n ? "Bez znaków" : `${n} ${k1 > 0 ? plural(n, "krzyżyk", "krzyżyki", "krzyżyków") : plural(n, "bemol", "bemole", "bemoli")}`;
   $$("#bar-keypick [data-kd]").forEach(b => (b.disabled = Math.abs(k1 + +b.dataset.kd) > 7));
-  $("#bar-key").value = String(k);
+  if ($("#bar-key")) $("#bar-key").value = String(k);
   $("#bar-del").disabled = kids(part, "measure").length < 2;
   $("#bar-bpm").textContent = String(curBpm());
 }
@@ -1380,7 +1381,9 @@ function beatPicker(box, cur, pick) {
   };
   draw();
 }
+let rebarred = false;
 function barOp(op, val) {
+  rebarred = false;
   const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml), parts = [...doc.getElementsByTagName("part")];
   const later = (part, from) => kids(part, "measure").slice(from);          // this bar and all after it
   if (op === "time") {
@@ -1389,6 +1392,11 @@ function barOp(op, val) {
       const ms = kids(part, "measure"); if (!ms[bar - 1]) return;
       later(part, bar).forEach(mm => kids(mm, "attributes").forEach(a => kids(a, "time").forEach(x => x.remove())));
       const t = doc.createElement("time"); t.innerHTML = `<beats>${b}</beats><beat-type>${bt}</beat-type>`; putAttr(attrsOf(doc, ms[bar - 1]), t);
+    });
+    /* the notes flow into bars of the new length (tied across bar lines); parts too complex for that keep their bars */
+    if (rebarScore(doc, parts, bar - 1, b, +bt)) rebarred = true;
+    else parts.forEach(part => {
+      const ms = kids(part, "measure"); if (!ms[bar - 1]) return;
       later(part, bar - 1).forEach(mm => {                       // empty bars take the new length
         const ns = kids(mm, "note"), vs = new Set(ns.map(n => (txt(n, "voice") || "1") + "/" + (txt(n, "staff") || "1")));
         if (!ns.length || vs.size > 1 || !ns.every(n => kid(n, "rest"))) return;     // one voice of rests only (not a piano bar)
@@ -1479,7 +1487,7 @@ function transposeScore(df) {
   hud(`Tonacja: ${$("#bar-keyname").textContent}`, 1600);
 }
 $("#bar-keypick").addEventListener("click", e => { const b = e.target.closest("[data-kd]"); if (b && !b.disabled) transposeScore(+b.dataset.kd); });
-$("#bar-key").addEventListener("change", e => barOp("key", e.target.value));
+$("#bar-key")?.addEventListener("change", e => barOp("key", e.target.value));
 $("#bar-add").addEventListener("click", () => barOp("add"));
 $("#bar-addbefore").addEventListener("click", () => barOp("addbefore"));
 $("#bar-del").addEventListener("click", () => barOp("del"));
@@ -3649,7 +3657,7 @@ $("#in-backup").addEventListener("change", async e => {
 const NEWS = { "4.0": ["Nowy, jasny wygląd, ekran startowy i nowa ikona Solo.",
   "Nuty jako strona A4, cztery takty w linii.",
   "Edytuj i Gotowe, cofnij i ponów na górze. Edycja zaczyna się od Taktu: metrum, klucz każdej partii, tonacja utworu.",
-  "Dowolne metrum (np. 5/4, 7/8, 3+2+2/8) w nowej melodii, w edycji i w metronomie.",
+  "Dowolne metrum (np. 5/4, 7/8, 3+2+2/8) w nowej melodii, w edycji i w metronomie. Po zmianie metrum nuty same przechodzą do nowych taktów.",
   "Belki ósemek: Nuta → Belka łączy z następną nutą albo rozdziela.",
   "Odsłuch przy edycji gra jak w zapisie: tonacja, długość, dynamika, instrument.",
   "Partia (dotknij nazwy instrumentu): ukryj, wycisz, zmień instrument, oktawa, co gra.",
@@ -4268,7 +4276,8 @@ function buildNewSheet() {
   /* the clefs this instrument is written in (trombone: bass, tenor; viola: alto, treble), its usual one first */
   const ins = instrById(nm.instr), clefs = [...new Set([ins.clef, ...(typeof clefsOf === "function" ? clefsOf(ins) : [])])].filter(c => CLEF_PL[c]);
   if (!clefs.includes(nm.clef)) nm.clef = ins.clef;
-  $("#new-clefs").innerHTML = clefs.map(c => `<button type="button" data-clef="${c}" aria-pressed="${c === nm.clef}">${cap(CLEF_PL[c])}</button>`).join("");
+  const CL_ICON = { treble: "g", bass: "f", tenor: "c", alto: "c" };
+  $("#new-clefs").innerHTML = clefs.map(c => `<button type="button" data-clef="${c}" aria-pressed="${c === nm.clef}"><svg class="cl ${CL_ICON[c]}"><use href="#clef-${CL_ICON[c]}"/></svg>${cap(CLEF_PL[c])}</button>`).join("");
   syncNewKey();
 }
 /* the key by its name (F-dur, d-moll) with its signature under it; − / + walk the circle of fifths (7♭ … 7♯) */
