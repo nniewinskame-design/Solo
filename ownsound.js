@@ -165,10 +165,9 @@ $("#sh-own").addEventListener("click", e => {
   if (act === "play") playScale(own.byInstr[id]);
   if (act === "again") closeSheetThen(() => openOwnFlow(id));
   if (act === "del") closeSheetThen(() => { const keep = own.byInstr[id]; delete own.byInstr[id]; ownSel = null; saveOwn(); syncOwn(); hudUndoOwn(id, keep); });
-  if (act === "re") pickInstrument("Jaki instrument?", nid => { if (nid === id) return; const other = own.byInstr[nid]; own.byInstr[nid] = own.byInstr[id]; if (other) own.byInstr[id] = other; else delete own.byInstr[id]; /* two recordings swap, nothing is lost */ ownSel = null; saveOwn(); syncOwn(); hud(`Teraz: ${instrById(nid).name}`, 1800); });
+  if (act === "re") pickInstrument("Jaki instrument?", nid => { if (nid === id) return; const other = own.byInstr[nid]; own.byInstr[nid] = own.byInstr[id]; if (other) own.byInstr[id] = other; else delete own.byInstr[id]; /* two recordings swap, nothing is lost */ ownSel = null; saveOwn(); syncOwn();  });
 });
 function hudUndoOwn(id, list) {
-  hud("Usunięto brzmienie", 4000);
   const b = document.createElement("button"); b.className = "toast-act"; b.textContent = "Cofnij";
   b.addEventListener("click", () => { own.byInstr[id] = list; saveOwn(); syncOwn(); $("#toast").classList.remove("show"); });
   $("#toast").appendChild(b);
@@ -321,7 +320,7 @@ function renderOwn() {
     foot.querySelectorAll(".of-tile").forEach(b => b.addEventListener("click", async () => { if (!(await startListening())) return; of.step = +b.dataset.i; of.revisit = true; of.state = "listen"; renderOwn(); }));
     if (got) {
       $("#of-scale").addEventListener("click", () => playScale(of.done.filter(Boolean)));
-      $("#of-save").addEventListener("click", () => { own.byInstr[of.instr] = of.done.filter(Boolean).sort((a, b) => a.midi - b.midi); store.set("ownUse", "1"); closeOwnFlow(); saveOwn().then(ok => ok && hud(`${m.name}: Solo zagra Twoim brzmieniem`, 2500)); });   // said only once it is stored
+      $("#of-save").addEventListener("click", () => { own.byInstr[of.instr] = of.done.filter(Boolean).sort((a, b) => a.midi - b.midi); store.set("ownUse", "1"); closeOwnFlow(); saveOwn(); });   // said only once it is stored
     } else $("#of-close").addEventListener("click", closeOwnFlow);
   }
 }

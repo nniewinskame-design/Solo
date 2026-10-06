@@ -639,7 +639,7 @@ function ensureOnStaff() {
     const cur = ledgerCost(idx.map(x => x + S.iv.d + 7 * (S.readOct || 0)), clef), f = fitFor(clef);
     const curScore = cur + Math.abs(S.readOct || 0) * 0.35;
     if (swapped) return true;
-    if (cur > 0.8 && f.oct !== (S.readOct || 0) && f.cost < curScore - 0.6) { const up = f.oct > (S.readOct || 0); S.readOct = f.oct; setTimeout(() => hud(up ? "Oktawę wyżej: nuty mieszczą się na pięciolinii" : "Oktawę niżej: nuty mieszczą się na pięciolinii", 3000), 900); return true; }
+    if (cur > 0.8 && f.oct !== (S.readOct || 0) && f.cost < curScore - 0.6) { const up = f.oct > (S.readOct || 0); S.readOct = f.oct; void up; return true; }
   } catch (e) { console.warn(e); }
 }
 function openPiece(piece, settings) {
@@ -880,7 +880,7 @@ function beamTap() {
   if (r === "last") { hud("To ostatnia nuta w takcie: belka łączy nuty w jednym takcie"); return; }
   if (r === "long") { hud("Belką łączy się ósemki i krótsze nuty"); return; }
   pushUndo(); S.piece.xml = new XMLSerializer().serializeToString(doc); S.keepSel = sel;
-  afterEdit(); hud(join ? "Połączone belką z następną" : "Rozdzielone");
+  afterEdit();
 }
 function xmlNoteAt(doc, sel) {
   const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === sel.pid); if (!part) return null;
@@ -915,7 +915,7 @@ function setEditMode(on) {
     const moved = S.iv.d || S.iv.s || S.clef !== "keep" || S.readOct;
     S.editView = { iv: S.iv, clef: S.clef, preset: S.preset, page: S.page, zoom: S.zoom, readOct: S.readOct };
     S.iv = { d: 0, s: 0 }; S.clef = "keep"; S.preset = -1; S.readOct = 0;
-    S.loadedKey = null; render(); if (moved) hud("Poprawiasz nuty tak, jak są zapisane", 2500);
+    S.loadedKey = null; render(); void moved;
   }
   if (!on && S.editView) { Object.assign(S, S.editView); S.editView = null; S.loadedKey = null; changed(); }
   if (!on) S.editSel = null;
@@ -1197,7 +1197,7 @@ function editNote(op) {
     ty.textContent = t; if (dotted) ty.after(doc.createElement("dot"));
     for (let c = n.nextElementSibling; c && kid(c, "chord"); c = c.nextElementSibling) { kid(c, "duration").textContent = kid(n, "duration").textContent; kids(c, "dot").forEach(d => d.remove()); plainLen(c); const ct = kid(c, "type"); if (ct) { ct.textContent = t; if (dotted) ct.after(doc.createElement("dot")); } }
     if (fitBar(doc, at.part, at.m, n)) return true;
-    if (!kid(n, "rest") && tieOver(doc, at.part, at.m, n)) { hud("Nuta przechodzi do następnego taktu (z łukiem)", 2200); S.editSel = null; return true; }
+    if (!kid(n, "rest") && tieOver(doc, at.part, at.m, n)) { S.editSel = null; return true; }
     hud("To się nie mieści w takcie", 2500); return false;
   };
   if (op.startsWith("len:") || op === "dot") {
@@ -1483,7 +1483,7 @@ function barOp(op, val) {
   refreshInfo(); afterEdit();
   /* a new metre re-sizes only empty bars; written bars that no longer add up are said, not silently left red */
   const red = op === "time" ? doubtfulBars(barIssues(S.piece.xml)).filter(b => b >= bar).length : 0;
-  hud(red ? `Metrum ${val}. ${red} ${plural(red, "takt trzeba", "takty trzeba", "taktów trzeba")} poprawić (na czerwono)` : { time: `Metrum ${val}`, clef: "Zmieniono klucz", key: "Zmieniono znaki przy kluczu", add: "Dodano takt", addbefore: "Dodano takt", del: "Usunięto takt" }[op], red ? 4000 : 1600);
+  if (red) hud(`${red} ${plural(red, "takt trzeba", "takty trzeba", "taktów trzeba")} poprawić (na czerwono)`, 4000);
   buildBarSheet();
 }
 let barClefMode = "sound";
@@ -1501,7 +1501,6 @@ function transposeScore(df) {
   pushUndo();
   S.piece.xml = transposeXmlString(S.piece.xml, iv, true);
   refreshInfo(); afterEdit(); buildBarSheet();
-  hud(`Tonacja: ${$("#bar-keyname").textContent}`, 1600);
 }
 $("#bar-keypick").addEventListener("click", e => { const b = e.target.closest("[data-kd]"); if (b && !b.disabled) transposeScore(+b.dataset.kd); });
 $("#bar-key")?.addEventListener("change", e => barOp("key", e.target.value));
@@ -2061,7 +2060,7 @@ function speedTrainer(o) {
 function trainerPass() {
   const tr = pb.trainer; if (!tr || !pb.loop) return;
   tr.pass++; if (tr.pass % tr.every || tr.pct >= tr.to) return;
-  tr.pct = Math.min(tr.to, tr.pct + tr.step); hud(`Tempo ${tr.pct}%`, 1500); play();
+  tr.pct = Math.min(tr.to, tr.pct + tr.step); play();
 }
 /* positions of everything the cursor needs, relative to #pages (they don't change while scrolling); each bar and
    its staff lines are measured once, not once per note */
@@ -2415,7 +2414,7 @@ async function savePdf(send) {
       if (send) { location.href = `mailto:?subject=${encodeURIComponent(title)}`; hud("Pobrano. Dołącz plik do wiadomości.", 4000); }
       else hud(files.length > 1 ? `Pobrano ${files.length} ${plural(files.length, "plik", "pliki", "plików")} PDF` : "Pobrano " + files[0].name, 3000);
     }
-    else hud("Gotowe", 1200);
+    else { /* shared: the share sheet itself said so */ }
   } catch (e) { console.error(e); hud("Nie udało się zapisać PDF. Spróbuj jeszcze raz.", 4000); }
   finally { pdfBusy = false; if (S.view === "score") render(); }
 }
@@ -2442,7 +2441,7 @@ async function sendImage() {
     const c = await rasterPage(el); S.loadedKey = null;
     const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.9));
     const name = safeName(S.piece.title || "Nuty") + ".jpg", file = new File([blob], name, { type: "image/jpeg" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: S.piece.title }); hud("Gotowe", 1200); return; } catch (e) { if (e && e.name === "AbortError") return; } }
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: S.piece.title }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
     download(name, blob, "image/jpeg"); hud("Pobrano " + name, 3000);
   } catch (e) { console.error(e); hud("Nie udało się przygotować obrazu.", 4000); }
   finally { pdfBusy = false; if (S.view === "score") render(); }
@@ -2813,7 +2812,7 @@ $("#confirm-yes").addEventListener("click", async () => {
     if (!(await putRecord(rec))) return;
     saveCols(cols().map(c => inCols.includes(c.id) ? { ...c, items: [...new Set([...c.items, t.id])] } : c));
     if (wasFav) saveFavs([...new Set([...favs(), t.id])]);
-    hud("Przywrócono", 1800); if (S.view === "home") refreshLibrary();
+    if (S.view === "home") refreshLibrary();
   });
   const done = () => { hudAct("Usunięto", "Cofnij", undo, 6000); refreshLibrary(); };
   if (t.fromLibrary) { closeSheetThen(done); return; }
@@ -2840,7 +2839,7 @@ async function duplicatePiece(p) {
     const src = (await DB.get(p.id)) || p, all = await DB.all(), names = new Set(all.map(x => x.title));
     const base = (src.title || "Bez tytułu").replace(/ \d+$/, ""); let k = 2, title = `${base} ${k}`; while (names.has(title)) title = `${base} ${++k}`;
     const now = Date.now(), rec = { ...src, id: "p" + now.toString(36) + Math.random().toString(36).slice(2, 7), title, created: now, updated: now, opened: now };
-    await DB.put(rec); refreshLibrary(); hud(`Kopia: ${title}`, 2500);
+    await DB.put(rec); refreshLibrary();
   } catch (e) { console.warn(e); hud(saveErrorText(e), 4000); }
 }
 
@@ -3250,7 +3249,7 @@ async function startReading() {
       $("#notice-text").textContent = "Dynamika (p, f…) i napisy, np. tempo, nie są odczytywane.";
       $("#notice").hidden = false;
     }
-    hud(skipped.length ? `Gotowe. Pominięto ${plural(skipped.length, "stronę", "strony", "strony")} bez nut: ${skipped.join(", ")}` : "Gotowe", skipped.length ? 5000 : 2400);
+    if (skipped.length) hud(`Pominięto ${plural(skipped.length, "stronę", "strony", "strony")} bez nut: ${skipped.join(", ")}`, 5000);
   } catch (e) {
     dismissCover($("#reading"));
     drawPending();                                   // pages read so far are marked and kept
@@ -4179,7 +4178,7 @@ function syncInstall() {
   const os = deviceOs(); $$("#install-steps [data-os]").forEach(p => (p.hidden = p.dataset.os !== os));
 }
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; syncInstall(); });
-window.addEventListener("appinstalled", () => { installEvt = null; syncInstall(); hud("Solo jest na ekranie początkowym", 3000); });
+window.addEventListener("appinstalled", () => { installEvt = null; syncInstall(); });
 $("#btn-install").addEventListener("click", async () => {
   if (!installEvt) return;
   installEvt.prompt(); try { await installEvt.userChoice; } catch {}
@@ -4412,7 +4411,7 @@ $("#pp-hide").addEventListener("click", () => {
   const pid = partSheetId, part = S.parts.find(p => p.id === pid); if (!part) return;
   if (S.parts.filter(p => p.keep).length < 2) { hud("To jedyna widoczna partia"); return; }
   if (S.only) { S.only = null; S.keepBefore = null; }
-  part.keep = false; closeSheet(); changed(); renderPartStrip(); hud("Ukryta. Dotknij jej nazwy, żeby wróciła");
+  part.keep = false; closeSheet(); changed(); renderPartStrip();
 });
 $("#pp-mute").addEventListener("click", () => { const id = partSheetId; if (pb.mute.has(id)) pb.mute.delete(id); else pb.mute.add(id); buildPartSheet(); renderPartStrip(); if (playState) play(playPos()); });
 async function withOnly(pid, fn) { const prev = S.only; showOnly(pid); await new Promise(r => setTimeout(r, 300)); try { await fn(); } finally { showOnly(prev); } }
@@ -4420,14 +4419,14 @@ $("#pp-print").addEventListener("click", () => closeSheetThen(() => withOnly(par
 $("#pp-send").addEventListener("click", () => closeSheetThen(async () => { const keep = exportParts; exportParts = [partSheetId]; try { await savePdf(true); } finally { exportParts = keep; } }));
 /* the same notes on another instrument (a bassoon line as the 2nd trombone); an octave up or down */
 $("#pp-instr").addEventListener("click", () => { const pid = partSheetId; closeSheetThen(() => pickInstrument("Jaki instrument?", id => {
-  pushUndo(); applyNewXml(orchestrateXml(changePartInstr(S.piece.xml, pid, instrById(instrOfPart(pid)), instrById(id), partTr(pid)), pid), pid); hudUndo(`Teraz: ${instrById(id).name}`);
+  pushUndo(); applyNewXml(orchestrateXml(changePartInstr(S.piece.xml, pid, instrById(instrOfPart(pid)), instrById(id), partTr(pid)), pid), pid); 
 })); });
 $$("#pp-up, #pp-down").forEach(b => b.addEventListener("click", () => {
   const pid = partSheetId, dir = b.id === "pp-up" ? 1 : -1, ins = S.parts.find(p => p.id === pid)?.staves > 1 ? null : instrById(instrOfPart(pid));
   const out = shiftPartOctave(S.piece.xml, pid, dir, ins), known = ins && namedInstr(pid), tr = partTr(pid);
   /* an octave the instrument cannot play is refused (the notes stay where they were) */
   if (known && outOfRange(out, pid, known, tr) > 0.2 && outOfRange(out, pid, known, tr) > outOfRange(S.piece.xml, pid, known, tr)) { hud(`${dir > 0 ? "Wyżej" : "Niżej"} ${known.name.toLowerCase()} nie zagra`, 3000); return; }
-  pushUndo(); applyNewXml(orchestrateXml(out), pid);   /* keeps its number */ hudUndo(dir > 0 ? "Oktawę wyżej" : "Oktawę niżej");
+  pushUndo(); applyNewXml(orchestrateXml(out), pid);   /* keeps its number */
 }));
 $("#pp-del").addEventListener("click", () => {
   const id = partSheetId, doc = parseXml(S.piece.xml), root = doc.documentElement;
@@ -4539,7 +4538,7 @@ $("#ap-go").addEventListener("click", () => {
     const r = addPart(S.piece.xml, ap.instr, ap.role, { int: ap.int, src: ap.src, same: (ap.role === "voice2" || ap.role === "voice3") && ap.show === "same" && !$("#ap-showbox").hidden });
     const rep = ap.replace; ap.replace = null;
     if (rep && r.id) { r.xml = replacePart(r.xml, rep, r.id); if (rep === S.melody) S.melody = r.id; }
-    pushUndo(); setPartRole(r.id, ap.role); closeSheetThen(() => { applyNewXml(r.xml, r.id); hudUndo(rep ? "Zmieniono partię" : "Dodano partię"); });
+    pushUndo(); setPartRole(r.id, ap.role); closeSheetThen(() => { applyNewXml(r.xml, r.id); if (rep) hudUndo("Zmieniono partię"); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać tej partii"); }
 });
 /* quick ensembles: duo = melody + second voice, trio = + bass; for the player's own instrument */
@@ -4557,7 +4556,7 @@ $$("#ap-quick [data-quick]").forEach(b => b.addEventListener("click", () => {
       const third = ["puzon", "puzon-alt"].includes(me.id) ? "puzon-b" : me.lo <= low - 7 || !SECTION_BASS[me.id] ? me.id : SECTION_BASS[me.id];
       const r2 = addPart(xml, third, "voice3"); xml = r2.xml; ids.push(r2.id);
     }
-    pushUndo(); setPartRole(ids[0], "voice2"); setPartRole(ids[1], "voice3"); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(b.dataset.quick === "trio" ? "Trio gotowe" : "Duet gotowy"); });
+    pushUndo(); setPartRole(ids[0], "voice2"); setPartRole(ids[1], "voice3"); closeSheetThen(() => { applyNewXml(xml, ids[0]); S.parts.forEach(p => { if (ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); });
   } catch (e) { console.error(e); hud("Nie udało się dopisać partii"); }
 }));
 
@@ -4575,7 +4574,7 @@ function quickCanon() {
     const third = ["puzon", "puzon-alt"].includes(me.id) ? "puzon-b" : me.id;
     const r = canonXml(S.piece.xml, src, [me, instrById(third)], plan.d);
     const xml = orchestrateXml(r.xml);
-    pushUndo(); closeSheetThen(() => { applyNewXml(xml, r.ids[0]); S.parts.forEach(p => { if (r.ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); hudUndo(`Kanon: wejścia co ${plan.d} ${plural(plan.d, "takt", "takty", "taktów")}`); });
+    pushUndo(); closeSheetThen(() => { applyNewXml(xml, r.ids[0]); S.parts.forEach(p => { if (r.ids.includes(p.id)) p.keep = true; }); changed(); renderPartStrip(); });
   } catch (e) { console.error(e); hud("Nie udało się zrobić kanonu"); }
 }
 /* "Zmień" a part: pick another instrument or what it plays; the new part takes the old one's place */
@@ -4641,7 +4640,7 @@ $("#col-save").addEventListener("click", () => {
   const all = cols(); let c = all.find(x => x.id === colTarget);
   if (c) Object.assign(c, { name, color: colColor });
   else { c = { id: "c" + Date.now().toString(36), name, color: colColor, items: colPiece ? [colPiece] : [] }; all.push(c); }
-  saveCols(all); closeSheetThen(() => { hud(colPiece ? `Dodano do: ${name}` : "Gotowe", 1800); refreshLibrary(); });
+  saveCols(all); closeSheetThen(() => refreshLibrary());
 });
 $("#col-del").addEventListener("click", () => {
   const all = cols(), c = all.find(x => x.id === colTarget); if (!c) return;
