@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sprawdzian odczytu · Solo TEST</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+:root{--paper:#F4EEE4;--card:#FFFCF7;--ink:#1E1714;--ink-2:#6E625A;--line:rgba(30,23,20,.12);--ok:#0B7A5E;--bad:#C93A2E;--acc:#4B1622}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.5 "Geist",system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px 16px 60px}
+main{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:28px;margin:0;letter-spacing:-.02em}
+p{margin:0}
+.muted{color:var(--ink-2)}
+.case{background:var(--card);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.case h2{font-size:19px;margin:0}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+label.file{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:#fff;border:1.5px solid var(--line);cursor:pointer;font-weight:600}
+input[type=file]{position:absolute;left:-9999px}
+button{font:600 16px inherit;font-family:inherit;padding:12px 18px;border-radius:12px;border:0;background:var(--acc);color:#fff;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+table{width:100%;border-collapse:collapse;font-size:15px}
+td,th{padding:6px 8px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--ink-2);font-size:13px}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
+.verdict{font-weight:700;font-size:17px}
+.status{font-size:14px;color:var(--ink-2)}
+code{font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Sprawdzian odczytu nut</h1>
+  <p class="muted">Tylko na stronie testowej. Wybierz zdjęcia testowe (te od Taty), kliknij „Sprawdź” i porównaj wynik z poprzednim razem: lepiej, tak samo czy gorzej. Zdjęcia zostają na Twoim urządzeniu, nic nie jest wysyłane.</p>
+  <div id="cases"></div>
+  <div class="row"><button id="run">Sprawdź wszystkie wybrane</button><span class="status" id="status"></span></div>
+  <p class="muted">Arkusze odpowiedzi są robocze. Tata potwierdza je przy okazji, a po poprawce wyniki będą jeszcze dokładniejsze.</p>
+</main>
+<script src="core.js"></script>
+<script>
+"use strict";
+/* Answer sheets: only facts about the printed music (clef, key, metre, rests, counts), never the notes themselves. */
+const CASES = [
+  { id: "hb1", name: "Hay Burner, strony 1 i 2 sklejone (00001273)",
+    expect: { clef: "F", fifths: -1, time: "4/4", timeChanges: 0, multiRests: [8, 7, 2, 7, 2, 11, 4], barErrorsMax: 0 } },
+  { id: "hb2", name: "Hay Burner, strona 2 z aplikacji PDF (00001275)",
+    expect: { clef: "F", fifths: -1, multiRests: [11, 4], barErrorsMax: 0 } },
+  { id: "sv", name: "Szwedzki podręcznik, ćwiczenia 13–21 (00001403)",
+    expect: { clef: "F", fifths: 0, time: "4/4", timeChanges: 0, naturalEB: 0, range: [46, 53], whole: 19, half: 56, shorter: 0, barErrorsMax: 0 } }
+];
+const STEP = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+function analyse(xml) {
+  const doc = parseXml(xml), part = doc.getElementsByTagName("part")[0];
+  const r = { clefs: [], times: [], fifths: null, multi: [], barErrors: 0, measures: 0, naturalEB: 0, out: [], whole: 0, half: 0, shorter: 0, flats: 0 };
+  let div = 1, beats = 4, bt = 4;
+  kids(part, "measure").forEach((m, i) => {
+    r.measures++;
+    kids(m, "attributes").forEach(a => {      // homr writes divisions and key/time/clef in separate blocks
+      const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
+      kids(a, "clef").forEach(c => r.clefs.push(txt(c, "sign")));
+      const k = kid(a, "key"); if (k && r.fifths === null) r.fifths = parseInt(txt(k, "fifths"), 10);
+      const t = kid(a, "time"); if (t) { beats = parseInt(txt(t, "beats"), 10) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; r.times.push(beats + "/" + bt); }
+      const ms = a.getElementsByTagName("multiple-rest")[0]; if (ms) r.multi.push(parseInt(ms.textContent, 10));
+    });
+    let sum = 0, rest = false;
+    kids(m, "note").forEach(n => {
+      if (kid(n, "chord") || kid(n, "grace")) return;
+      const dur = parseFloat(txt(n, "duration")) || 0; sum += dur;
+      const rr = kid(n, "rest"); if (rr) { if (rr.getAttribute("measure") === "yes") rest = true; return; }
+      const p = kid(n, "pitch"); if (!p) return;
+      const step = txt(p, "step"), alt = parseFloat(txt(p, "alter")) || 0, oct = parseInt(txt(p, "octave"), 10);
+      if ((step === "E" || step === "B") && alt === 0) r.naturalEB++;
+      if (alt < 0) r.flats++;
+      const midi = 12 * (oct + 1) + STEP[step] + alt; r.out.push(midi);
+      const type = txt(n, "type"); if (type === "whole") r.whole++; else if (type === "half") r.half++; else r.shorter++;
+    });
+    const want = div * beats * 4 / bt;
+    if (!rest && sum > 0 && Math.abs(sum - want) > 0.01 && i > 0) r.barErrors++;
+  });
+  return r;
+}
+function judge(c, r) {
+  const e = c.expect, checks = [];
+  const add = (label, ok, got, want) => checks.push({ label, ok, got, want });
+  add("Klucz basowy w całym utworze", r.clefs.length > 0 && r.clefs.every(s => s === e.clef), r.clefs.join(", ") || "brak", "tylko F (basowy)");
+  add("Znaki przykluczowe", r.fifths === e.fifths, r.fifths === null ? "brak" : (r.fifths < 0 ? -r.fifths + " ♭" : r.fifths > 0 ? r.fifths + " ♯" : "bez znaków"), e.fifths < 0 ? -e.fifths + " ♭" : "bez znaków");
+  if (e.time) add("Metrum (C = 4/4)", r.times[0] === e.time, r.times[0] || "brak", e.time);
+  if (e.timeChanges !== undefined) add("Bez zmian metrum, których nie ma w nutach", new Set(r.times).size - 1 <= e.timeChanges, r.times.join(" → ") || "brak", "jedno metrum");
+  if (e.multiRests) { const found = e.multiRests.filter(v => r.multi.includes(v)).length; add("Pauzy wielotaktowe", found === e.multiRests.length, r.multi.join(", ") || "brak", e.multiRests.join(", ")); }
+  add("Takty, które się nie sumują", r.barErrors <= e.barErrorsMax, String(r.barErrors), String(e.barErrorsMax));
+  if (e.naturalEB !== undefined) add("Bemole przy E i H zachowane", r.naturalEB === e.naturalEB, r.naturalEB + " bez bemola", "0");
+  if (e.range) { const bad = r.out.filter(m => m < e.range[0] || m > e.range[1]).length; add("Bez przesunięć o oktawę", bad === 0, bad + " poza zakresem", "0"); }
+  if (e.whole !== undefined) add("Całe nuty", Math.abs(r.whole - e.whole) <= 1, String(r.whole), String(e.whole));
+  if (e.half !== undefined) add("Półnuty", Math.abs(r.half - e.half) <= 2, String(r.half), String(e.half));
+  if (e.shorter !== undefined) add("Bez krótszych nut, których nie ma", r.shorter <= e.shorter, String(r.shorter), String(e.shorter));
+  return checks;
+}
+const box = document.getElementById("cases"), files = {};
+CASES.forEach(c => {
+  const el = document.createElement("section"); el.className = "case"; el.id = "c-" + c.id;
+  el.innerHTML = `<h2>${c.name}</h2><div class="row"><label class="file" for="f-${c.id}">Wybierz zdjęcie</label><input type="file" id="f-${c.id}" accept="image/*"><span class="status" id="n-${c.id}">nie wybrano</span></div><div id="r-${c.id}"></div>`;
+  box.appendChild(el);
+  el.querySelector("input").addEventListener("change", e => { files[c.id] = e.target.files[0]; document.getElementById("n-" + c.id).textContent = files[c.id] ? files[c.id].name : "nie wybrano"; });
+});
+let rec = null;
+async function recognizer() {
+  if (rec) return rec;
+  const mod = await import("./homr/homr.js"), abs = p => new URL(p, location.href).href;
+  rec = await mod.createRecognizer({ baseUrl: abs("homr/models/"), wasmPaths: abs("homr/ort/"), prefer: store.get("homrPrefer", "webgpu"),
+    createWorker: () => new Worker(abs("homr/worker.js"), { type: "module" }) });
+  return rec;
+}
+async function toBlob(file) {
+  const url = URL.createObjectURL(file); const img = await loadImage(url); URL.revokeObjectURL(url);
+  return await (await fetch(canvasToJpeg(img, 2400, 0.9))).blob();     // the same preparation as the app
+}
+const status = document.getElementById("status");
+document.getElementById("run").addEventListener("click", async () => {
+  const btn = document.getElementById("run"); btn.disabled = true;
+  try {
+    for (const c of CASES) {
+      if (!files[c.id]) continue;
+      const out = document.getElementById("r-" + c.id); out.innerHTML = "<p class='status'>Czytam…</p>";
+      const t0 = performance.now(), r0 = await recognizer();
+      const res = await r0.recognizePage(await toBlob(files[c.id]), { ocr: false, onProgress: p => { status.textContent = `${c.name}: ${p.stage}${p.total ? " " + Math.min(p.done + 1, p.total) + "/" + p.total : ""}`; } });
+      if (!res.ok) { out.innerHTML = `<p class="bad">Odczyt nieudany: ${res.error}</p>`; continue; }
+      const xml = homrToSolo([res.musicXml], c.name), r = analyse(xml), checks = judge(c, r);
+      const passed = checks.filter(x => x.ok).length, key = "sprawdzian:" + c.id;
+      const prev = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
+      const verdict = !prev ? "Pierwszy pomiar" : passed > prev.passed ? "Lepiej niż poprzednio" : passed < prev.passed ? "Gorzej niż poprzednio" : "Tak samo jak poprzednio";
+      try { localStorage.setItem(key, JSON.stringify({ passed, total: checks.length, at: Date.now(), version: window.SOLO_VERSION || "" })); } catch {}
+      window.LAST = window.LAST || {}; window.LAST[c.id] = { xml, raw: res.musicXml, passed, total: checks.length, r, checks, ms: Math.round(performance.now() - t0), backend: r0.backend };
+      out.innerHTML = `<p class="verdict">${passed} z ${checks.length} zgodnych · ${verdict}${prev ? ` (wcześniej ${prev.passed} z ${prev.total})` : ""}</p>
+        <table><tr><th>Sprawdzam</th><th>Wynik</th><th>Odczytane</th><th>Powinno być</th></tr>
+        ${checks.map(x => `<tr><td>${x.label}</td><td class="${x.ok ? "ok" : "bad"}">${x.ok ? "zgadza się" : "nie zgadza się"}</td><td>${x.got}</td><td>${x.want}</td></tr>`).join("")}</table>
+        <p class="status">Takty: ${r.measures} · czas: ${Math.round((performance.now() - t0) / 1000)} s · tryb: ${r0.backend}</p>`;
+    }
+    status.textContent = "Gotowe.";
+  } catch (e) { status.textContent = "Błąd: " + (e && e.message || e); console.error(e); }
+  btn.disabled = false;
+});
+/* the reader's fast mode needs the service worker's isolation headers, like the app */
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(() => { if (!navigator.serviceWorker.controller && !sessionStorage.getItem("sw-reload")) { sessionStorage.setItem("sw-reload", "1"); navigator.serviceWorker.ready.then(() => location.reload()); } }).catch(() => {});
+</script>
+</body>
+</html>

@@ -102,6 +102,13 @@ def apply_overlay(dest, build):
     (dest / ".nojekyll").write_text("")
 
 
+def add_test_pages(dest):
+    # pages that exist only on the test site (never live): tools/sprawdzian/*
+    for f in (REPO / "tools" / "sprawdzian").glob("*"):
+        if f.is_file():
+            shutil.copy2(f, dest / f.name)
+
+
 def cmd_preview(folder):
     dest = Path(folder or REPO.parent / "solo-preview").resolve()
     if dest == REPO or REPO in dest.parents:
@@ -110,6 +117,7 @@ def cmd_preview(folder):
     files = git("ls-files", "--cached", "--others", "--exclude-standard").splitlines()
     copy_tree(dest, files)
     apply_overlay(dest, "podgląd")
+    add_test_pages(dest)
     print(f"Test copy built in {dest}\nTo look at it:  python3 -m http.server 8000 --directory \"{dest}\"  → http://localhost:8000/")
 
 
@@ -139,6 +147,7 @@ def cmd_test():
             shutil.rmtree(p) if p.is_dir() else p.unlink()
     copy_tree(SITE_DIR, git("ls-files").splitlines())
     apply_overlay(SITE_DIR, build)
+    add_test_pages(SITE_DIR)
     bf.write_text(f"{build}\n")
 
     git("add", "-A", cwd=SITE_DIR)
