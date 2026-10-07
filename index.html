@@ -196,6 +196,7 @@
     </div>
     <figure class="peek" id="peek" hidden><canvas id="peek-c"></canvas><figcaption><span id="peek-t">Oryginał</span><button class="x" id="peek-x" aria-label="Zamknij"><svg class="i"><use href="#x"/></svg></button></figcaption></figure>
     <button class="follow-pill" id="follow-pill" hidden><svg class="i"><use href="#down"/></svg><span>Wróć do grania</span></button>
+    <div class="ed-zoom" id="ed-zoom" role="group" aria-label="Powiększenie w edycji"><button type="button" data-ez="-1" aria-label="Mniejsze nuty"><svg class="i"><use href="#minus"/></svg></button><span id="ed-zoom-v">100%</span><button type="button" data-ez="1" aria-label="Większe nuty"><svg class="i"><use href="#plus"/></svg></button></div>
     <div class="pages" id="pages"><div class="loading-page"><span class="spinner"></span></div></div>
   </div>
   <div class="editor" id="editbar" role="toolbar" aria-label="Popraw nuty" hidden>
@@ -673,7 +674,7 @@
   </div>
   <h3 class="lbl">Plik</h3>
   <div class="list">
-    <button class="li tap" id="btn-save"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Zapisz</b><small>PDF na tym urządzeniu</small></span><svg class="i chev"><use href="#right"/></svg></button>
+    <button class="li tap" id="btn-save"><span class="ic"><svg class="i"><use href="#download"/></svg></span><span class="grow"><b>Zapisz</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-share"><span class="ic"><svg class="i"><use href="#share"/></svg></span><span class="grow"><b>Udostępnij</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-print"><span class="ic"><svg class="i"><use href="#print"/></svg></span><span class="grow"><b>Drukuj</b></span><svg class="i chev"><use href="#right"/></svg></button>
     <button class="li tap" id="btn-restore" hidden><span class="ic"><svg class="i"><use href="#undo"/></svg></span><span class="grow"><b>Przywróć odczyt</b></span></button>

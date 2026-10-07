@@ -193,7 +193,7 @@ function readingPartId() {
 /* the score as it is drawn; the same piece and settings give the same text, so taps and bar lookups do not parse,
    beam and serialise the whole score again */
 function processedXml() {
-  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff(), S.layout, S.meterLines, S.pz || 1].join("\u0001");
+  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff(), S.layout, S.meterLines, S.pz || 1, editZoom()].join("\u0001");
   if (processedXml.key === key) return processedXml.out;
   const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
 }
@@ -362,7 +362,10 @@ function processedXmlNow() {
    method books), three or two when the bars are crowded (many short notes in the busiest part). A pickup bar joins the
    first line; a lone last bar joins the line before it when that line is light. A scanned piece shown "as in the
    original" keeps the lines of the paper. */
-const castsOff = () => !!S.piece && S.page !== "screen" && !(S.layout === "orig" && S.hasLines);
+/* while editing with bigger notes the lines are laid out again (fewer bars a line), also for a scan kept as in the
+   original; the paper itself keeps its layout */
+const editZoom = () => (S.editMode ? S.ez || 1 : 1);
+const castsOff = () => !!S.piece && S.page !== "screen" && (!(S.layout === "orig" && S.hasLines) || editZoom() > 1);
 function castOff(root) {
   const parts = kids(root, "part"); if (!parts.length) return;
   const bars = kids(parts[0], "measure").length; if (!bars) return;
@@ -379,7 +382,7 @@ function castOff(root) {
   while (i < bars) {
     const look = busy.slice(i, i + 4), avg = look.reduce((a, b) => a + b, 0) / look.length;
     let n = avg > 14 ? 2 : avg > 10 ? 3 : 4;
-    n = Math.max(1, Math.round(n / Math.max(1, S.pz || 1)));          // bigger notes ("Wielkość nut"): fewer bars a line
+    n = Math.max(1, Math.round(n / Math.max(1, (S.pz || 1) * editZoom())));          // bigger notes ("Wielkość nut", or zoomed in while editing): fewer bars a line
     for (let k = i + 1; k < i + n; k++) if (forced.has(k)) { n = k - i; break; }
     lines.push([i, Math.min(bars, i + n)]); i += n;
   }

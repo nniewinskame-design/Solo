@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.6";
+const VERSION = "4.2.7";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -826,6 +826,8 @@ function pagedXml(xml, opts) {
    screen, the PDF, print and the picture all use it, so they look the same (Nat: +/− did not enlarge the notes and the
    picture came out smaller) */
 const paperZoom = () => (S.layout === "orig" && S.hasLines ? scanZoom() : 1) * (S.pz || 1);
+/* on screen while editing: the paper's size times the editing zoom (Nat: zoom in to edit more easily) */
+const screenZoom = () => paperZoom() * editZoom();
 function a4Options(extra, zoom = paperZoom()) {
   const z = zoom, r = v => Math.round(v / z);
   return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: castsOff() ? "line" : S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
@@ -967,7 +969,7 @@ async function doRender() {
       /* a scan shown as in the original: its lines are filled to the full width, the last one too, and the staff gets
          the size it has on the paper relative to the line's length (an exercise book prints big staves) */
       const orig = S.layout === "orig" && S.hasLines;
-      opts = a4Options(orig ? { minLastJustification: 0 } : {}, paperZoom());
+      opts = a4Options(orig ? { minLastJustification: 0 } : {}, screenZoom());
     }
     else {
       const px = 38 * S.zoom;
@@ -3263,6 +3265,12 @@ const setZoom = z => {
   $("#zoom-val").textContent = Math.round(z * 100) + "%"; if (S.piece) { S.dirty = true; autosave(); }
 };
 $("#zoom-in").addEventListener("click", () => setZoom(zoomNow() + .1));
+/* the editing zoom: 100–250%, only while editing; leaving editing shows the page as it prints again */
+$("#ed-zoom").addEventListener("click", e => {
+  const b = e.target.closest("[data-ez]"); if (!b) return;
+  S.ez = Math.max(1, Math.min(2.5, Math.round(((S.ez || 1) + 0.25 * +b.dataset.ez) * 100) / 100));
+  $("#ed-zoom-v").textContent = Math.round(S.ez * 100) + "%"; S.loadedKey = null; render();
+});
 $("#zoom-out").addEventListener("click", () => setZoom(zoomNow() - .1));
 [["#f-title", "title"], ["#f-composer", "composer"], ["#f-instrument", "instrument"]].forEach(([sel, k]) => {
   $(sel).addEventListener("change", e => { S.piece[k] = e.target.value.trim(); if (k === "title" && !S.piece.title) S.piece.title = "Bez tytułu"; changed(); if (k === "instrument" && openSheetId === "more") buildMoreSheet(); });
