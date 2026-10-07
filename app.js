@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.4";
+const VERSION = "4.2.5";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -26,7 +26,7 @@ const engineReady = new Promise(resolve => {
 const S = {
   view: "home", piece: null, parts: [], srcKey: { fifths: 0, mode: "major" }, srcClef: "treble",
   clef: "keep", iv: { d: 0, s: 0 }, preset: -1,
-  zoom: Math.max(.5, Math.min(2, Number(store.get("zoom2", 0.8)) || 0.8)), tempo: 100,
+  zoom: Math.max(.5, Math.min(2, Number(store.get("zoom2", 1)) || 1)), tempo: 100,
   dirty: false, thumbDirty: false, loadedKey: null, mode: null
 };
 const CLEF_PL = { treble: "wiolinowy", bass: "basowy", tenor: "tenorowy", alto: "altowy" };
@@ -549,7 +549,8 @@ function loadState(piece, settings) {
     if (Number.isInteger(settings.preset)) S.preset = settings.preset;
     if (settings.bpm >= 20 && settings.bpm <= 300) S.bpm = Math.round(settings.bpm);
     if (settings.zoom >= .5 && settings.zoom <= 2) S.zoom = settings.zoom;
-    if (settings.pz >= .6 && settings.pz <= 1.8) S.pz = settings.pz;
+    /* note size on the page (4.2.4+, "nz"); the old page-view zoom ("pz") is not carried over: every piece opens at 100% */
+    if (settings.nz >= .6 && settings.nz <= 1.8) S.pz = settings.nz;
     if (Number.isInteger(settings.readOct)) S.readOct = Math.max(-2, Math.min(2, settings.readOct));
     /* settings saved before 3.9: the octave picked for the reading clef sat inside the transposition and moved every
        part; it now belongs to the part being read only */
@@ -701,7 +702,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, trShift: S.piece.trShift || 0, partRoles: S.piece.partRoles || null, noticeOff: !!S.piece.noticeOff, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { melody: S.melody || null, keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, pz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing, meterLines: S.meterLines !== false },
+    settings: { melody: S.melody || null, keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, nz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing, meterLines: S.meterLines !== false },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
