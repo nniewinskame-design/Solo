@@ -227,7 +227,9 @@ function processedXmlNow() {
         const voices = new Map(); list.forEach(n => { const v = txt(n, "voice") || "1"; voices.set(v, [...(voices.get(v) || []), n]); });
         voices.forEach(vs => {
           const sum = vs.reduce((a, n) => a + (parseFloat(txt(n, "duration")) || 0), 0); if (sum > cap + 1e-6) return;
-          const seen = vs.find(n => n.getAttribute("print-object") !== "no"), keep = vs[0], r = kid(keep, "rest");
+          /* only a bar of drawn rests (or of empty room alone) becomes one; rests left beside empty room stay where they are */
+          const shown = vs.filter(n => n.getAttribute("print-object") !== "no"); if (shown.length && shown.length < vs.length) return;
+          const seen = shown[0], keep = vs[0], r = kid(keep, "rest");
           if (seen && seen !== keep) { const sr = kid(seen, "rest"); [...r.children].forEach(c => c.remove()); [...sr.children].forEach(c => r.appendChild(c.cloneNode(true))); }
           if (seen) keep.removeAttribute("print-object"); else keep.setAttribute("print-object", "no");
           kid(keep, "duration").textContent = String(cap);

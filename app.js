@@ -884,7 +884,11 @@ function endLines(root) {
       const L = ob[i], R = ob[i + 1], NL = nb[i], NR = nb[i + 1];
       const xs = [...m.querySelectorAll(":scope > g.staff > g.layer > *:not(.mRest):not(.multiRest)")].map(minX).filter(x => x != null && x < R);
       if (!xs.length) return lin([L, R], [NL, NR]);
-      const lo = Math.min(...xs), hi = Math.max(...xs), a = NL + (i ? 1.5 : 1.8) * sp, b = NR - (R - hi);
+      /* only a first note that stands at the start of its bar gets the fixed room; one after empty room keeps its place
+         in time (Nat: a rest was pulled onto the bar line) */
+      const lo = Math.min(...xs), hi = Math.max(...xs);
+      if (lo - L > 3.5 * sp) return lin([L, R], [NL, NR]);
+      const a = NL + (i ? 1.5 : 1.8) * sp, b = NR - (R - hi);
       if (a >= NR - sp) return lin([L, R], [NL, NR]);
       const os = lo > L ? [L, lo] : [lo], ns = lo > L ? [NL, a] : [a];
       if (hi > lo && b > a + 1) { os.push(hi); ns.push(b); }
@@ -1103,11 +1107,12 @@ function selectNote(sel) {
   $$("#editbar .ed-pane[data-pane=pitch] button, #editbar .ed-pane[data-pane=marks] button").forEach(b => (b.disabled = !n || (isRest && !["left", "right", "up", "down"].includes(b.dataset.ed))));
   /* Dodaj: the lengths show what the chosen note has (a chosen rest: tapping a length makes it that note); with
      nothing chosen they are what the next tap writes, as notes or, with "–" on, as rests */
-  const restMode = n ? isRest : !!S.inRest, cur = n ? (isRest ? null : (txt(n, "type") || "whole")) : (S.inLen || "quarter");
-  $$("#editbar [data-len]").forEach(b => { b.setAttribute("aria-pressed", String(b.dataset.len === cur)); const u = b.querySelector("use"); if (u) u.setAttribute("href", `#${!n && S.inRest ? "r" : "n"}-${b.dataset.len}`); });
+  /* Dodaj: a row of notes and a row of rests; the chosen note or rest shows its length; with nothing chosen the
+     pressed one is what the next tap writes */
+  const restMode = n ? isRest : !!S.inRest, cur = n ? (kid(n, "rest") && kid(n, "rest").getAttribute("measure") === "yes" ? "whole" : (txt(n, "type") || "whole")) : (S.inLen || "quarter");
+  $$("#editbar [data-len]").forEach(b => b.setAttribute("aria-pressed", String(!restMode && b.dataset.len === cur)));
+  $$("#editbar [data-rlen]").forEach(b => b.setAttribute("aria-pressed", String(restMode && b.dataset.rlen === cur)));
   $("#ed-dot").setAttribute("aria-pressed", String(n ? !!kid(n, "dot") : !!S.inDot));
-  $("#ed-restmode").setAttribute("aria-pressed", String(restMode));
-  $("#ed-restmode").setAttribute("aria-label", n ? (isRest ? "Zamień pauzę na nutę" : "Zamień nutę na pauzę") : "Pauza: następne dotknięcie wstawia pauzę");
   ["#ed-flat", "#ed-sharp"].forEach(id => ($(id).disabled = !n || isRest));
   $("#ed-beam").disabled = !n || isRest || !BEAMABLE[txt(n, "type")];
   if (n && !isRest) { const docB = parseXml(S.piece.xml), atB = xmlNoteAt(docB, sel), on = !!atB && beamJoined(docB, atB); $("#ed-beam").setAttribute("aria-pressed", String(on)); $("#ed-beam").setAttribute("aria-label", on ? "Rozdziel belkę z następną nutą" : "Połącz belką z następną nutą"); }
@@ -1263,10 +1268,16 @@ function addAt(m, X, Y) {
 $$("#editbar [data-tab-ed]").forEach(b => b.addEventListener("click", () => edTab(S.edTab === b.dataset.tabEd ? null : b.dataset.tabEd)));     // a second tap closes the tool
 /* a length: the chosen note gets it, a chosen rest becomes a note of it (Nat), nothing chosen: what the next tap writes */
 $$("#editbar [data-len]").forEach(b => b.addEventListener("click", () => {
-  S.inLen = b.dataset.len;
+  S.inLen = b.dataset.len; S.inRest = false;
   if (!S.editSel) { selectNote(null); return; }
   const at = xmlNoteAt(parseXml(S.piece.xml), S.editSel);
   editNote((at && at.n && kid(at.n, "rest") ? "tonote:" : "len:") + b.dataset.len);
+}));
+/* a rest length: the chosen note or rest becomes that rest; nothing chosen: the next tap writes that rest */
+$$("#editbar [data-rlen]").forEach(b => b.addEventListener("click", () => {
+  S.inLen = b.dataset.rlen; S.inRest = true;
+  if (!S.editSel) { selectNote(null); return; }
+  editNote("torest:" + b.dataset.rlen);
 }));
 $("#ed-dot").addEventListener("click", () => { if (S.editSel) editNote("dot"); else { S.inDot = !S.inDot; selectNote(null); } });
 $("#ed-flat").addEventListener("click", () => editNote("flat"));
@@ -1311,8 +1322,6 @@ function lineOp(op, val) {
 $$("#line-kind [data-ls]").forEach(b => b.addEventListener("click", () => lineOp("linestyle", b.dataset.ls)));
 $("#line-add").addEventListener("click", () => lineOp("add"));
 $("#line-newline").addEventListener("click", () => lineOp("newline"));
-/* "–": a chosen note becomes a rest and a chosen rest a note; with nothing chosen the next tap writes a rest */
-$("#ed-restmode").addEventListener("click", () => { if (S.editSel) editNote("rest"); else { S.inRest = !S.inRest; selectNote(null); } });
 /* Kosz: whatever is chosen goes: a note (a rest takes its place), a rest (the music after it moves up), a bar line
    (the two bars become one), a bar chosen in Takt, or a bar holding only a whole-bar rest */
 function deleteChosen() {
@@ -1440,7 +1449,7 @@ function undo() { if (!S.undo || !S.undo.length) return false; (S.redo = S.redo 
 function redo() { if (!S.redo || !S.redo.length) return false; S.undo.push(S.piece.xml); restoreXml(S.redo.pop()); return true; }
 function editNote(op) {
   if (op === "done") { setEditMode(false); return; }
-  if ((op.startsWith("len:") || op.startsWith("tonote:")) && !S.editSel) return;
+  if ((op.startsWith("len:") || op.startsWith("tonote:") || op.startsWith("torest:")) && !S.editSel) return;
   if (op === "bar") { edTab("bar"); return; }
   if (op === "beam") { beamTap(); return; }
   if (op === "undo") { undo(); return; }
@@ -1499,7 +1508,12 @@ function editNote(op) {
     if (!kid(n, "rest") && tieOver(doc, at.part, at.m, n)) { S.editSel = null; return true; }
     hud("To się nie mieści w takcie", 2500); return false;
   };
-  if (op.startsWith("tonote:")) {
+  if (op.startsWith("torest:")) {
+    /* a chosen note or rest becomes a drawn rest of the tapped length */
+    if (kid(n, "chord")) return;
+    if (p) toRest(n); n.removeAttribute("print-object");
+    if (!setLen(op.slice(7), false)) return;
+  } else if (op.startsWith("tonote:")) {
     /* a chosen rest becomes a note of the tapped length (at the height of the note before it) */
     if (!kid(n, "rest")) return;
     toNote(); if (!setLen(op.slice(7), false)) return;
