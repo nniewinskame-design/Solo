@@ -2092,3 +2092,8 @@ svg.cl.g{height:27px!important;margin:-3px 0!important}
 .card .more svg.i{width:20px;height:20px}
 /* Opis → Instrument as a list */
 .li .f-select{flex:1;min-width:0;border:0;background:transparent;font:inherit;color:var(--ink);text-align:right;appearance:none;-webkit-appearance:none;padding:8px 0}
+/* Utwór: "Popraw znaki przy kluczu" under the key */
+.kp-hint{margin:6px 0 0;text-align:center;font-size:12px;color:var(--ink-3)}
+.keyfix{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:8px 10px;box-shadow:var(--card-shadow,0 1px 2px rgb(15 23 42/.06))}
+.keyfix .kf-val{display:flex;flex-direction:column;align-items:center;line-height:1.2}
+.keyfix .kf-val b{font-size:16px}.keyfix .kf-val small{font-size:12px;color:var(--ink-3)}

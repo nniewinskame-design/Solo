@@ -991,20 +991,26 @@ function staffSlots() {
   return out;
 }
 const staffsOf = m => [...m.children].filter(c => c.classList && c.classList.contains("staff"));
+/* empty room (print-object="no") is not drawn: the k-th drawn note or rest of a bar is the k-th shown one in the file */
+const shownNote = x => x.getAttribute("print-object") !== "no";
+function xmlIndexOf(mm, k) { const xs = kids(mm, "note"); let c = -1; for (let j = 0; j < xs.length; j++) if (shownNote(xs[j]) && ++c === k) return j; return -1; }
+const drawnIndexOf = (mm, i) => kids(mm, "note").slice(0, i).filter(shownNote).length;
+function storedBar(pid, bar) { const part = [...parseXml(S.piece.xml).getElementsByTagName("part")].find(p => p.getAttribute("id") === pid); return part ? kids(part, "measure")[bar - 1] || null : null; }
 function locateNote(el) {
   const m = el.closest("g.measure"); if (!m) return null;
   const di = [...$$("#pages g.measure")].indexOf(m), bar = drawnBars(processedXml())[di];
   const st = el.closest("g.staff"), si = Math.max(0, staffsOf(m).indexOf(st)), slot = staffSlots()[si];
   if (!slot) return null;
   if (slot.multi) return { piano: true };
-  const i = [...(st || m).querySelectorAll(NOTE_SEL)].indexOf(el);
-  return bar && i >= 0 ? { bar, i, di, si, pid: slot.pid } : null;
+  const k = [...(st || m).querySelectorAll(NOTE_SEL)].indexOf(el), mm = bar && storedBar(slot.pid, bar), j = mm ? xmlIndexOf(mm, k) : k;
+  return bar && k >= 0 ? { bar, i: j >= 0 ? j : k, di, si, pid: slot.pid } : null;
 }
 function drawnNote(sel) {
   /* the drawn bar is found from the bar number (a note moved into another bar, or bars added, keep their place) */
   const di = sel.bar ? drawnBars(processedXml()).indexOf(sel.bar) : sel.di;
   const m = $$("#pages g.measure")[di >= 0 ? di : sel.di], st = m && (staffsOf(m)[sel.si] || m);
-  return st ? [...st.querySelectorAll(NOTE_SEL)][sel.i] : null;
+  const mm = sel.pid && storedBar(sel.pid, sel.bar), k = mm ? drawnIndexOf(mm, sel.i) : sel.i;
+  return st ? [...st.querySelectorAll(NOTE_SEL)][k] : null;
 }
 /* in correcting mode a finger does not have to hit the note head: the closest note or rest is taken */
 function nearestNote(x, y, max = 90, sel = NOTE_SEL) {
@@ -1214,20 +1220,23 @@ function addAt(m, X, Y) {
   const { div } = barCap(part, mm), want = S.inLen || "quarter", dotted = !!S.inDot;
   const drawn = [...st.querySelectorAll(NOTE_SEL)], xml = kids(mm, "note");
   const cx = el => { const r = el.getBoundingClientRect(); return (r.left + r.right) / 2; };
-  /* the first note to the right of the tap (a chord counts once, by its first note) */
-  let i = drawn.findIndex(el => cx(el) > X); if (i < 0) i = drawn.length;
+  /* the drawn notes left and right of the tap, as places in the file (a chord counts once, by its first note) */
+  const k = (x => (x < 0 ? drawn.length : x))(drawn.findIndex(el => cx(el) > X));
+  let i = k < drawn.length ? xmlIndexOf(mm, k) : xml.length; if (i < 0) i = xml.length;
   while (i < xml.length && kid(xml[i], "chord")) i++;
-  let pi = i - 1; while (pi > 0 && kid(xml[pi], "chord")) pi--;
+  let pi = k > 0 ? xmlIndexOf(mm, k - 1) : -1; while (pi > 0 && kid(xml[pi], "chord")) pi--;
   const prev = pi >= 0 ? xml[pi] : null, voice = txt(prev || xml[0], "voice") || "1", staffNo = txt(prev || xml[0], "staff");
+  /* empty room between them (or anywhere in a bar of rests) takes the new note */
+  const room = xml.slice(pi + 1, i).find(x => kid(x, "rest") && !shownNote(x)) || (xml.every(x => kid(x, "rest")) ? xml[0] : null);
   const step = STEP_N[((idx % 7) + 7) % 7], oct = Math.floor(idx / 7), alt = keyAlter(keyAt(part, mm), step);
   const head = S.inRest ? "<rest/>" : `<pitch><step>${step}</step>${alt ? `<alter>${alt}</alter>` : ""}<octave>${oct}</octave></pitch>`;
   let n;
-  const intoRest = prev && kid(prev, "rest") ? prev : (xml.length === 1 && kid(xml[0], "rest") ? xml[0] : null);
+  const intoRest = room || (prev && kid(prev, "rest") ? prev : null);
   if (intoRest) {
     /* the tap is in a rest's room (or the bar is empty): the rest becomes the new note, as long as fits there */
-    n = intoRest; const r = kid(n, "rest"), room = parseFloat(txt(n, "duration")) || 0;
+    n = intoRest; n.removeAttribute("print-object"); const r = kid(n, "rest"), space = parseFloat(txt(n, "duration")) || 0;
     const tmp = parseXml(`<x>${head}</x>`).documentElement.firstElementChild; n.replaceChild(doc.importNode(tmp, true), r);
-    const fits = t => ED_LEN[t] * div * (dotted ? 1.5 : 1) <= room + 1e-6;
+    const fits = t => ED_LEN[t] * div * (dotted ? 1.5 : 1) <= space + 1e-6;
     const t = fits(want) ? want : ED_TYPES.slice().reverse().find(fits) || "16th";
     writeLen(doc, n, t, dotted && fits(want), div);
   } else {
@@ -1537,8 +1546,10 @@ function editNote(op) {
           const gb = group(nb), pa = doc.createElement("x"), pb2 = doc.createElement("x");
           first.before(pa); gb[0].before(pb2); g.forEach(x => pb2.before(x)); gb.forEach(x => pa.before(x)); pa.remove(); pb2.remove();
         } else {
-          /* at the bar line: into the next (previous) bar, into the rests at its start (end) */
-          if (right && mi === ms.length - 1) { newBarAfterLast(); ms = kids(at.part, "measure"); }
+          /* at the bar line the note stays in its bar (Nat: it jumped into the next bar); only to the right of the
+             piece's last bar a new bar is made and the note goes there */
+          if (!(right && mi === ms.length - 1)) { hud(right ? "To koniec taktu" : "To początek taktu", 1500); return; }
+          newBarAfterLast(); ms = kids(at.part, "measure");
           const other = ms[mi + (right ? 1 : -1)]; if (!other) return;
           if (kids(other, "backup").length) { hud("Sąsiedni takt ma dwa głosy", 2500); return; }
           const oh = heads(other), orun = []; for (let j = right ? 0 : oh.length - 1; j >= 0 && j < oh.length && isR(oh[j]); j += right ? 1 : -1) orun.push(oh[j]);
@@ -1704,6 +1715,9 @@ function buildBarSheet() {
   $("#bar-keysig").textContent = !n ? "Bez znaków" : `${n} ${k1 > 0 ? plural(n, "krzyżyk", "krzyżyki", "krzyżyków") : plural(n, "bemol", "bemole", "bemoli")}`;
   $$("#bar-keypick [data-kd]").forEach(b => (b.disabled = Math.abs(k1 + +b.dataset.kd) > 7));
   if ($("#bar-key")) $("#bar-key").value = String(k);
+  /* "Popraw znaki przy kluczu": the signature from this bar on, written as it is (for a misread signature) */
+  $("#bar-kf-val").textContent = !k ? "Bez znaków" : `${Math.abs(k)} ${k > 0 ? "♯" : "♭"}`;
+  $$("#bar-keyfix [data-kf]").forEach(b => (b.disabled = Math.abs(k + +b.dataset.kf) > 7));
   $("#bar-bpm").textContent = String(curBpm());
 }
 /* any metre (Nat, 7 Oct): four common ones one tap away, and a small field shaped like a chip to type any other:
@@ -1899,6 +1913,13 @@ function transposeScore(df) {
   S.piece.xml = transposeXmlString(S.piece.xml, iv, true);
   refreshInfo(); afterEdit(); buildBarSheet();
 }
+/* the key signature alone changes; every note keeps its line and space (and its own ♯ ♭ ♮ against the key) */
+$("#bar-keyfix").addEventListener("click", e => {
+  const b = e.target.closest("[data-kf]"); if (!b || b.disabled) return;
+  const { bar, pid } = barTarget(), part = [...parseXml(S.piece.xml).getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || parseXml(S.piece.xml).getElementsByTagName("part")[0];
+  const m = part && kids(part, "measure")[bar - 1]; if (!m) return;
+  barOp("key", String(keyAt(part, m) + +b.dataset.kf));
+});
 $("#bar-keypick").addEventListener("click", e => { const b = e.target.closest("[data-kd]"); if (b && !b.disabled) transposeScore(+b.dataset.kd); });
 $("#bar-key")?.addEventListener("change", e => barOp("key", e.target.value));
 [["#bar-bpm-down", -4], ["#bar-bpm-up", 4]].forEach(([s, d]) => $(s).addEventListener("click", () => { setBpm(curBpm() + d); $("#bar-bpm").textContent = String(curBpm()); }));

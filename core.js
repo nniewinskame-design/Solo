@@ -193,7 +193,7 @@ function readingPartId() {
 /* the score as it is drawn; the same piece and settings give the same text, so taps and bar lookups do not parse,
    beam and serialise the whole score again */
 function processedXml() {
-  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff(), S.layout, S.meterLines, !!S.editMode].join("\u0001");
+  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff(), S.layout, S.meterLines].join("\u0001");
   if (processedXml.key === key) return processedXml.out;
   const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
 }
@@ -231,16 +231,12 @@ function processedXmlNow() {
           if (seen && seen !== keep) { const sr = kid(seen, "rest"); [...r.children].forEach(c => c.remove()); [...sr.children].forEach(c => r.appendChild(c.cloneNode(true))); }
           if (seen) keep.removeAttribute("print-object"); else keep.setAttribute("print-object", "no");
           kid(keep, "duration").textContent = String(cap);
-          /* an empty bar while editing: a faint whole rest (the engine draws a whole-bar rest in black whatever its colour) */
-          if (seen || !S.editMode) r.setAttribute("measure", "yes");
-          else { r.removeAttribute("measure"); kids(keep, "dot").forEach(x => x.remove()); let ty = kid(keep, "type"); if (!ty) { ty = keep.ownerDocument.createElement("type"); (kid(keep, "voice") || kid(keep, "duration")).after(ty); } ty.textContent = "whole"; }
+          r.setAttribute("measure", "yes");
           vs.slice(1).forEach(n => n.remove());
         });
       });
     });
   });
-  /* while editing the empty room is shown as faint rests, so it can be tapped and filled */
-  if (S.editMode) [...root.getElementsByTagName("note")].forEach(n => { if (n.getAttribute("print-object") === "no" && kid(n, "rest")) { n.removeAttribute("print-object"); n.setAttribute("color", "#C9CFDD"); } });
   // title/composer from the editable fields
   let work = kid(root, "work");
   if (!work) { work = doc.createElement("work"); root.insertBefore(work, root.firstChild); }
