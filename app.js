@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.9";
+const VERSION = "4.2.10";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -825,7 +825,8 @@ function pagedXml(xml, opts) {
 /* the size of the notes on the A4 page: a scan's own staff size (as on its paper) times "Wielkość nut" (+/−); the
    screen, the PDF, print and the picture all use it, so they look the same (Nat: +/− did not enlarge the notes and the
    picture came out smaller) */
-const paperZoom = () => (S.layout === "orig" && S.hasLines ? scanZoom() : 1) * (S.pz || 1);
+const BASE_NOTES = 1.2;          // 100% is a bigger staff than the engine's own (Nat: "make 100% bigger"); a scan keeps its paper's size
+const paperZoom = () => (S.layout === "orig" && S.hasLines ? scanZoom() : BASE_NOTES) * (S.pz || 1);
 /* on screen while editing: the paper's size times the editing zoom (Nat: zoom in to edit more easily) */
 const screenZoom = () => paperZoom() * editZoom();
 function a4Options(extra, zoom = paperZoom()) {
