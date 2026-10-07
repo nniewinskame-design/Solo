@@ -2087,3 +2087,8 @@ svg.cl.g{height:27px!important;margin:-3px 0!important}
 /* Kosz in the tab bar: red, set a little apart */
 .ed-tabs .ed-trash{color:var(--bad-ink)!important;margin-left:4px!important;min-width:40px!important;height:40px;border-radius:999px;background:transparent;display:inline-flex;align-items:center;justify-content:center}
 .ed-tabs .ed-trash:active{background:var(--bad-tint)!important}
+/* the ⋯ on a library card: clearly visible (white disc, dark dots) */
+.card .more{background:#fff!important;color:var(--ink)!important;box-shadow:0 1px 3px rgb(15 23 42/.18),0 0 0 1px rgb(15 23 42/.06)!important;width:38px!important;height:38px!important;top:8px!important;right:8px!important}
+.card .more svg.i{width:20px;height:20px}
+/* Opis → Instrument as a list */
+.li .f-select{flex:1;min-width:0;border:0;background:transparent;font:inherit;color:var(--ink);text-align:right;appearance:none;-webkit-appearance:none;padding:8px 0}

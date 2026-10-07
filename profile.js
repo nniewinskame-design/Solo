@@ -278,11 +278,10 @@ function renderProfile() {
   /* the card at the top: who plays what, at a glance; the main instrument's family colour on the tile */
   const card = $("#me-card");
   /* the name, typed at the first start, can be changed right here: the card's title is the field */
-  if (card) card.innerHTML = `<span class="me-tile" ${hueStyle(m)}>${p.name ? `<b class="me-ini">${esc(p.name.charAt(0).toUpperCase())}</b>` : icon("user")}</span><span class="me-txt"><input class="me-name" id="me-name" type="text" autocomplete="given-name" autocapitalize="words" enterkeyhint="done" maxlength="30" placeholder="Twoje imię" aria-label="Imię" value="${esc(p.name || "")}"><small>${esc(m.name)} · A = ${p.a4} Hz</small></span>`;
+  if (card) card.innerHTML = `<span class="me-tile" ${hueStyle(m)}>${p.name ? `<b class="me-ini">${esc(p.name.charAt(0).toUpperCase())}</b>` : icon("user")}</span><span class="me-txt"><input class="me-name" id="me-name" type="text" autocomplete="given-name" autocapitalize="words" enterkeyhint="done" maxlength="30" placeholder="Twoje imię" aria-label="Imię" value="${esc(p.name || "")}"><small>${esc(m.name)}</small></span>`;
   const row = (label, body, note = "") => `<div class="me-row"><span class="me-l">${label}</span>${body}${note}</div>`;
   box.innerHTML = `<div class="group me-group">
     ${row("Instrumenty", `<div class="ichips">${p.instruments.map(id => `<button class="ichip" ${hueStyle(id)} data-main="${id}" aria-pressed="${id === p.main}">${esc(instrById(id).name)}</button>`).join("")}<button class="ichip add" data-edit aria-label="Zmień instrumenty">${icon("plus")}</button></div>`, p.instruments.length > 1 ? `<small class="me-note">Dotknij, żeby wybrać główny</small>` : "")}
-    ${row("Strój A", `<div class="seg three">${[440, 442, 443].map(v => `<button data-a4="${v}" aria-pressed="${p.a4 === v}">${v} Hz</button>`).join("")}</div>`)}
     ${trPc(m) ? row("Stroik pokazuje", `<div class="seg"><button data-read="written" aria-pressed="${p.reading === "written"}">Zapis dla ${esc(m.name.toLowerCase())}</button><button data-read="concert" aria-pressed="${p.reading === "concert"}">Dźwięki rzeczywiste</button></div>`) : ""}
   </div>`;
 }

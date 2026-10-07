@@ -21,6 +21,8 @@ function hud(msg, ms = 2400) {
   h.innerHTML = ""; const t = document.createElement("span"); t.className = "t-msg"; t.textContent = msg; h.appendChild(t); h.classList.add("show");
   clearTimeout(hud._t); hud._t = setTimeout(() => h.classList.remove("show"), ms);
 }
+/* a progress message goes away as soon as the work is done (a share sheet that opened says the rest) */
+hud.off = () => { clearTimeout(hud._t); $("#toast")?.classList.remove("show"); };
 /* ---------------- Music theory helpers ---------------- */
 const LETTERS = "CDEFGAB";
 const LETTER_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };

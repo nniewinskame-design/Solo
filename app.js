@@ -396,9 +396,9 @@ document.addEventListener("click", e => {
     if (act === "camera") { if (a.id === "w-camera") store.set("welcomed", "1"); if (openSheetId) closeSheetThen(openCamera); else openCamera(); }
     if (act === "print") closeSheetThen(() => exportParts.length === 1 ? withOnly(exportParts[0], printScore) : exportParts.length ? hud("Do druku wybierz jedną partię albo pobierz PDF", 3500) : printScore());
     if (act === "pdf") closeSheetThen(savePdf);
-    if (act === "send-pdf") closeSheetThen(() => savePdf(true));
-    if (act === "send-img") closeSheetThen(sendImage);
-    if (act === "xml") closeSheetThen(shareXml);
+    if (act === "send-pdf") closeSheetThen(() => savePdf(shareMode !== "save"));
+    if (act === "send-img") closeSheetThen(() => sendImage(shareMode !== "save"));
+    if (act === "xml") closeSheetThen(() => shareXml(shareMode !== "save"));
   }
 });
 $("#scrim").addEventListener("click", () => closeSheet());
@@ -475,7 +475,7 @@ async function refreshLibrary(animate) {
     /* the whole card opens the piece (a tap on the title used to start renaming it); renaming and everything else
        is in the "⋯" menu, which a long press also opens */
     b.innerHTML = `<button class="thumb" aria-label="Otwórz: ${esc(p.title || "Bez tytułu")}">${p.thumb ? `<img src="${esc(p.thumb)}" alt="">` : `<span class="ph">${esc(p.title || "Bez tytułu")}</span>`}${fav.has(p.id) ? `<i class="fav-badge" aria-hidden="true">${icon("heart-fill")}</i>` : ""}</button>
-      <button class="more" aria-label="Więcej: ${esc(p.title || "Bez tytułu")}">${icon("more")}</button>
+      <button class="more" aria-label="Więcej: ${esc(p.title || "Bez tytułu")}">${icon("dots3")}</button>
       <div class="t">${esc(p.title || "Bez tytułu")}</div><div class="m"><span class="c${p.composer ? "" : " ph"}">${esc(meta)}</span>${p.keyLabel ? `<span class="key" aria-label="Tonacja: ${esc(p.keyLabel)}">${esc(shortKey(p.keyLabel))}</span>` : ""}</div>`;
     b.querySelector(".thumb").addEventListener("click", () => { if (b._long) { b._long = false; return; } openFromLibrary(p); });
     b.querySelector(".more").addEventListener("click", () => openCardSheet(p, b));
@@ -1055,7 +1055,7 @@ function selectNote(sel) {
   if (S.edTab == null && !edTab.busy) edTab(null);          // editing opens with no tool open (Nat, 7 Oct); a tool opens when tapped
   const at = sel ? xmlNoteAt(parseXml(S.piece.xml), sel) : null, n = at && at.n, isRest = !!(n && kid(n, "rest"));
   /* Rozmieść and Styl work on the chosen note (a rest only moves left or right) */
-  $$("#editbar .ed-pane[data-pane=pitch] button, #editbar .ed-pane[data-pane=marks] button").forEach(b => (b.disabled = !n || (isRest && !["left", "right"].includes(b.dataset.ed))));
+  $$("#editbar .ed-pane[data-pane=pitch] button, #editbar .ed-pane[data-pane=marks] button").forEach(b => (b.disabled = !n || (isRest && !["left", "right", "up", "down"].includes(b.dataset.ed))));
   /* Dodaj: the lengths show what the chosen note has (a chosen rest: tapping a length makes it that note); with
      nothing chosen they are what the next tap writes, as notes or, with "–" on, as rests */
   const restMode = n ? isRest : !!S.inRest, cur = n ? (isRest ? null : (txt(n, "type") || "whole")) : (S.inLen || "quarter");
@@ -1552,6 +1552,16 @@ function editNote(op) {
       if (ex) { ex.remove(); const stop = nx && [...nx.getElementsByTagName("slur")].find(sl => sl.getAttribute("type") === "stop"); if (stop) stop.remove(); if (!x.children.length) x.remove(); }
       else if (nx) { const st = doc.createElement("slur"); st.setAttribute("type", "start"); st.setAttribute("number", "1"); x.appendChild(st); let y = kid(nx, "notations"); if (!y) { y = doc.createElement("notations"); nx.insertBefore(y, kid(nx, "lyric") || null); } const sp = doc.createElement("slur"); sp.setAttribute("type", "stop"); sp.setAttribute("number", "1"); y.appendChild(sp); }
     }
+  } else if ((op === "up" || op === "down") && kid(n, "rest")) {
+    /* a rest moves up or down a step at a time, within the staff and one step beyond (printed parts move rests out of
+       the way of another voice or a long note); written as <display-step>/<display-octave> */
+    const r = kid(n, "rest"), bottom = CLEF_BOTTOM[clefAt(at.part, at.m)] ?? 18;
+    const ds = kid(r, "display-step"), dov = kid(r, "display-octave");
+    const whole = r.getAttribute("measure") === "yes" || txt(n, "type") === "whole";
+    const cur = ds && dov ? parseInt(dov.textContent, 10) * 7 + STEP_I[ds.textContent.trim()] : bottom + (whole ? 6 : 4);
+    const nx = Math.max(bottom - 1, Math.min(bottom + 9, cur + (op === "up" ? 1 : -1))); if (nx === cur) return;
+    [ds, dov].forEach(x => x && x.remove());
+    r.innerHTML = `<display-step>${STEP_N[((nx % 7) + 7) % 7]}</display-step><display-octave>${Math.floor(nx / 7)}</display-octave>`;
   } else if (op === "up") move(1); else if (op === "down") move(-1);
   else if (op === "octup") move(7); else if (op === "octdown") move(-7);
   /* ♭ and ♯ move the note half a tone from where it is (B♭ in F major with ♯ is B; F with ♯ is F♯) */
@@ -1588,10 +1598,7 @@ function editNote(op) {
     if (p && kid(n, "chord")) { untie(n); unslur(n); n.remove(); S.editSel = null; }
     else if (p && n.nextElementSibling && kid(n.nextElementSibling, "chord")) { untie(n); unslur(n); const nx = n.nextElementSibling; kids(nx, "chord").forEach(x => x.remove()); n.remove(); }
     else if (p) toRest(n);
-    else if (kids(at.m, "note").length > 1) {
-      const hs = kids(at.m, "note").filter(x => !kid(x, "chord") && (txt(x, "voice") || "1") === (txt(n, "voice") || "1")), lastOther = hs.filter(x => x !== n).pop();
-      n.remove(); S.editSel = null; if (lastOther) fitBar(doc, at.part, at.m, lastOther);
-    }
+    else if (kids(at.m, "note").length > 1) { n.remove(); S.editSel = null; }        // any rest can go (Nat); a bar left short is marked
   }
   pushUndo();
   S.piece.xml = new XMLSerializer().serializeToString(doc);
@@ -2754,7 +2761,7 @@ async function savePdf(send) {
       if (send) { location.href = `mailto:?subject=${encodeURIComponent(title)}`; hud("Pobrano. Dołącz plik do wiadomości.", 4000); }
       else hud(files.length > 1 ? `Pobrano ${files.length} ${plural(files.length, "plik", "pliki", "plików")} PDF` : "Pobrano " + files[0].name, 3000);
     }
-    else { /* shared: the share sheet itself said so */ }
+    else hud.off();          // shared: the share sheet itself says the rest
   } catch (e) { console.error(e); hud("Nie udało się zapisać PDF. Spróbuj jeszcze raz.", 4000); }
   finally { pdfBusy = false; if (S.view === "score") render(); }
 }
@@ -2771,7 +2778,7 @@ $("#share-chips").addEventListener("click", e => {
   buildShareSheet();
 });
 /* T20: the first page as a picture, for chats that show images better than PDFs */
-async function sendImage() {
+async function sendImage(send = true) {
   if (!S.piece || pdfBusy) return;
   pdfBusy = true; stopPlayback(); hud("Przygotowuję obraz…", 30000);
   try {
@@ -2781,12 +2788,12 @@ async function sendImage() {
     const c = await rasterPage(el); S.loadedKey = null;
     const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.9));
     const name = safeName(S.piece.title || "Nuty") + ".jpg", file = new File([blob], name, { type: "image/jpeg" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: S.piece.title }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
+    if ((send || appleDevice()) && navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: S.piece.title }); hud.off(); return; } catch (e) { if (e && e.name === "AbortError") { hud.off(); return; } } }
     download(name, blob, "image/jpeg"); hud("Pobrano " + name, 3000);
   } catch (e) { console.error(e); hud("Nie udało się przygotować obrazu.", 4000); }
   finally { pdfBusy = false; if (S.view === "score") render(); }
 }
-async function shareXml() {
+async function shareXml(send = true) {
   if (!S.piece) return;
   const name = safeName(S.piece.title) + ".musicxml";
   let xml;
@@ -2802,12 +2809,17 @@ async function shareXml() {
   const type = "application/vnd.recordare.musicxml+xml";
   try {
     const file = new File([xml], name, { type });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: S.piece.title }); return; }
+    if ((send || appleDevice()) && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: S.piece.title }); return; }
   } catch (e) { if (e && e.name === "AbortError") return; }
   download(name, xml, type);
 }
-$("#btn-share").addEventListener("click", () => openSheet("share"));
-$("#btn-save").addEventListener("click", () => closeSheetThen(() => savePdf(false)));
+/* "Zapisz" and "Udostępnij" open the same choice (Zdjęcie, PDF, MusicXML): Zapisz keeps the file on this device,
+   Udostępnij sends it on (iPhone and iPad save through their share sheet: "Zachowaj w Plikach") */
+let shareMode = "share";
+const appleDevice = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+function openShare(mode) { shareMode = mode; $("#sh-share-t").textContent = mode === "save" ? "Zapisz jako" : "Udostępnij"; openSheet("share"); }
+$("#btn-share").addEventListener("click", () => closeSheetThen(() => openShare("share")));
+$("#btn-save").addEventListener("click", () => closeSheetThen(() => openShare("save")));
 $("#btn-print").addEventListener("click", () => closeSheetThen(printScore));
 
 
@@ -3022,6 +3034,15 @@ $$("#pageseg button").forEach(b => b.addEventListener("click", () => { S.page = 
 $$("#underseg button").forEach(b => b.addEventListener("click", () => { S.under = b.dataset.u; syncArrange(); changed(); }));
 $("#swing").addEventListener("change", e => { S.swing = e.target.checked; S.dirty = true; autosave(); if (playState) play(playPos()); });
 function syncArrange() { $$("#underseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.u === (S.under || "")))); $("#swing").checked = !!S.swing; }
+/* Opis → Instrument: chosen from the list (the player's own instruments first), not typed */
+function fillInstrumentSelect() {
+  const sel = $("#f-instrument"), cur = S.piece.instrument || "", mine = (typeof profile === "function" ? profile().instruments : []).map(instrById).filter(Boolean);
+  const opt = n => `<option value="${esc(n)}"${n === cur ? " selected" : ""}>${esc(n)}</option>`;
+  const all = INSTRUMENTS.map(i => i.name), known = new Set([...all, ...mine.map(i => i.name)]);
+  sel.innerHTML = (cur && !known.has(cur) ? opt(cur) : "") + (cur ? "" : `<option value="" selected>—</option>`) +
+    (mine.length ? `<optgroup label="Twoje">${mine.map(i => opt(i.name)).join("")}</optgroup>` : "") +
+    INSTR_GROUPS.map(g => `<optgroup label="${esc(g)}">${INSTRUMENTS.filter(i => i.group === g).map(i => opt(i.name)).join("")}</optgroup>`).join("");
+}
 function buildMoreSheet() {
   syncLayout(); syncArrange();
   $("#btn-restore").hidden = !canRestore();
@@ -3041,7 +3062,7 @@ function buildMoreSheet() {
   });
   syncTempo();
   $("#zoom-val").textContent = Math.round(zoomNow() * 100) + "%";
-  $("#f-title").value = S.piece.title || ""; $("#f-composer").value = S.piece.composer || ""; $("#f-instrument").value = S.piece.instrument || "";
+  $("#f-title").value = S.piece.title || ""; $("#f-composer").value = S.piece.composer || ""; fillInstrumentSelect();
   const imgs = S.piece.images || [];
   $("#row-orig").hidden = !imgs.length;
     $("#btn-delete").hidden = !S.piece.id;
@@ -3172,9 +3193,9 @@ function hudAct(msg, label, fn, ms = 4000) {
 let cardPiece = null, cardEl = null;
 function openCardSheet(p, el) { cardPiece = p; cardEl = el; $("#sh-card-t").textContent = p.title || "Bez tytułu"; openSheet("card"); }
 $("#cd-open")?.addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => openFromLibrary(p)); });
-$("#cd-save").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => savePdf(false)); }); });
+$("#cd-save").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => openShare("save")); }); });
 $("#cd-print").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(printScore); }); });
-$("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => openSheet("share")); }); });
+$("#cd-send").addEventListener("click", () => { const p = cardPiece; closeSheetThen(async () => { await openFromLibrary(p); whenDrawn(() => openShare("share")); }); });
 $("#cd-rename").addEventListener("click", () => { const el = cardEl, p = cardPiece; closeSheetThen(() => { const t = el && el.querySelector(".t"); if (t) inlineEdit(t, { value: p.title || "", placeholder: "Tytuł", onSave: v => renameInLibrary(p, "title", v) }); }); });
 $("#cd-del").addEventListener("click", () => { const p = cardPiece; closeSheetThen(() => askDelete(p, true)); });
 /* a full copy (notes, parts, photos, settings) under the next free title: "Etiuda 2" */
@@ -4220,7 +4241,12 @@ const NOTE_PL = ["C", "Cis", "D", "Es", "E", "F", "Fis", "G", "As", "A", "B", "H
 /* Polish octave names: C2–H2 wielka, C3 mała, C4 razkreślna … */
 const OCTAVE_NAMES = ["subkontra", "kontra", "wielka", "mała", "razkreślna", "dwukreślna", "trzykreślna", "czterokreślna"];
 function syncTuner() {
-  $$("#t-instr button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tr === ((tuner.tr % 12) + 12) % 12)));
+  /* the tuner reads for one of the player's instruments (each with its own key: Trąbka B, Klarnet A, Waltornia F…)
+     or in sounding pitch */
+  const mine = (typeof profile === "function" ? profile().instruments : []).map(instrById).filter(Boolean);
+  const opts = [...mine, { id: "", name: "Dźwięki rzeczywiste (C)", tr: 0 }];
+  let hit = false;
+  $("#t-instr").innerHTML = opts.map(m => { const on = !hit && (m.tr || 0) === tuner.tr && (m.id === "" ? !mine.some(x => (x.tr || 0) === tuner.tr) : true); if (on) hit = true; return `<button class="ichip" data-tr="${m.tr || 0}" aria-pressed="${on}" ${m.id ? hueStyle(m) : ""}>${esc(m.name)}</button>`; }).join("");
   $$("#t-tol button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.tol === tuner.tol)));
   $("#t-a").textContent = String(tuner.a4);
   const z = tuner.tol, pc = v => 50 + v;            // the meter spans −50…+50 cents
@@ -4229,7 +4255,8 @@ function syncTuner() {
   $("#t-zones").style.setProperty("background", $("#t-zones").style.background, "important"); $("#t-zones").style.opacity = "1";
   $("#t-go").innerHTML = `${icon(tuner.on ? "stop" : "mic")}<span>${tuner.on ? "Wyłącz stroik" : "Włącz stroik"}</span>`;
   const letterPc = ((tuner.tr % 12) + 12) % 12, sum = $("#t-set-sum");
-  if (sum) sum.textContent = `Strój ${({ 0: "C", 2: "B", 9: "Es", 7: "F" })[letterPc] || "C"} · ±${tuner.tol} ¢ · A ${tuner.a4} Hz`;
+  const forI = mine.find(m => (m.tr || 0) === tuner.tr);
+  if (sum) sum.textContent = `${forI ? forI.name : "Strój " + (({ 0: "C", 2: "B", 3: "A", 5: "G", 7: "F", 9: "Es" })[letterPc] || "C")} · ±${tuner.tol} ¢ · a¹ ${tuner.a4} Hz`;
 }
 /* Pitch of one sound: McLeod Pitch Method (normalised autocorrelation), the method used by good tuners.
    It does not depend on how loud the sound is (phones give a quiet signal when auto-gain is off),
@@ -4517,10 +4544,7 @@ const voiceForPart = pid => voiceFor(instrOfPart(pid));
 const noteVoice = () => voiceFor(mainInstr().id);
 /* the tuner's instrument letter (C, B, Es, F): the player's own instrument when it is in that letter, with its octave
    (B for a tenor sax is +14, not +2) */
-$$("#t-instr button").forEach(b => b.addEventListener("click", () => {
-  const v = +b.dataset.tr, m = mainInstr(), own = m.tr || 0;
-  setTunerTr(((own % 12) + 12) % 12 === v ? own : v);
-}));
+$("#t-instr").addEventListener("click", e => { const b = e.target.closest("[data-tr]"); if (b) setTunerTr(+b.dataset.tr); });
 /* any instrument's transposition for the tuner (for a picker in the redesigned tuner): setTunerTr(instrById(id).tr) */
 function setTunerTr(tr) { tuner.tr = tr | 0; store.set("tunerTr", tuner.tr); tn.txt.clear(); syncTuner(); }
 

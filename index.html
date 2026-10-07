@@ -58,6 +58,7 @@
   <symbol id="stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.2" fill="currentColor" stroke="none"/></symbol>
   <symbol id="updown" viewBox="0 0 24 24"><path d="M9 17.2V6.5M18 13.2V3.5"/><ellipse class="h" cx="6.6" cy="17.6" rx="3" ry="2.15" transform="rotate(-22 6.6 17.6)"/><ellipse cx="15.6" cy="13.6" rx="3" ry="2.15" transform="rotate(-22 15.6 13.6)"/><path d="M10.5 21h6.5M14.5 18.5l2.5 2.5"/></symbol>
   <symbol id="clef" viewBox="0 0 24 24"><path d="M4.6 9.2C5.3 5.8 8.1 4 11.1 4.3c3.6.4 5.4 3.4 4.8 6.9-.8 4.6-5 7.6-10.8 9.3"/><ellipse class="h" cx="6.7" cy="9.3" rx="2.2" ry="1.9"/><circle cx="19.6" cy="7.6" r="1.2" fill="currentColor" stroke="none"/><circle cx="19.6" cy="12.6" r="1.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="dots3" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2.3" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="2.3" fill="currentColor" stroke="none"/></symbol>
   <symbol id="more" viewBox="0 0 24 24"><ellipse cx="5" cy="12" rx="2.2" ry="1.6" fill="currentColor" stroke="none" transform="rotate(-22 5 12)"/><ellipse class="h" cx="12" cy="12" rx="2.2" ry="1.6" transform="rotate(-22 12 12)"/><ellipse cx="19" cy="12" rx="2.2" ry="1.6" fill="currentColor" stroke="none" transform="rotate(-22 19 12)"/></symbol>
   <symbol id="share" viewBox="0 0 24 24"><path d="M12 3.5v11M8 7.5l4-4 4 4"/><path d="M7 11H6a1 1 0 0 0-1 1v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7a1 1 0 0 0-1-1h-1"/></symbol>
   <symbol id="print" viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="3.5" y="9" width="17" height="8" rx="2"/><path d="M7 14h10v6.5H7z"/><ellipse class="h" cx="17" cy="12" rx="1.3" ry="1"/></symbol>
@@ -540,12 +541,13 @@
   <details class="lx-set" id="t-set">
     <summary><span class="ic"><svg class="i"><use href="#sliders"/></svg></span><span class="grow"><b>Ustawienia stroika</b><small id="t-set-sum"></small></span><svg class="i chev"><use href="#down"/></svg></summary>
     <div class="lx-set-body">
-      <h3 class="lbl">Strój instrumentu</h3>
-      <div class="seg" id="t-instr"><button data-tr="0">C</button><button data-tr="2">B</button><button data-tr="9">Es</button><button data-tr="7">F</button></div>
+      <h3 class="lbl">Instrument</h3>
+      <div class="ichips" id="t-instr"></div>
       <h3 class="lbl">Dokładność</h3>
       <div class="seg three" id="t-tol"><button data-tol="10">±10 ¢</button><button data-tol="5">±5 ¢</button><button data-tol="3">±3 ¢</button></div>
-      <h3 class="lbl">Strój A</h3>
+      <h3 class="lbl">Strój: dźwięk a¹</h3>
       <div class="list"><div class="li"><span class="grow"><b>A</b></span><button class="pill round sm" id="t-a-down" aria-label="Niżej"><svg class="i"><use href="#minus"/></svg></button><span class="val" id="t-a">440</span><span class="unit">Hz</span><button class="pill round sm" id="t-a-up" aria-label="Wyżej"><svg class="i"><use href="#plus"/></svg></button></div></div>
+      <p class="note">Szkoły grają zwykle 440 Hz, orkiestry często 442–443 Hz.</p>
     </div>
   </details>
   </div></div>
@@ -655,7 +657,7 @@
   <div class="list fields">
     <label class="li"><span class="fk">Tytuł</span><input id="f-title" type="text" autocomplete="off"></label>
     <label class="li"><span class="fk">Kompozytor</span><input id="f-composer" type="text" autocomplete="off"></label>
-    <label class="li"><span class="fk">Instrument</span><input id="f-instrument" type="text" autocomplete="off"></label>
+    <label class="li"><span class="fk">Instrument</span><select id="f-instrument" class="f-select"></select></label>
   </div>
   <h3 class="lbl">Plik</h3>
   <div class="list">
@@ -773,8 +775,8 @@
     <button class="tile" id="cd-rename"><svg class="i"><use href="#pencil"/></svg><span>Nazwa</span></button>
     <button class="tile" id="cd-fav"><svg class="i"><use href="#heart"/></svg><span>Ulubione</span></button>
     <button class="tile" id="cd-col"><svg class="i"><use href="#stack"/></svg><span>Porządkuj</span></button>
+    <button class="tile danger" id="cd-del"><svg class="i"><use href="#trash"/></svg><span>Usuń</span></button>
   </div>
-  <button class="btn ghost danger wide sep-del" id="cd-del"><svg class="i"><use href="#trash"/></svg><span>Usuń utwór</span></button>
 </div>
 
 <div class="sheet" id="sh-instr" role="dialog" aria-modal="true" aria-labelledby="sh-instr-t" hidden>
@@ -811,7 +813,7 @@
   <div id="share-parts" hidden><h3 class="lbl first">Partie</h3><div class="ichips" id="share-chips"></div></div>
   <div class="tiles share-tiles">
     <button class="tile" data-act="send-pdf"><svg class="i"><use href="#file"/></svg><span>PDF</span></button>
-    <button class="tile" data-act="send-img"><svg class="i"><use href="#image"/></svg><span>Obraz</span></button>
+    <button class="tile" data-act="send-img"><svg class="i"><use href="#image"/></svg><span>Zdjęcie</span></button>
     <button class="tile" data-act="xml"><svg class="i"><use href="#music"/></svg><span>MusicXML</span></button>
   </div>
 </div>
