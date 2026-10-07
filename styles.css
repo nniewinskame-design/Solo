@@ -2119,3 +2119,5 @@ body.editmode .ed-zoom{display:flex;position:sticky;top:8px;z-index:6;margin:0 1
 .ed-zoom button{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--brand-ink);background:transparent}
 .ed-zoom button:active{background:var(--brand-tint)}
 .ed-zoom span{min-width:44px;text-align:center;font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+/* the lit bar moves exactly with the music (no easing that made it trail the line) */
+.barlight{transition:none!important}

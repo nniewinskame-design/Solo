@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.7";
+const VERSION = "4.2.8";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -2415,13 +2415,14 @@ async function play(fromMs, opt = {}) {
     ev.push({ id, el, pid, q0: e.tstamp, t: sec(start - fromMs), dur: Math.max(0.08, sec(end - start)), pitch: v.pitch - p.tr, voice: p.voice, vk: p.vk, silent: p.mute, shape: p.mute ? null : shapeOf(el) });
   }));
   if (!ev.length) { fail("Brak nut do odtworzenia"); return; }
-  /* an empty bar is played as silence, and the cursor lights it while it lasts (it has no notes to follow) */
+  /* every bar's start is a (silent) cursor step, so the bar lights the moment it begins, also when it starts with a
+     rest or is empty (Nat: the lit bar came late); an empty bar is played as silence */
   const mEls = measureEls();
   bars.forEach((b, i) => {
-    if (b.t >= B || barEnd(i) <= fromMs + 20 || ev.some(e => e.q0 >= b.t - 1 && e.q0 < barEnd(i) - 1)) return;
+    if (b.t >= B || barEnd(i) <= fromMs + 20 || ev.some(e => !e.bar && Math.abs(e.q0 - b.t) < 1)) return;
     const el = mEls[b.di]; if (!el) return;
     const start = Math.max(b.t, fromMs);
-    ev.push({ id: null, el, pid: null, q0: b.t, t: sec(start - fromMs), dur: sec(barEnd(i) - start), pitch: 60, voice: null, vk: null, silent: true, shape: null });
+    ev.push({ id: null, el, bar: true, pid: null, q0: b.t, t: sec(start - fromMs), dur: sec(barEnd(i) - start), pitch: 60, voice: null, vk: null, silent: true, shape: null });
   });
   ev.sort((a, b) => a.q0 - b.q0);
   if (S.swing) {         /* T29: eighths in pairs play long-short (about 2:1), counted from the bar's own beats; not in 6/8 */
@@ -2560,10 +2561,11 @@ function cursorMap(ev) {
   const ons = []; let last = null;
   ev.forEach(e => {
     if (!e.el) return;
-    if (last && Math.abs(e.t - last.t) < 0.005) { last.els.push(e.el); return; }
+    if (last && Math.abs(e.t - last.t) < 0.005) { if (!e.bar) last.els.push(e.el); return; }
     const m = e.el.closest("g.measure"); if (!m) return;
-    const b = barOf(m), nr = rel(e.el.getBoundingClientRect());
-    last = { t: e.t, els: [e.el], x: nr.x + nr.w / 2, m, ...b };
+    const b = barOf(m), nr = rel(e.el === m ? barRect(m) : e.el.getBoundingClientRect());
+    /* a bar's start: the line stands just after its bar line */
+    last = { t: e.t, els: e.el === m ? [] : [e.el], x: e.el === m ? nr.x + 4 : nr.x + nr.w / 2, m, ...b };
     ons.push(last);
   });
   return ons;
