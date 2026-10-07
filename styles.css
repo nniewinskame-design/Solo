@@ -2111,3 +2111,5 @@ svg.cl.g{height:27px!important;margin:-3px 0!important}
 .onb-mark{width:96px;height:96px;margin:9vh auto 22px;border-radius:28px;background:var(--grad-brand);display:flex;align-items:center;justify-content:center;box-shadow:0 10px 28px rgb(103 116 252/.28)}
 .onb-mark svg.i{width:48px;height:48px;color:#fff;fill:#fff;stroke:#fff}
 .w-stage .onb-mark{margin:auto}
+/* collection chips can be held (no text selection or iOS callout) */
+#cols .cchip{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}

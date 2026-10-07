@@ -239,6 +239,29 @@ function processedXmlNow() {
       });
     });
   });
+  /* an empty bar (a whole-bar rest not drawn) keeps its time when played: the engine drops a hidden whole-bar rest
+     altogether (the bar would last no time and playback skipped it, Nat 8 Oct), so it becomes hidden rests of
+     ordinary lengths (a dotted half in 3/4) */
+  kids(root, "part").forEach(part => {
+    let div = 1;
+    kids(part, "measure").forEach(m => {
+      kids(m, "attributes").forEach(a => { const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div; });
+      kids(m, "note").forEach(n => {
+        const r = kid(n, "rest"); if (!r || r.getAttribute("measure") !== "yes" || n.getAttribute("print-object") !== "no") return;
+        const dur = parseFloat(txt(n, "duration")) || 0; if (!dur) return;
+        const keep = ["voice", "staff"].map(t => kid(n, t)).filter(Boolean);
+        noteValues(dur / div).forEach(([q, t, dot]) => {
+          const x = m.ownerDocument.createElement("note"); x.setAttribute("print-object", "no");
+          x.innerHTML = `<rest/><duration>${Math.round(q * div * 1000) / 1000}</duration>`;
+          const vo = keep.find(e => e.tagName === "voice"); if (vo) x.appendChild(vo.cloneNode(true));
+          const ty = m.ownerDocument.createElement("type"); ty.textContent = t; x.appendChild(ty); if (dot) x.appendChild(m.ownerDocument.createElement("dot"));
+          const sf = keep.find(e => e.tagName === "staff"); if (sf) x.appendChild(sf.cloneNode(true));
+          n.before(x);
+        });
+        n.remove();
+      });
+    });
+  });
   // title/composer from the editable fields
   let work = kid(root, "work");
   if (!work) { work = doc.createElement("work"); root.insertBefore(work, root.firstChild); }

@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.2";
+const VERSION = "4.2.3";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -2339,7 +2339,7 @@ const wavCache = { key: "", url: null };
 function wavKey(ev, clicks, len, a4) {
   let h = 2166136261 >>> 0; const mix = v => { h = Math.imul(h ^ (Math.round(v * 1000) | 0), 16777619) >>> 0; };
   const mixS = s => { for (let i = 0; i < s.length; i++) mix(s.charCodeAt(i) / 1000); };
-  ev.forEach(e => { mix(e.t); mix(e.dur); mix(e.pitch); mix(e.silent ? 1 : 0); mixS(e.vk); const s = e.shape; if (s) { mix(s.g0); mix(s.g1); mix(s.len); mix(s.acc); } });
+  ev.forEach(e => { mix(e.t); mix(e.dur); mix(e.pitch); mix(e.silent ? 1 : 0); mixS(e.vk || ""); const s = e.shape; if (s) { mix(s.g0); mix(s.g1); mix(s.len); mix(s.acc); } });
   clicks.forEach(c => { mix(c.t); mix(c.acc ? 1 : 0); });
   mix(len); mix(a4); mixS(store.get("ownUse") || "");
   if (typeof own !== "undefined") mixS(Object.entries(own.byInstr).map(([id, l]) => id + l.map(x => x.midi.toFixed(3)).join()).join());
@@ -2407,6 +2407,14 @@ async function play(fromMs, opt = {}) {
     ev.push({ id, el, pid, q0: e.tstamp, t: sec(start - fromMs), dur: Math.max(0.08, sec(end - start)), pitch: v.pitch - p.tr, voice: p.voice, vk: p.vk, silent: p.mute, shape: p.mute ? null : shapeOf(el) });
   }));
   if (!ev.length) { fail("Brak nut do odtworzenia"); return; }
+  /* an empty bar is played as silence, and the cursor lights it while it lasts (it has no notes to follow) */
+  const mEls = measureEls();
+  bars.forEach((b, i) => {
+    if (b.t >= B || barEnd(i) <= fromMs + 20 || ev.some(e => e.q0 >= b.t - 1 && e.q0 < barEnd(i) - 1)) return;
+    const el = mEls[b.di]; if (!el) return;
+    const start = Math.max(b.t, fromMs);
+    ev.push({ id: null, el, pid: null, q0: b.t, t: sec(start - fromMs), dur: sec(barEnd(i) - start), pitch: 60, voice: null, vk: null, silent: true, shape: null });
+  });
   ev.sort((a, b) => a.q0 - b.q0);
   if (S.swing) {         /* T29: eighths in pairs play long-short (about 2:1), counted from the bar's own beats; not in 6/8 */
     let bi = 0;
@@ -5177,9 +5185,13 @@ function renderCols(all) {
     `<button class="cchip add" id="col-add" aria-label="Nowa kolekcja">${icon("plus")}</button>`;
 }
 (() => {
-  const box = $("#cols"); let t = 0, long = false;
-  box.addEventListener("pointerdown", e => { const c = e.target.closest("[data-user]"); if (!c) return; long = false; t = setTimeout(() => { long = true; navigator.vibrate?.(10); editCol(c.dataset.col); }, 480); });
-  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => box.addEventListener(ev, () => clearTimeout(t)));
+  /* hold a collection's chip: its sheet (name, colour, Usuń). A finger that drifts a little still counts as holding;
+     only a real swipe (scrolling the chips) cancels it (Nat: on the phone the hold did nothing) */
+  const box = $("#cols"); let t = 0, long = false, x0 = 0, y0 = 0;
+  const stop = () => clearTimeout(t);
+  box.addEventListener("pointerdown", e => { const c = e.target.closest("[data-user]"); if (!c) return; long = false; x0 = e.clientX; y0 = e.clientY; stop(); t = setTimeout(() => { long = true; navigator.vibrate?.(10); editCol(c.dataset.col); }, 450); });
+  box.addEventListener("pointermove", e => { if (Math.hypot(e.clientX - x0, e.clientY - y0) > 12) stop(); });
+  ["pointerup", "pointercancel"].forEach(ev => box.addEventListener(ev, stop));
   box.addEventListener("contextmenu", e => e.preventDefault());
   box.addEventListener("click", e => {
     if (e.target.closest("#col-add")) { colTarget = null; colPiece = null; openSheet("col"); return; }
