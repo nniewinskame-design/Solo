@@ -778,10 +778,48 @@ function scanZoom() {
 }
 /* bars spread evenly along a line (a bar's width follows its length in time, not how many notes it holds) and
    every line, the last one too, ends at the right edge, as in hand-made sheets */
-const EVEN_BARS = { spacingLinear: 0.1, spacingNonLinear: 1, minLastJustification: 0,
+const EVEN_BARS = { minLastJustification: 0,
   /* clear room on both sides of every bar line, and after the clef, key and metre before the first note (the
      engine's default lets a note or its ♮ touch the bar line) */
   leftMarginRightBarLine: 2, rightMarginRightBarLine: 2, rightMarginClef: 1.8, rightMarginKeySig: 2, rightMarginMeterSig: 2 };   // the engine allows at most 2
+/* A4 pages with our own line breaks: the engine keeps lines where we put them but then makes no new page, so the
+   music is first drawn on one long page, the lines are measured, and a page break goes before the first line that
+   no longer fits the A4 page (the next page starts with it). The options switch to "encoded" breaks. */
+function pagedXml(xml, opts) {
+  if (opts.breaks !== "line" && opts.breaks !== "encoded") return xml;
+  const key = xml + "\u0001" + JSON.stringify(opts);
+  if (pagedXml.key === key) { opts.breaks = "encoded"; return pagedXml.out; }
+  let out = xml;
+  try {
+    tk.setOptions({ ...opts, pageHeight: 60000, adjustPageHeight: true }); tk.loadData(xml);
+    const d = new DOMParser().parseFromString(tk.renderToSVG(1), "image/svg+xml");
+    const def = d.querySelector("svg.definition-scale"), vb = (def && def.getAttribute("viewBox") || "").split(/\s+/).map(Number);
+    const k = vb.length === 4 && vb[2] ? vb[2] / opts.pageWidth : 10;                   // drawing units per option unit
+    const sys = [...d.querySelectorAll("g.system")].map(g => {
+      const ys = [...g.querySelectorAll("g.staff > path")].map(p => ((p.getAttribute("d") || "").match(/-?\d+(\.\d+)?/g) || []).map(Number)[1]).filter(Number.isFinite);
+      return { top: Math.min(...ys), bot: Math.max(...ys), bars: g.querySelectorAll(":scope > g.measure").length };
+    }).filter(x => Number.isFinite(x.top));
+    if (sys.length > 1) {
+      const sp = (sys[0].bot - sys[0].top) / 4 || 180, H = (opts.pageHeight - opts.pageMarginTop - opts.pageMarginBottom) * k;
+      let start = opts.pageMarginTop * k, barNo = 0; const breaks = [];
+      sys.forEach((s, i) => {
+        if (i > 0 && s.bot + 3 * sp - start > H) { breaks.push(barNo); start = s.top - 4 * sp; }
+        barNo += s.bars;
+      });
+      if (breaks.length) {
+        const doc = parseXml(xml), set = new Set(breaks);
+        kids(doc.documentElement, "part").forEach(p => kids(p, "measure").forEach((m, i) => {
+          if (!set.has(i)) return;
+          let pr = kid(m, "print"); if (!pr) { pr = doc.createElement("print"); m.insertBefore(pr, m.firstChild); }
+          pr.setAttribute("new-system", "yes"); pr.setAttribute("new-page", "yes");
+        }));
+        out = new XMLSerializer().serializeToString(doc);
+      }
+    }
+  } catch (e) { console.warn(e); }
+  opts.breaks = "encoded"; pagedXml.key = key; pagedXml.out = out;
+  return out;
+}
 function a4Options(extra, zoom = S.zoom) {
   const z = zoom, r = v => Math.round(v / z);
   return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: castsOff() ? "line" : S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
@@ -916,8 +954,9 @@ async function doRender() {
       opts = { pageWidth: Math.round(width * 100 / px), pageHeight: 60000, adjustPageHeight: true, scale: Math.round(px), breaks: S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
         pageMarginLeft: 50, pageMarginRight: 50, pageMarginTop: 60, pageMarginBottom: 60, spacingSystem: 8, svgViewBox: false, transpose: intervalString(S.iv), justifyVertically: false, breaksNoWidow: true, ...EVEN_BARS };
     }
+    const xmlDrawn = mode === "pages" ? pagedXml(xml, opts) : xml;
     tk.setOptions(opts);
-    if (!tk.loadData(xml)) throw new Error("Nie udało się narysować nut.");
+    if (!tk.loadData(xmlDrawn)) throw new Error("Nie udało się narysować nut.");
     let html = "";
     for (let i = 1; i <= tk.getPageCount(); i++) html += `<div class="page${mode === "reflow" ? " reflow" : ""}">${tk.renderToSVG(i)}</div>`;
     const firstShow = S.loadedKey !== "view";
@@ -1123,6 +1162,12 @@ function editTap(e) {
   if (e.target.closest("g.clef, g.keySig, g.meterSig, g.tempo")) { edTab("bar"); return; }
   const line = e.target.closest("g.barLine") || barLineAt(X, Y);
   if (line) { selectLine(line); return; }
+  if (S.edTab === "line") {
+    /* in Takt a tap right on a note or rest chooses it (Kosz, or the bar it is in); elsewhere it chooses the bar */
+    const on = e.target.closest(NOTE_SEL) || nearestNote(X, Y, 6, "g.note") || nearestNote(X, Y, 6, "g.rest, g.mRest");
+    const sel = on && locateNote(on);
+    if (sel && !sel.piano) { S.lineSel = null; S.barSel = null; selectNote(sel); markBarSel(); markLineSel(); return; }
+  }
   if (S.edTab === "bar" || S.edTab === "line") {
     const m = e.target.closest("g.measure") || measureAt(X, Y); if (!m) return;
     const di = measureEls().indexOf(m), bar = drawnBars(processedXml())[di]; if (!bar) return;
@@ -1235,7 +1280,7 @@ function selectLine(g) {
   edTab("line"); markLineSel();
 }
 /* Takt works on the chosen bar line, or on the line after the chosen bar */
-const taktBar = () => S.lineSel || (S.barSel && S.barSel.bar) || null;
+const taktBar = () => S.lineSel || (S.barSel && S.barSel.bar) || (S.editSel && S.editSel.bar) || null;
 function markLineSel() {
   $$("#pages g.barLine.lsel").forEach(g => g.classList.remove("lsel"));
   if (!S.editMode || S.edTab !== "line") return;
@@ -1266,7 +1311,6 @@ function deleteChosen() {
   if (S.edTab === "line" && S.barSel) { S.editSel = null; barOp("del"); S.barSel = null; edTab("line"); return; }
   if (S.editSel) {
     const at = xmlNoteAt(parseXml(S.piece.xml), S.editSel), n = at && at.n;
-    if (n && kid(n, "rest") && kids(at.m, "note").length === 1) { S.barSel = { bar: S.editSel.bar, pid: S.editSel.pid }; S.editSel = null; barOp("del"); return; }
     editNote("delete"); return;
   }
   hud("Najpierw dotknij tego, co chcesz usunąć", 2500);
@@ -1285,14 +1329,14 @@ function barCap(part, m) {
 }
 const divisionsAt = (part, m) => barCap(part, m).div;
 function restNote(doc, dur, type, voice, staff) {
-  const r = doc.createElement("note");
+  const r = doc.createElement("note"); r.setAttribute("print-object", "no");        // room Solo fills by itself: kept, not drawn
   r.innerHTML = `<rest/><duration>${dur}</duration><voice>${voice || 1}</voice>` + (type ? `<type>${type}</type>` : "") + (staff ? `<staff>${staff}</staff>` : "");
   return r;
 }
 /* an empty bar after m (a whole-bar rest; both staves of a piano part) */
 function emptyBar(doc, part, m) {
   const { cap } = barCap(part, m), two = twoStaff(part), nm = doc.createElement("measure");
-  nm.innerHTML = `<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice>${two ? "<staff>1</staff>" : ""}</note>` + (two ? `<backup><duration>${cap}</duration></backup><note><rest measure="yes"/><duration>${cap}</duration><voice>5</voice><staff>2</staff></note>` : "");
+  nm.innerHTML = `<note print-object="no"><rest measure="yes"/><duration>${cap}</duration><voice>1</voice>${two ? "<staff>1</staff>" : ""}</note>` + (two ? `<backup><duration>${cap}</duration></backup><note print-object="no"><rest measure="yes"/><duration>${cap}</duration><voice>5</voice><staff>2</staff></note>` : "");
   return nm;
 }
 /* a length set by hand is a plain length: no triplet mark left on it (its sound and its look would disagree) */
@@ -1421,6 +1465,7 @@ function editNote(op) {
   };
   const move = d => { if (!p) return; untie(n); const idx = parseInt(txt(p, "octave"), 10) * 7 + STEP_I[txt(p, "step")] + d, st = STEP_N[((idx % 7) + 7) % 7]; kid(p, "step").textContent = st; kid(p, "octave").textContent = String(Math.floor(idx / 7)); setAlter(keyAlter(fifths, st)); };
   const toNote = () => {
+    n.removeAttribute("print-object");
     const r = kid(n, "rest"), prev = [...at.part.getElementsByTagName("pitch")].filter(x => x.compareDocumentPosition(n) & 4).pop();
     const np = doc.createElement("pitch"), clef = clefAt(at.part, at.m), mid = (CLEF_BOTTOM[clef] ?? 18) + 4;
     np.innerHTML = prev ? prev.innerHTML : `<step>${STEP_N[mid % 7]}</step><octave>${Math.floor(mid / 7)}</octave>`;
@@ -1466,22 +1511,16 @@ function editNote(op) {
     const rests = q => noteValues(q / div).map(([qq, t, dot]) => { const r = restNote(doc, qq * div, t, v, stf); if (dot) kid(r, "type").after(doc.createElement("dot")); return r; });
     let ms = kids(at.part, "measure"), mi = ms.indexOf(at.m);
     const g = group(n), first = g[0], last = g[g.length - 1], d = D(n);
-    const swapBars = (a, b) => {          // everything but the bar's settings changes places
-      const keep = c => ["attributes", "print", "barline"].includes(c.tagName);
-      const ca = [...a.children].filter(c => !keep(c)), cb = [...b.children].filter(c => !keep(c));
-      const endA = kids(a, "barline").find(x => (x.getAttribute("location") || "right") === "right") || null, endB = kids(b, "barline").find(x => (x.getAttribute("location") || "right") === "right") || null;
-      ca.forEach(c => b.insertBefore(c, endB)); cb.forEach(c => a.insertBefore(c, endA));
-    };
     const newBarAfterLast = () => [...doc.getElementsByTagName("part")].forEach(pt => {
       const lm = kids(pt, "measure").pop(), nm = emptyBar(doc, pt, lm); nm.setAttribute("number", String(kids(pt, "measure").length + 1)); lm.after(nm);
       const fin = kids(lm, "barline").find(x => (x.getAttribute("location") || "right") === "right" && /light-heavy/.test(txt(x, "bar-style")) && !kid(x, "repeat")); if (fin) nm.appendChild(fin);
     });
     let target = at.m;
-    if (isR(n) && kid(n, "rest").getAttribute("measure") === "yes" || (isR(n) && heads(at.m).length === 1)) {
-      if (right && mi === ms.length - 1) { newBarAfterLast(); ms = kids(at.part, "measure"); }
-      const other = ms[mi + (right ? 1 : -1)]; if (!other) return;
-      if (kids(other, "backup").length) { hud("Sąsiedni takt ma dwa głosy", 2500); return; }
-      swapBars(at.m, other); target = other;
+    /* a rest ("–") moves only inside its bar (Nat: rests jumped onto bar lines and into the next bars) */
+    if (isR(n)) {
+      const hs = heads(at.m), k = hs.indexOf(n), nb = hs[k + (right ? 1 : -1)]; if (!nb) return;
+      const gb = group(nb), pa = doc.createElement("x"), pb2 = doc.createElement("x");
+      first.before(pa); gb[0].before(pb2); g.forEach(x => pb2.before(x)); gb.forEach(x => pa.before(x)); pa.remove(); pb2.remove();
     } else {
       const hs = heads(at.m), k = hs.indexOf(n);
       const run = []; for (let j = k + (right ? 1 : -1); j >= 0 && j < hs.length && isR(hs[j]); j += right ? 1 : -1) run.push(hs[j]);
@@ -1556,12 +1595,13 @@ function editNote(op) {
     /* a rest moves up or down a step at a time, within the staff and one step beyond (printed parts move rests out of
        the way of another voice or a long note); written as <display-step>/<display-octave> */
     const r = kid(n, "rest"), bottom = CLEF_BOTTOM[clefAt(at.part, at.m)] ?? 18;
+    const v0 = txt(n, "voice") || "1", same = kids(at.m, "note").filter(x => !kid(x, "chord") && (txt(x, "voice") || "1") === v0), allR = same.every(x => kid(x, "rest"));
     const ds = kid(r, "display-step"), dov = kid(r, "display-octave");
     const whole = r.getAttribute("measure") === "yes" || txt(n, "type") === "whole";
     const cur = ds && dov ? parseInt(dov.textContent, 10) * 7 + STEP_I[ds.textContent.trim()] : bottom + (whole ? 6 : 4);
     const nx = Math.max(bottom - 1, Math.min(bottom + 9, cur + (op === "up" ? 1 : -1))); if (nx === cur) return;
     [ds, dov].forEach(x => x && x.remove());
-    r.innerHTML = `<display-step>${STEP_N[((nx % 7) + 7) % 7]}</display-step><display-octave>${Math.floor(nx / 7)}</display-octave>`;
+    (allR ? same : [n]).forEach(x => { const rr = kid(x, "rest"); rr.innerHTML = `<display-step>${STEP_N[((nx % 7) + 7) % 7]}</display-step><display-octave>${Math.floor(nx / 7)}</display-octave>`; });
   } else if (op === "up") move(1); else if (op === "down") move(-1);
   else if (op === "octup") move(7); else if (op === "octdown") move(-7);
   /* ♭ and ♯ move the note half a tone from where it is (B♭ in F major with ♯ is B; F with ♯ is F♯) */
@@ -1578,6 +1618,7 @@ function editNote(op) {
     if (!setLen(nt, false)) return;
   } else if (op === "rest") {
     if (p) { if (kid(n, "chord")) { untie(n); unslur(n); n.remove(); S.editSel = null; } else toRest(n); }
+    else if (n.getAttribute("print-object") === "no") n.removeAttribute("print-object");      // empty room → a drawn "–"
     else toNote();
   } else if (op === "add") {
     /* a rest becomes a note; a note gets a copy right after it (taking the place of the rests that follow) */
@@ -1597,8 +1638,13 @@ function editNote(op) {
        takes its place); a rest goes away */
     if (p && kid(n, "chord")) { untie(n); unslur(n); n.remove(); S.editSel = null; }
     else if (p && n.nextElementSibling && kid(n.nextElementSibling, "chord")) { untie(n); unslur(n); const nx = n.nextElementSibling; kids(nx, "chord").forEach(x => x.remove()); n.remove(); }
-    else if (p) toRest(n);
-    else if (kids(at.m, "note").length > 1) { n.remove(); S.editSel = null; }        // any rest can go (Nat); a bar left short is marked
+    else if (p) { toRest(n); n.setAttribute("print-object", "no"); }
+    else {
+      /* a rest goes: its time stays as empty room (the bar keeps its length); in a bar of rests every rest goes */
+      const v = txt(n, "voice") || "1", mine = kids(at.m, "note").filter(x => !kid(x, "chord") && (txt(x, "voice") || "1") === v);
+      (mine.every(x => kid(x, "rest")) ? mine : [n]).forEach(x => x.setAttribute("print-object", "no"));
+    }
+    S.editSel = null;
   }
   pushUndo();
   S.piece.xml = new XMLSerializer().serializeToString(doc);
@@ -2418,7 +2464,7 @@ function cursorMap(ev) {
     let b = bars.get(m); if (b) return b;
     /* the height comes from the staff lines only (notes above or below the staff would make it jump) */
     const staffs = staffsOf(m), lines = st => { const ls = [...(st || m).children].filter(c => c.tagName === "path").slice(0, 5).map(l => l.getBoundingClientRect()); return ls.length ? { t: Math.min(...ls.map(r => r.top)) - pr.top, b: Math.max(...ls.map(r => r.bottom)) - pr.top } : (r => ({ t: r.y, b: r.y + r.h }))(rel((st || m).getBoundingClientRect())); };
-    const a = lines(staffs[0]), z = lines(staffs[staffs.length - 1]), gap = (a.b - a.t) / 4 || 8, mr = rel(m.getBoundingClientRect());
+    const a = lines(staffs[0]), z = lines(staffs[staffs.length - 1]), gap = (a.b - a.t) / 4 || 8, mr = rel(barRect(m));
     b = { sys: m.closest("g.system") || m, top: a.t - gap * 1.5, h: z.b - a.t + gap * 3, mx: mr.x, mw: mr.w, mi: mIndex.has(m) ? mIndex.get(m) : -1 };
     bars.set(m, b); return b;
   };
@@ -2558,12 +2604,20 @@ function setLoopBar(di) {
   drawLoop(); syncLoopUi();
   if (playState) play();
 }
+/* a bar on the screen from its bar line to the previous one (the first bar of a line from the line's start), so the
+   playing bar and a loop light the whole bar with no gaps */
+function barRect(m) {
+  const r = m.getBoundingClientRect(), sys = m.closest("g.system"), ms = sys ? [...sys.querySelectorAll(":scope > g.measure")] : [m], k = ms.indexOf(m);
+  const bl = x => { const g = x && x.querySelector(":scope > g.barLine"); return g ? g.getBoundingClientRect() : null; };
+  const own = bl(m), prev = k > 0 ? bl(ms[k - 1]) : null, left = prev ? prev.right : r.left, right = own ? own.right : r.right;
+  return { left, right, top: r.top, bottom: r.bottom, width: right - left, height: r.height };
+}
 function drawLoop() {
   $$("#pages .loopband").forEach(x => x.remove());
   if (!pb.loop) return;
   const ms = measureEls(), pg = $("#pages"), pr = pg.getBoundingClientRect(), rows = new Map();
   ms.slice(pb.loop.a, pb.loop.b + 1).forEach(m => {
-    const sys = m.closest("g.system") || m, r = m.getBoundingClientRect(), row = rows.get(sys) || { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
+    const sys = m.closest("g.system") || m, r = barRect(m), row = rows.get(sys) || { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
     row.l = Math.min(row.l, r.left); row.r = Math.max(row.r, r.right); row.t = Math.min(row.t, r.top); row.b = Math.max(row.b, r.bottom); rows.set(sys, row);
   });
   /* in % of the pages, so zooming in and out keeps the band on its bars */
@@ -2646,8 +2700,9 @@ document.addEventListener("visibilitychange", () => {
 /* ---------------- Print & export ---------------- */
 async function printScore() {
   await engineReady; stopPlayback();
-  tk.setOptions(a4Options({}, 1));                 // the paper size, as the PDF (not the screen's zoom)
-  tk.loadData(processedXml());
+  const po = a4Options({}, 1), px = pagedXml(processedXml(), po);
+  tk.setOptions(po);                 // the paper size, as the PDF (not the screen's zoom)
+  tk.loadData(px);
   let html = "";
   for (let i = 1; i <= tk.getPageCount(); i++) html += `<div class="pg">${tk.renderToSVG(i)}</div>`;
   const pa = $("#print-area"); pa.innerHTML = html; endLines(pa);
@@ -2722,7 +2777,7 @@ function buildPdf(images, w, h, title) {
 let pdfBusy = false;
 /* the score (or one part of it) as PDF pages */
 async function pdfBlob(xml, title) {
-  tk.setOptions(a4Options({}, 1)); tk.loadData(xml);
+  const po = a4Options({}, 1), px = pagedXml(xml, po); tk.setOptions(po); tk.loadData(px);
   const svgs = []; for (let i = 1; i <= tk.getPageCount(); i++) svgs.push(tk.renderToSVG(i));
   S.loadedKey = null;
   const images = [];
@@ -2783,7 +2838,7 @@ async function sendImage(send = true) {
   pdfBusy = true; stopPlayback(); hud("Przygotowuję obraz…", 30000);
   try {
     await engineReady;
-    tk.setOptions(a4Options()); tk.loadData(processedXml());
+    const po = a4Options(), px = pagedXml(processedXml(), po); tk.setOptions(po); tk.loadData(px);
     const el = await pageCanvas(tk.renderToSVG(1)); endLines(el); enlargeTitle(el, 1.9);
     const c = await rasterPage(el); S.loadedKey = null;
     const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.9));

@@ -193,7 +193,7 @@ function readingPartId() {
 /* the score as it is drawn; the same piece and settings give the same text, so taps and bar lookups do not parse,
    beam and serialise the whole score again */
 function processedXml() {
-  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff(), S.layout, S.meterLines].join("\u0001");
+  const key = [S.piece.xml, S.parts.map(p => p.id + (p.keep ? 1 : 0) + p.name).join(), S.piece.title, S.piece.composer, S.piece.instrument, S.clef, S.readOct, S.under, S.iv.d, S.iv.s, S.melody, castsOff(), S.layout, S.meterLines, !!S.editMode].join("\u0001");
   if (processedXml.key === key) return processedXml.out;
   const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
 }
@@ -208,24 +208,39 @@ function processedXmlNow() {
     kids(pl, "score-part").forEach(sp => { if (!keep.has(sp.getAttribute("id"))) sp.remove(); });
     if (removed) kids(pl, "part-group").forEach(g => g.remove());
   }
-  /* a rest that fills a whole bar (written as a rest of any length, e.g. inserted with "–") is drawn as a whole-bar
-     rest, in the middle of the bar */
+  /* a bar (one voice) holding only rests is drawn as one whole-bar rest in the middle of the bar, as printed music
+     does; it is empty (no rest drawn) when all its rests are empty room (print-object="no": rests Solo adds by itself
+     and rests taken away with Kosz keep the bar's time without being drawn; Nat: "a staff may be empty"). An additive
+     metre keeps its group rests. */
   kids(root, "part").forEach(part => {
-    let div = 1, beats = 4, bt = 4;
+    let div = 1, beats = 4, bt = 4, add = false;
     kids(part, "measure").forEach(m => {
       kids(m, "attributes").forEach(a => {
         const d = kid(a, "divisions"); if (d) div = parseFloat(d.textContent) || div;
-        const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; }
+        const t = kid(a, "time"); if (t) { beats = beatsOf(txt(t, "beats")) || beats; bt = parseInt(txt(t, "beat-type"), 10) || bt; add = txt(t, "beats").includes("+"); }
       });
+      if (m.getAttribute("implicit") === "yes" || add) return;
       const cap = div * 4 * beats / bt, ns = kids(m, "note").filter(n => !kid(n, "grace") && !kid(n, "cue"));
       const staves = new Map(); ns.forEach(n => { const k = txt(n, "staff") || "1"; if (!staves.has(k)) staves.set(k, []); staves.get(k).push(n); });
       staves.forEach(list => {
         if (!list.every(n => kid(n, "rest"))) return;
         const voices = new Map(); list.forEach(n => { const v = txt(n, "voice") || "1"; voices.set(v, [...(voices.get(v) || []), n]); });
-        voices.forEach(vs => { if (vs.length === 1 && Math.abs((parseFloat(txt(vs[0], "duration")) || 0) - cap) < 1e-6) kid(vs[0], "rest").setAttribute("measure", "yes"); });
+        voices.forEach(vs => {
+          const sum = vs.reduce((a, n) => a + (parseFloat(txt(n, "duration")) || 0), 0); if (sum > cap + 1e-6) return;
+          const seen = vs.find(n => n.getAttribute("print-object") !== "no"), keep = vs[0], r = kid(keep, "rest");
+          if (seen && seen !== keep) { const sr = kid(seen, "rest"); [...r.children].forEach(c => c.remove()); [...sr.children].forEach(c => r.appendChild(c.cloneNode(true))); }
+          if (seen) keep.removeAttribute("print-object"); else keep.setAttribute("print-object", "no");
+          kid(keep, "duration").textContent = String(cap);
+          /* an empty bar while editing: a faint whole rest (the engine draws a whole-bar rest in black whatever its colour) */
+          if (seen || !S.editMode) r.setAttribute("measure", "yes");
+          else { r.removeAttribute("measure"); kids(keep, "dot").forEach(x => x.remove()); let ty = kid(keep, "type"); if (!ty) { ty = keep.ownerDocument.createElement("type"); (kid(keep, "voice") || kid(keep, "duration")).after(ty); } ty.textContent = "whole"; }
+          vs.slice(1).forEach(n => n.remove());
+        });
       });
     });
   });
+  /* while editing the empty room is shown as faint rests, so it can be tapped and filled */
+  if (S.editMode) [...root.getElementsByTagName("note")].forEach(n => { if (n.getAttribute("print-object") === "no" && kid(n, "rest")) { n.removeAttribute("print-object"); n.setAttribute("color", "#C9CFDD"); } });
   // title/composer from the editable fields
   let work = kid(root, "work");
   if (!work) { work = doc.createElement("work"); root.insertBefore(work, root.firstChild); }
@@ -771,9 +786,9 @@ function barIssues(xml) {
    print it (Verovio also gives an additive whole-bar rest no width, so the bar could not be tapped) */
 const REST_Q = { 0.5: ["eighth", 0], 0.75: ["eighth", 1], 1: ["quarter", 0], 1.5: ["quarter", 1], 2: ["half", 0], 3: ["half", 1], 4: ["whole", 0], 6: ["whole", 1] };
 function emptyBarXml(beats, bt, div, extra = "<voice>1</voice>") {
-  const whole = `<note><rest measure="yes"/><duration>${Math.round(div * 4 * beatsOf(beats) / bt)}</duration>${extra}</note>`;
+  const whole = `<note print-object="no"><rest measure="yes"/><duration>${Math.round(div * 4 * beatsOf(beats) / bt)}</duration>${extra}</note>`;
   if (!String(beats).includes("+")) return whole;
-  const gs = String(beats).split("+").map(g => { const q = (parseInt(g, 10) || 0) * 4 / bt, d = div * q, r = REST_Q[q]; return r && Number.isInteger(d) ? `<note><rest/><duration>${d}</duration>${extra}<type>${r[0]}</type>${r[1] ? "<dot/>" : ""}</note>` : null; });
+  const gs = String(beats).split("+").map(g => { const q = (parseInt(g, 10) || 0) * 4 / bt, d = div * q, r = REST_Q[q]; return r && Number.isInteger(d) ? `<note print-object="no"><rest/><duration>${d}</duration>${extra}<type>${r[0]}</type>${r[1] ? "<dot/>" : ""}</note>` : null; });
   return gs.every(Boolean) ? gs.join("") : whole;
 }
 function blankXml(bars = 8, o = {}) {
