@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.12";
+const VERSION = "4.2.13";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -3283,12 +3283,7 @@ const setZoom = z => {
   $("#zoom-val").textContent = Math.round(z * 100) + "%"; if (S.piece) { S.dirty = true; autosave(); }
 };
 $("#zoom-in").addEventListener("click", () => setZoom(zoomNow() + .1));
-/* the editing zoom: 100–250%, only while editing; leaving editing shows the page as it prints again */
-$("#ed-zoom").addEventListener("click", e => {
-  const b = e.target.closest("[data-ez]"); if (!b) return;
-  S.ez = Math.max(1, Math.min(2.5, Math.round(((S.ez || 1) + 0.25 * +b.dataset.ez) * 100) / 100));
-  $("#ed-zoom-v").textContent = Math.round(S.ez * 100) + "%"; S.loadedKey = null; render();
-});
+/* (the editing zoom pill was removed: it got in the way, Nat 8 Oct; S.ez stays 1) */
 $("#zoom-out").addEventListener("click", () => setZoom(zoomNow() - .1));
 [["#f-title", "title"], ["#f-composer", "composer"], ["#f-instrument", "instrument"]].forEach(([sel, k]) => {
   $(sel).addEventListener("change", e => { S.piece[k] = e.target.value.trim(); if (k === "title" && !S.piece.title) S.piece.title = "Bez tytułu"; changed(); if (k === "instrument" && openSheetId === "more") buildMoreSheet(); });
