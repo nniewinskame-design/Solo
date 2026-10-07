@@ -365,7 +365,9 @@ function processedXmlNow() {
 /* while editing with bigger notes the lines are laid out again (fewer bars a line), also for a scan kept as in the
    original; the paper itself keeps its layout */
 const editZoom = () => (S.editMode ? S.ez || 1 : 1);
-const castsOff = () => !!S.piece && S.page !== "screen" && (!(S.layout === "orig" && S.hasLines) || editZoom() > 1);
+/* one rule for every piece: bigger notes ("Wielkość nut" above 100%, or zoomed in while editing) mean fewer bars a
+   line; a scan as in the original keeps its paper's lines only at 100% or less */
+const castsOff = () => !!S.piece && S.page !== "screen" && (!(S.layout === "orig" && S.hasLines) || editZoom() > 1 || (S.pz || 1) > 1);
 function castOff(root) {
   const parts = kids(root, "part"); if (!parts.length) return;
   const bars = kids(parts[0], "measure").length; if (!bars) return;

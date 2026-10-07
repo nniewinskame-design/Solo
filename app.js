@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.10";
+const VERSION = "4.2.11";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -539,7 +539,10 @@ function loadState(piece, settings) {
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null; S.clefMine = false;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
-  S.layout = S.hasLines ? "orig" : "fit"; S.meterLines = true; S.page = "a4"; S.pageMine = false; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
+  /* only a scan (its photo's lines) opens "as in the original"; a file that merely has saved line breaks (a MusicXML
+     from Solo or another program) is laid out like any piece (Nat: Hay Burner's bars a line were frozen) */
+  const scanned = piece.sourceType === "device" || piece.sourceType === "ai";
+  S.layout = S.hasLines && scanned ? "orig" : "fit"; S.layoutMine = false; S.meterLines = true; S.page = "a4"; S.pageMine = false; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
   if (settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
@@ -555,7 +558,8 @@ function loadState(piece, settings) {
     /* settings saved before 3.9: the octave picked for the reading clef sat inside the transposition and moved every
        part; it now belongs to the part being read only */
     else if (S.iv && (S.iv.d || S.iv.s)) { const s12 = S.iv.s, oc = Math.trunc(s12 / 12); if (oc && Math.abs(s12 % 12) <= 6) { S.iv = { d: S.iv.d - 7 * oc, s: s12 - 12 * oc }; S.readOct = oc; } }
-    if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
+    if ((settings.layout === "orig" || settings.layout === "fit") && (scanned || settings.layoutMine)) S.layout = settings.layout;
+    S.layoutMine = !!settings.layoutMine;
     if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
     S.pageMine = !!settings.pageMine;
     S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = false;          // no swing (Nat, 8 Oct)
@@ -702,7 +706,7 @@ function recordFromState() {
     title: S.piece.title || "Bez tytułu", composer: S.piece.composer || "", instrument: S.piece.instrument || "",
     xml: S.piece.xml, sourceType: S.piece.sourceType || "file", images: S.piece.images || [], aiJson: S.piece.aiJson || null,
     issues: S.piece.issues || [], lines: S.piece.lines || null, origXml: S.piece.origXml || null, trShift: S.piece.trShift || 0, partRoles: S.piece.partRoles || null, noticeOff: !!S.piece.noticeOff, created: S.piece.created || now, updated: S.dirty ? now : (S.piece.updated || now), opened: S.piece.opened || now,
-    settings: { melody: S.melody || null, keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, nz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing, meterLines: S.meterLines !== false },
+    settings: { melody: S.melody || null, keep: S.parts.filter(p => p.keep).map(p => p.id), clef: (S.editView || S).clef, iv: (S.editView || S).iv, preset: (S.editView || S).preset, bpm: S.bpm, zoom: (S.editView || S).zoom, nz: S.pz, readOct: (S.editView || S).readOct || 0, pageMine: !!S.pageMine, clefMine: !!S.clefMine, layout: S.layout, layoutMine: !!S.layoutMine, page: (S.editView || S).page, under: S.under || "", swing: !!S.swing, meterLines: S.meterLines !== false },
     keyLabel: curKeyName(), clefLabel: CLEF_PL[curClef()] || "", thumb: S.piece.thumb || null
   };
 }
@@ -825,8 +829,8 @@ function pagedXml(xml, opts) {
 /* the size of the notes on the A4 page: a scan's own staff size (as on its paper) times "Wielkość nut" (+/−); the
    screen, the PDF, print and the picture all use it, so they look the same (Nat: +/− did not enlarge the notes and the
    picture came out smaller) */
-const BASE_NOTES = 1.2;          // 100% is a bigger staff than the engine's own (Nat: "make 100% bigger"); a scan keeps its paper's size
-const paperZoom = () => (S.layout === "orig" && S.hasLines ? scanZoom() : BASE_NOTES) * (S.pz || 1);
+const BASE_NOTES = 1.35;          // 100% is a bigger staff than the engine's own (Nat: "make 100% bigger"); a scan keeps its paper's size
+const paperZoom = () => (S.layout === "orig" && S.hasLines && (S.piece && S.piece.lines || []).length ? scanZoom() : BASE_NOTES) * (S.pz || 1);
 /* on screen while editing: the paper's size times the editing zoom (Nat: zoom in to edit more easily) */
 const screenZoom = () => paperZoom() * editZoom();
 function a4Options(extra, zoom = paperZoom()) {
@@ -3183,7 +3187,7 @@ $("#oct-down").addEventListener("click", () => { const { k, oct } = kOct(); setK
 $("#oct-up").addEventListener("click", () => { const { k, oct } = kOct(); setKOct(k, oct + 1); });
 
 /* ---------------- More sheet ---------------- */
-$$("#layoutseg button").forEach(b => b.addEventListener("click", () => { S.layout = b.dataset.layout; syncLayout(); S.loadedKey = null; changed(); }));
+$$("#layoutseg button").forEach(b => b.addEventListener("click", () => { S.layout = b.dataset.layout; S.layoutMine = true; syncLayout(); S.loadedKey = null; changed(); }));
 $$("#meterseg button").forEach(b => b.addEventListener("click", () => { S.meterLines = b.dataset.m === "1"; syncLayout(); S.loadedKey = null; changed(); }));
 function syncLayout() {
   $$("#meterseg button").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.m === "1") === (S.meterLines !== false))));
