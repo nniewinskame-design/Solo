@@ -335,10 +335,13 @@ function castOff(root) {
     return ns.length / staves;
   })));
   const pickup = kids(parts[0], "measure")[0].getAttribute("implicit") === "yes" ? 1 : 0;
+  /* a line the player started ("Nowa linia") always starts a line */
+  const forced = new Set(kids(parts[0], "measure").map((m, k) => kids(m, "print").some(pr => pr.getAttribute("solo-break") === "yes") ? k : -1).filter(k => k > 0));
   const lines = []; let i = pickup;
   while (i < bars) {
     const look = busy.slice(i, i + 4), avg = look.reduce((a, b) => a + b, 0) / look.length;
-    const n = avg > 14 ? 2 : avg > 10 ? 3 : 4;
+    let n = avg > 14 ? 2 : avg > 10 ? 3 : 4;
+    for (let k = i + 1; k < i + n; k++) if (forced.has(k)) { n = k - i; break; }
     lines.push([i, Math.min(bars, i + n)]); i += n;
   }
   if (pickup && lines.length) lines[0][0] = 0;
@@ -349,8 +352,8 @@ function castOff(root) {
   }
   const starts = new Set(lines.slice(1).map(l => l[0]));
   parts.forEach(p => kids(p, "measure").forEach((m, k) => {
-    kids(m, "print").forEach(pr => { pr.removeAttribute("new-system"); pr.removeAttribute("new-page"); if (!pr.attributes.length && !pr.children.length) pr.remove(); });
-    if (!starts.has(k)) return;
+    kids(m, "print").forEach(pr => { if (pr.getAttribute("solo-break") === "yes") return; pr.removeAttribute("new-system"); pr.removeAttribute("new-page"); if (!pr.attributes.length && !pr.children.length) pr.remove(); });
+    if (!starts.has(k) || kids(m, "print").some(pr => pr.getAttribute("solo-break") === "yes")) return;
     const pr = root.ownerDocument.createElement("print"); pr.setAttribute("new-system", "yes"); m.insertBefore(pr, m.firstChild);
   }));
 }

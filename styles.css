@@ -2077,3 +2077,13 @@ svg.cl.g{height:27px!important;margin:-3px 0!important}
 .dock.transport #btn-restart{grid-column:1}.dock.transport #btn-loop{grid-column:2}
 .dock.transport #btn-play{grid-column:3;margin:0 10px}.dock.transport #btn-tempo{grid-column:4}
 @media (min-width:600px){.dock.transport{grid-template-columns:1fr 72px 72px auto 144px 1fr}.dock.transport #btn-restart{grid-column:2}.dock.transport #btn-loop{grid-column:3}.dock.transport #btn-play{grid-column:4}.dock.transport #btn-tempo{grid-column:5}}
+/* editor panes as even grids (Dodaj 5 + 5, Rozmieść 6, Takt 4 + 2) */
+.ed-pane.grid-pane{display:grid!important;gap:6px;width:100%}
+.ed-pane.grid-pane[hidden]{display:none!important}
+.ed-pane.grid-pane.g5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.ed-pane.grid-pane.g6{grid-template-columns:repeat(6,minmax(0,1fr))}
+.ed-pane.grid-pane button{width:100%!important;max-width:none!important;min-width:0!important;height:46px!important;margin:0!important;flex:none!important}
+.line-pane .lp-row.two{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+/* Kosz in the tab bar: red, set a little apart */
+.ed-tabs .ed-trash{color:var(--bad-ink)!important;margin-left:4px!important;min-width:40px!important;height:40px;border-radius:999px;background:transparent;display:inline-flex;align-items:center;justify-content:center}
+.ed-tabs .ed-trash:active{background:var(--bad-tint)!important}
