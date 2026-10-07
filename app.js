@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.5";
+const VERSION = "4.2.6";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -780,6 +780,7 @@ function scanZoom() {
 /* bars spread evenly along a line (a bar's width follows its length in time, not how many notes it holds) and
    every line, the last one too, ends at the right edge, as in hand-made sheets */
 const EVEN_BARS = { minLastJustification: 0, spacingNonLinear: 0.5,
+  bottomMarginHeader: 7,          // clear room between the title and the first line (Nat: lines start lower)
   /* clear room on both sides of every bar line, and after the clef, key and metre before the first note (the
      engine's default lets a note or its ♮ touch the bar line) */
   leftMarginRightBarLine: 2, rightMarginRightBarLine: 2, rightMarginClef: 1.8, rightMarginKeySig: 2, rightMarginMeterSig: 2 };   // the engine allows at most 2
