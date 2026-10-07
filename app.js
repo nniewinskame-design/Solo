@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.15";
+const VERSION = "4.2.16";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -3822,13 +3822,14 @@ async function startReading() {
   presentCover($("#reading"));
   try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) { console.warn(e); }
   try {
-    const piece = await readOnDevice(pages, readCtl.signal), skipped = piece.skipped; delete piece.skipped;
+    const piece = await readOnDevice(pages, readCtl.signal), skipped = piece.skipped, later = piece.later; delete piece.skipped; delete piece.later;
     ck("ck1", "ok"); ck("ck2", "ok"); ck("ck3", "ok"); bar(1);
     pending = []; drawPending();
     /* the answers belonged to these notes: the next piece starts from "Nie wiem" (B-16) */
     ["clef", "time", "key"].forEach(k => store.del("ask-" + k));
     dismissCover($("#reading"));
     openPiece(piece);
+    textsLater(later);
     if (!piece.issues.length) {
       $("#notice-title").textContent = "Porównaj ze zdjęciem";
       $("#notice-text").textContent = "Dynamika (p, f…) i napisy, np. tempo, nie są odczytywane.";
@@ -4018,6 +4019,23 @@ function recognizeWatched(rec, blob, signal, onProgress, ocr = true) {
   return rec.recognizePage(blob, { ocr, signal: ctl.signal, onProgress: p => { pet(); onProgress(p); } })
     .finally(() => { clearTimeout(dog); signal.removeEventListener("abort", stop); });
 }
+/* the words above the staves, read while the piece is already open: when there are any, the piece is set again with
+   them, as long as nobody has changed it in the meantime (an edit is never overwritten) */
+async function textsLater(later) {
+  if (!later || !later.pages.length) return;
+  try {
+    const rec = await getRecognizer(null, new AbortController().signal), texts = [];
+    for (let k = 0; k < later.pages.length; k++) {
+      const p = later.pages[k]; if (!p.blob || !p.staves.length) continue;
+      const r = await rec.readTextStrips(p.blob, p.staves.map(s => ({ cx: s.cx, cy: s.cy, h: s.h, w: s.w, index: s.index })));
+      if (r && r.ok && r.texts && r.texts.length) texts.push({ page: k, staves: p.staves, texts: r.texts });
+    }
+    if (!texts.length) return;
+    const checked = checkReading(attachTexts(homrToSolo(later.xmls, later.title), texts), later.answers);
+    if (checked.xml === later.xml || !S.piece || S.piece.xml !== later.xml || S.editMode) return;
+    S.piece.xml = checked.xml; S.piece.issues = checked.issues; S.loadedKey = null; changed();
+  } catch (e) { console.warn("texts later", e); }
+}
 async function readPage(pg, i, n, signal, ctx) {
   const pre = n > 1 ? `Strona ${i + 1} z ${n}: ` : "";
   const fail = msg => { const e = new Error((n > 1 ? `Strona ${i + 1}: ` : "") + msg); e.page = pg; return e; };
@@ -4041,13 +4059,14 @@ async function readPage(pg, i, n, signal, ctx) {
     /* low memory (a phone ran out once): one thread, a smaller picture and no reading of the words above the staves */
     if (ctx.lowMem && !blob.small) { const url = URL.createObjectURL(blob); try { const im = await loadImage(url); const r2 = await canvasToJpegBlob(im, 1800, 0.88); blob = r2.blob; blob.small = true; } catch (e) { console.warn(e); } finally { URL.revokeObjectURL(url); } }
     const rec = await getRecognizer(ctx.lowMem ? "wasm" : ctx.prefer, signal);
-    /* the reader also reads the text above each staff: tempo, rit., a tempo, rehearsal letters (see attachTexts) */
-    const r = await recognizeWatched(rec, blob, signal, progress, !ctx.lowMem);
+    /* the notes first: the words above the staves (tempo, rit., a tempo, rehearsal letters) are read after the piece is
+       on the screen (textsLater), so the music appears about a third sooner (Nat: reading must be faster) */
+    const r = await recognizeWatched(rec, blob, signal, progress, false);
     if (r.ok) {
       if (rec.backend === "webgpu") store.set("homrGpuOk", "1");
       if (ctx.prefer) { store.set("homrPrefer", ctx.prefer); store.set("homrPreferAt", String(Date.now())); }
       const xml = r.musicXml || "";
-      return { xml, staves: r.staves || [], texts: r.texts || [], empty: !/<note\b/.test(xml) };
+      return { xml, staves: r.staves || [], texts: r.texts || [], empty: !/<note\b/.test(xml), blob };
     }
     if (r.error === "cancelled") { dropRecognizer(); throw abortError(); }        // the worker may still be busy: a new one next time
     const log = String(r.log || "");
@@ -4103,10 +4122,12 @@ async function readOnDevice(pages, signal) {
   });
   const names = new Set((await DB.all().catch(() => [])).map(p => p.title));
   let title = "Nowe nuty", k = 2; while (names.has(title)) title = "Nowe nuty " + k++;
-  const checked = checkReading(attachTexts(homrToSolo(used.map(p => p.res.xml), title), texts), readAnswers());
+  const answers = readAnswers();
+  const checked = checkReading(attachTexts(homrToSolo(used.map(p => p.res.xml), title), texts), answers);
   /* the instrument from the profile (not "Instrument" with nothing chosen), unless it is a keyboard (B-17) */
   const ins = mainInstr();
-  return { title, composer: "", xml: checked.xml, sourceType: "device", images: used.map(p => p.keep), lines, aiJson: null, issues: checked.issues,
+  const later = ctx.lowMem ? null : { pages: used.map(p => ({ blob: p.res.blob, staves: p.res.staves })), xmls: used.map(p => p.res.xml), title, answers, xml: checked.xml };
+  return { later, title, composer: "", xml: checked.xml, sourceType: "device", images: used.map(p => p.keep), lines, aiJson: null, issues: checked.issues,
     instrument: ins && !PIANO_RE.test(ins.name) ? ins.name : "", skipped };
 }
 $("#btn-cancel-read").addEventListener("click", () => readCtl && readCtl.abort());
