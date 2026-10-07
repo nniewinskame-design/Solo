@@ -3,7 +3,7 @@
    pdf.js, fonts, the reader's runtime, tens of MB) which survive an update and are checked against the server in
    the background, so a changed library still arrives without the version being bumped. The reader's models
    ("homr-web-models", ~150 MB) and files shared to Solo ("solo-shared") are never touched here. */
-const CACHE = "solo-v90";
+const CACHE = "solo-v91";
 const LIBS = "solo-libs";
 const SHELL = ["./", "index.html", "styles.css", "listen.css", "theme.js", "core.js", "arrange.js", "motion.js", "orb.js", "app.js", "profile.js", "ownsound.js", "clefs.js", "manifest.webmanifest",
   "prywatnosc.html", "regulamin.html", "licencje.html", "legal.js",

@@ -365,9 +365,9 @@ function processedXmlNow() {
 /* while editing with bigger notes the lines are laid out again (fewer bars a line), also for a scan kept as in the
    original; the paper itself keeps its layout */
 const editZoom = () => (S.editMode ? S.ez || 1 : 1);
-/* one rule for every piece: bigger notes ("Wielkość nut" above 100%, or zoomed in while editing) mean fewer bars a
-   line; a scan as in the original keeps its paper's lines only at 100% or less */
-const castsOff = () => !!S.piece && S.page !== "screen" && (!(S.layout === "orig" && S.hasLines) || editZoom() > 1 || (S.pz || 1) > 1);
+/* one rule for every piece: the bars a line stay the same at any note size ("Wielkość nut" only makes the notes
+   bigger); only zooming in while editing lays the lines out again, for easier tapping */
+const castsOff = () => !!S.piece && S.page !== "screen" && (!(S.layout === "orig" && S.hasLines) || editZoom() > 1);
 function castOff(root) {
   const parts = kids(root, "part"); if (!parts.length) return;
   const bars = kids(parts[0], "measure").length; if (!bars) return;
@@ -384,7 +384,7 @@ function castOff(root) {
   while (i < bars) {
     const look = busy.slice(i, i + 4), avg = look.reduce((a, b) => a + b, 0) / look.length;
     let n = avg > 14 ? 2 : avg > 10 ? 3 : 4;
-    n = Math.max(1, Math.round(n / Math.max(1, (S.pz || 1) * editZoom())));          // bigger notes ("Wielkość nut", or zoomed in while editing): fewer bars a line
+    n = Math.max(1, Math.round(n / editZoom()));          // zoomed in while editing: fewer bars a line (the page itself keeps its bars a line)
     for (let k = i + 1; k < i + n; k++) if (forced.has(k)) { n = k - i; break; }
     lines.push([i, Math.min(bars, i + n)]); i += n;
   }

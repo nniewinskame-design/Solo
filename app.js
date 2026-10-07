@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.11";
+const VERSION = "4.2.12";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -539,10 +539,9 @@ function loadState(piece, settings) {
   S.clef = "keep"; S.iv = { d: 0, s: 0 }; S.preset = -1; S.bpm = null; S.clefMine = false;
   /* T12: a scanned piece keeps the bars per line of the paper ("Jak w oryginale"), others fit the screen */
   S.hasLines = /<print[^>]*new-system="yes"/.test(piece.xml || "");
-  /* only a scan (its photo's lines) opens "as in the original"; a file that merely has saved line breaks (a MusicXML
-     from Solo or another program) is laid out like any piece (Nat: Hay Burner's bars a line were frozen) */
-  const scanned = piece.sourceType === "device" || piece.sourceType === "ai";
-  S.layout = S.hasLines && scanned ? "orig" : "fit"; S.layoutMine = false; S.meterLines = true; S.page = "a4"; S.pageMine = false; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
+  /* a piece with its own lines (a scan, or a file with saved line breaks) keeps them, at any note size (Nat: that is
+     right; the bars a line never change with "Wielkość nut") */
+  S.layout = S.hasLines ? "orig" : "fit"; S.layoutMine = false; S.meterLines = true; S.page = "a4"; S.pageMine = false; S.pz = 1; S.readOct = 0; S.under = ""; S.swing = false;
   if (settings) {
     if (Array.isArray(settings.keep)) S.parts.forEach(p => (p.keep = settings.keep.includes(p.id)));
     if (!S.parts.some(p => p.keep)) S.parts.forEach(p => (p.keep = true));
@@ -558,7 +557,7 @@ function loadState(piece, settings) {
     /* settings saved before 3.9: the octave picked for the reading clef sat inside the transposition and moved every
        part; it now belongs to the part being read only */
     else if (S.iv && (S.iv.d || S.iv.s)) { const s12 = S.iv.s, oc = Math.trunc(s12 / 12); if (oc && Math.abs(s12 % 12) <= 6) { S.iv = { d: S.iv.d - 7 * oc, s: s12 - 12 * oc }; S.readOct = oc; } }
-    if ((settings.layout === "orig" || settings.layout === "fit") && (scanned || settings.layoutMine)) S.layout = settings.layout;
+    if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
     S.layoutMine = !!settings.layoutMine;
     if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
     S.pageMine = !!settings.pageMine;
