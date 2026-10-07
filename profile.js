@@ -179,13 +179,18 @@ function finishOnb(skipped) {
   if (!p.instruments.includes(p.main)) p.main = p.instruments[0] || "puzon";
   saveProfile(p); store.set("welcomed", "1");
   fadeOut($("#onb"), 220);
+  /* music opened during the questions (a shared link, the example): its short tour comes after them */
+  setTimeout(() => { if (typeof tourStart === "function" && S.view === "score" && !openSheetId && !store.get("tourDone")) tourStart(); }, 600);
 }
 function tile(on, label, data, extra = "", hue = "slate", sub = "") { return `<button class="onb-tile${on ? " on" : ""}" style="--h:var(--${hue});--h-ink:var(--${hue}-ink)" ${data} aria-pressed="${on}">${extra}<span>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ""}</span></button>`; }
 
 function renderOnb() {
   const p = onb.p, name = ONB_STEPS[onb.step], box = $("#onb-body");
   $("#onb-back").hidden = onb.step === 0;
-  $("#onb-dots").innerHTML = ONB_STEPS.map((_, i) => `<i class="${i === onb.step ? "on" : i < onb.step ? "done" : ""}"></i>`).join("");   // a progress bar: answered steps filled
+  /* a progress bar of the steps this player actually goes through (a skipped question has no segment, so the bar
+     moves one segment per "Dalej") */
+  const shown = ONB_STEPS.map((n, i) => i).filter(i => i === onb.step || i === 0 || i === ONB_STEPS.length - 1 || !onbSkipStep(ONB_STEPS[i]));
+  $("#onb-dots").innerHTML = shown.map(i => `<i class="${i === onb.step ? "on" : i < onb.step ? "done" : ""}"></i>`).join("");
   let h = "", next = "Dalej";
   if (name === "hello") {
     h = `${STAGE_SVG}<h1 class="h-xl">Cześć, tu Solo.</h1>

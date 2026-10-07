@@ -2107,3 +2107,7 @@ svg.cl.g{height:27px!important;margin:-3px 0!important}
 .kslide .ks-ticks span{white-space:nowrap;overflow:visible}
 .kslide .ks-ticks .orig{color:var(--ink);font-weight:600}
 .kslide .ks-ticks .on{color:var(--brand-ink);font-weight:700}
+/* the first onboarding screen: Solo's mark instead of an empty card */
+.onb-mark{width:96px;height:96px;margin:9vh auto 22px;border-radius:28px;background:var(--grad-brand);display:flex;align-items:center;justify-content:center;box-shadow:0 10px 28px rgb(103 116 252/.28)}
+.onb-mark svg.i{width:48px;height:48px;color:#fff;fill:#fff;stroke:#fff}
+.w-stage .onb-mark{margin:auto}

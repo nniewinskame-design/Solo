@@ -1249,7 +1249,8 @@ function readyTuneXml(id) {
 
 /* the Solo "aura": a clean wash of neighbouring colours (blue, violet, a touch of pink), never mixed into grey; used on
    the start screen, the first-run welcome and above the library instead of pictures */
-const STAGE_SVG = `<div class="aura" aria-hidden="true"></div>`;
+/* the first screen's picture: Solo's mark (the gradient tile with the white note, as on the start screen and the icon) */
+const STAGE_SVG = `<div class="onb-mark" aria-hidden="true"><svg class="i"><use href="#note"/></svg></div>`;
 
 /* ---------------- re-barring after a metre change (Nat, 7 Oct: "the notes should adapt by themselves") ----------------
    From the bar where the metre changes to the next metre change (or the end), every part's music flows into bars of the

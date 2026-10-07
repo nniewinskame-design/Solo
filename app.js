@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.1";
+const VERSION = "4.2.2";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -653,7 +653,7 @@ function openPiece(piece, settings) {
   const refit = !!ensureOnStaff();
   S.dirty = refit && !!S.piece.id; S.thumbDirty = !piece.thumb || refit; S.loadedKey = null;
   S.piece.opened = Date.now();
-  if (!store.get("tourDone")) setTimeout(() => { if (S.view === "score" && !openSheetId && !store.get("tourDone")) tourStart(); }, 1600);
+  if (!store.get("tourDone")) setTimeout(() => { if (S.view === "score" && !openSheetId && !store.get("tourDone") && $("#onb").hidden) tourStart(); }, 1600);
   /* after a scan: which bars to check, short; once closed with ✕ it never comes back for this piece */
   $("#notice").hidden = !(S.piece.issues && S.piece.issues.length) || !!S.piece.noticeOff;
   if (S.piece.issues && S.piece.issues.length) {
@@ -4716,7 +4716,8 @@ function tourShow() {
   const card = $("#tour-card"); card.style.top = card.style.bottom = "";
   if (r.top > innerHeight / 2) card.style.top = Math.max(16, top - card.offsetHeight - 16) + "px"; else card.style.top = Math.min(innerHeight - card.offsetHeight - 16, top + Math.min(h, innerHeight * .45) + 16) + "px";
 }
-function tourStart() { if (S.view !== "score") return; tourI = 0; $("#tour").hidden = false; tourShow(); $("#tour-next").focus(); }
+/* never over the first questions */
+function tourStart() { if (S.view !== "score" || !$("#onb").hidden) return; tourI = 0; $("#tour").hidden = false; tourShow(); $("#tour-next").focus(); }
 function tourEnd() { tourI = -1; $("#tour").hidden = true; store.set("tourDone", "1"); }
 $("#tour-next").addEventListener("click", () => { if (++tourI >= TOUR.length) tourEnd(); else tourShow(); });
 $("#tour-skip").addEventListener("click", tourEnd);
@@ -4772,9 +4773,9 @@ async function openShared() {
   setupHero(); measureGlyphs(); setPlayUi(false); drawPending();
   restorePending().finally(openShared);          // pages left unread last time first, then a shared file
   show("home");
-  if (!store.get("welcomed")) {
-    DB.all().then(all => { if (!all.length) $("#welcome").hidden = false; else store.set("welcomed", "1"); }).catch(e => console.warn(e));   // unreadable is not "new here"
-  }
+  /* the old welcome screen is not shown any more: the home page's own empty state ("Pusty pulpit") greets a new player
+     (Nat: the live app showed the old screen over the new home page) */
+  store.set("welcomed", "1");
   if ("serviceWorker" in navigator && (location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))) setupUpdates();
   /* "Open with Solo" on a computer (manifest file_handlers) */
   if ("launchQueue" in window) launchQueue.setConsumer(async lp => { try { const files = await Promise.all((lp.files || []).map(h => h.getFile())); if (files.length) handleFiles(files); } catch (e) { console.warn(e); } });
