@@ -778,7 +778,7 @@ function scanZoom() {
 }
 /* bars spread evenly along a line (a bar's width follows its length in time, not how many notes it holds) and
    every line, the last one too, ends at the right edge, as in hand-made sheets */
-const EVEN_BARS = { minLastJustification: 0,
+const EVEN_BARS = { minLastJustification: 0, spacingNonLinear: 0.5,
   /* clear room on both sides of every bar line, and after the clef, key and metre before the first note (the
      engine's default lets a note or its ♮ touch the bar line) */
   leftMarginRightBarLine: 2, rightMarginRightBarLine: 2, rightMarginClef: 1.8, rightMarginKeySig: 2, rightMarginMeterSig: 2 };   // the engine allows at most 2
@@ -867,9 +867,19 @@ function endLines(root) {
     ms[0].querySelectorAll(":scope > g.staff > g.clef, :scope > g.staff > g.keySig, :scope > g.staff > g.meterSig, :scope > g.staff > g.meterSigGrp").forEach(g => {
       const v = xsOf(g); if (v.length) s0 = Math.max(s0, Math.max(...v) + (GLYPH[g.getAttribute("class").split(" ")[0]] || 1.5) * sp);
     });
-    const n = ms.length, W = (E - s0) / n; if (!(W > 0)) return;
-    const B = ms.map((_, i) => i === n - 1 ? E : s0 + (i + 1) * W);                    // the new bar lines
+    const n = ms.length, T = E - s0; if (!(T > 0)) return;
     for (let i = 0; i < n; i++) if (!(bars[i] > (i ? bars[i - 1] : s0))) return;         // a drawing it can't read: left as drawn
+    /* bars as even as the music allows: a bar never gets less room than the engine gave its notes (Nat: beamed notes
+       too close), the others share what is left equally */
+    const need = bars.map((x, i) => 0.95 * (x - (i ? bars[i - 1] : s0))), sumNeed = need.reduce((a, b) => a + b, 0);
+    let w;
+    if (sumNeed >= T) w = need.map(x => x * T / sumNeed);
+    else {
+      const sorted = need.slice().sort((a, b) => b - a); let rest = T, left = n, base = T / n;
+      for (const x of sorted) { if (x <= base) break; rest -= x; left--; base = left ? rest / left : 0; }
+      w = need.map(x => Math.max(x, base));
+    }
+    const B = []; w.reduce((x, wi, i) => (B[i] = i === n - 1 ? E : x + wi), s0);         // the new bar lines
     /* bar lines and staff lines move to the even places; inside a bar the room after its bar line (or the metre) is
        always the same: 1.5 staff spaces before the first note, its stem or its ♭/♮ (1.8 after the metre; the engine
        sometimes puts an accidental on the bar line), so every bar starts alike (Gould; solo-zasady-zapisu 11a), and only the music between the first and the last note stretches or narrows */
@@ -1028,7 +1038,7 @@ function nearestNote(x, y, max = 90, sel = NOTE_SEL) {
 }
 /* "Belka": the chosen note and the next one are joined by a beam, or parted when they already are */
 function beamJoined(doc, at) {
-  const auto = at.m.getElementsByTagName("beam").length ? doc : autoBeam(parseXml(new XMLSerializer().serializeToString(doc)));
+  const auto = at.m.getAttribute("solo-beams") === "hand" ? doc : autoBeam(stripAutoBeams(parseXml(new XMLSerializer().serializeToString(doc))));
   const a2 = auto === doc ? at : xmlNoteAt(auto, S.editSel);
   const b = a2 && a2.n && [...a2.n.getElementsByTagName("beam")].find(y => (y.getAttribute("number") || "1") === "1");
   return !!b && ["begin", "continue"].includes(b.textContent.trim());
@@ -1253,6 +1263,7 @@ function addAt(m, X, Y) {
     else { const last = xml[xml.length - 1]; if (last) { let a = last; while (a.nextElementSibling && kid(a.nextElementSibling, "chord")) a = a.nextElementSibling; a.after(n); } else mm.insertBefore(n, kids(mm, "barline").find(b => (b.getAttribute("location") || "right") === "right") || null); }
   }
   const fits = fitBar(doc, part, mm, n);
+  if (mm.getAttribute("solo-beams") === "hand") { mm.removeAttribute("solo-beams"); [...mm.getElementsByTagName("beam")].forEach(b => b.remove()); }
   /* writing your own melody in its last bar: one empty bar is ready after it (the final bar line moves with it) */
   const ms = kids(part, "measure");
   if (mm === ms[ms.length - 1] && S.piece.sourceType === "own") [...doc.getElementsByTagName("part")].forEach(pt => {
@@ -1671,6 +1682,8 @@ function editNote(op) {
     }
     S.editSel = null;
   }
+  /* a bar whose rhythm changed is beamed by the rules again (hand-set beams no longer fit it) */
+  if (/^(len|tonote|torest):/.test(op) || ["dot", "rest", "delete", "left", "right", "add"].includes(op)) [at.m, ...kids(at.part, "measure").filter(x => x !== at.m && kids(x, "note").includes(n))].forEach(x => { if (x.getAttribute("solo-beams") === "hand") { x.removeAttribute("solo-beams"); [...x.getElementsByTagName("beam")].forEach(b => b.remove()); } });
   pushUndo();
   S.piece.xml = new XMLSerializer().serializeToString(doc);
   /* a change you can hear is heard: pitch, length, dot, dynamic, hairpin, articulation */
@@ -1710,13 +1723,13 @@ function markBarSel() {
   const { bar } = barTarget(), di = drawnBars(processedXml()).indexOf(bar), g = measureEls()[di]; if (g) g.classList.add("bsel");
 }
 function buildBarSheet() {
-  const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml);
+  const { pid } = barTarget(), bar = 1, doc = parseXml(S.piece.xml);          // Utwór: the whole piece, from its first bar
   const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || doc.getElementsByTagName("part")[0];
   const m = part && kids(part, "measure")[bar - 1]; if (!m) return;
   $("#sh-bar-t").textContent = "";
   /* the bar Takt works on is marked in the music */
   markBarSel();
-  $("#bar-note").textContent = bar === 1 ? "Metrum, klucz i znaki zmieniają się w całym utworze." : `Metrum, klucz i znaki zmieniają się od taktu ${bar} do końca.`;
+  $("#bar-note").hidden = true;
   const t = timeAt(part, m), c = clefAt(part, m), k = keyAt(part, m);
   /* the metre is written when the choice settles (one change, one undo step), not at every tap */
   meterInline($("#bar-time"), t, v => { clearTimeout(buildBarSheet.t); buildBarSheet.t = setTimeout(() => barOp("time", v), 800); });
@@ -1727,7 +1740,11 @@ function buildBarSheet() {
   const k1 = keyAt(part, kids(part, "measure")[0]), n = Math.abs(k1);
   $("#bar-keyname").textContent = keyName(k1, mode);
   $("#bar-keysig").textContent = !n ? "Bez znaków" : `${n} ${k1 > 0 ? plural(n, "krzyżyk", "krzyżyki", "krzyżyków") : plural(n, "bemol", "bemole", "bemoli")}`;
-  $$("#bar-keypick [data-kd]").forEach(b => (b.disabled = Math.abs(k1 + +b.dataset.kd) > 7));
+  /* the key slider (as in the first Solo): the piece's own key in the middle, half a tone a step, lower to the left */
+  const tr = Math.max(-6, Math.min(6, S.piece.trShift || 0)), k0 = normFifths(k1 - 7 * tr);
+  $("#bar-krange").value = String(tr);
+  $("#bar-kticks").innerHTML = Array.from({ length: 13 }, (_, i) => i - 6).map(s => `<span class="${s === 0 ? "orig" : ""}${s === tr ? " on" : ""}">${esc(keyName(normFifths(k0 + 7 * s), mode).replace(/-(dur|moll)$/, ""))}</span>`).join("");
+  buildBarSheet.mode = mode; buildBarSheet.k0 = k0;
   if ($("#bar-key")) $("#bar-key").value = String(k);
   /* "Popraw znaki przy kluczu": the signature from this bar on, written as it is (for a misread signature) */
   $("#bar-kf-val").textContent = !k ? "Bez znaków" : `${Math.abs(k)} ${k > 0 ? "♯" : "♭"}`;
@@ -1782,7 +1799,8 @@ function beatPicker(box, cur, pick) {
 let rebarred = false;
 function barOp(op, val) {
   rebarred = false;
-  const { bar, pid } = barTarget(), doc = parseXml(S.piece.xml), parts = [...doc.getElementsByTagName("part")];
+  let { bar, pid } = barTarget(); const doc = parseXml(S.piece.xml), parts = [...doc.getElementsByTagName("part")];
+  if (op === "time" || op === "clef" || op === "key") bar = 1;          // Utwór sets them for the whole piece (Nat: earlier lines must follow)
   const later = (part, from) => kids(part, "measure").slice(from);          // this bar and all after it
   if (op === "time") {
     const [b, bt] = val.split("/");
@@ -1927,11 +1945,31 @@ function transposeScore(df) {
   S.piece.xml = transposeXmlString(S.piece.xml, iv, true);
   refreshInfo(); afterEdit(); buildBarSheet();
 }
+/* a key as a number of fifths a reader expects: from 6 flats to 5 sharps (G♭ rather than F♯, as brass players read) */
+const normFifths = f => { let x = ((f % 12) + 12) % 12; if (x > 5) x -= 12; return x; };
+/* the slider: the piece goes to the key s half tones from where it was written, by that exact interval */
+function transposeTo(s) {
+  const { pid } = barTarget(), doc = parseXml(S.piece.xml);
+  const part = [...doc.getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || doc.getElementsByTagName("part")[0];
+  const k1 = keyAt(part, kids(part, "measure")[0]), delta = s - (S.piece.trShift || 0); if (!delta) return;
+  let df = ((7 * delta) % 12 + 12) % 12; if (df > 5) df -= 12;
+  df = [df, df - 12, df + 12].filter(x => Math.abs(k1 + x) <= 7).sort((a, b) => Math.abs(k1 + a) - Math.abs(k1 + b))[0]; if (df == null) return;
+  const kk = (7 * df - delta) / 12, iv = { d: 4 * df - 7 * kk, s: delta };
+  S.piece.trShift = s;
+  pushUndo();
+  S.piece.xml = transposeXmlString(S.piece.xml, iv, true);
+  refreshInfo(); afterEdit(); buildBarSheet();
+}
+$("#bar-krange").addEventListener("input", e => {
+  const s = +e.target.value; $("#bar-keyname").textContent = keyName(normFifths(buildBarSheet.k0 + 7 * s), buildBarSheet.mode);
+  $$("#bar-kticks span").forEach((x, i) => x.classList.toggle("on", i - 6 === s));
+});
+$("#bar-krange").addEventListener("change", e => transposeTo(+e.target.value));
 /* the key signature alone changes; every note keeps its line and space (and its own ♯ ♭ ♮ against the key) */
 $("#bar-keyfix").addEventListener("click", e => {
   const b = e.target.closest("[data-kf]"); if (!b || b.disabled) return;
-  const { bar, pid } = barTarget(), part = [...parseXml(S.piece.xml).getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || parseXml(S.piece.xml).getElementsByTagName("part")[0];
-  const m = part && kids(part, "measure")[bar - 1]; if (!m) return;
+  const { pid } = barTarget(), part = [...parseXml(S.piece.xml).getElementsByTagName("part")].find(p => p.getAttribute("id") === pid) || parseXml(S.piece.xml).getElementsByTagName("part")[0];
+  const m = part && kids(part, "measure")[0]; if (!m) return;
   barOp("key", String(keyAt(part, m) + +b.dataset.kf));
 });
 $("#bar-keypick").addEventListener("click", e => { const b = e.target.closest("[data-kd]"); if (b && !b.disabled) transposeScore(+b.dataset.kd); });

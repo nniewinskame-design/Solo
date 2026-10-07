@@ -198,7 +198,7 @@ function processedXml() {
   const out = processedXmlNow(); processedXml.key = key; processedXml.out = out; return out;
 }
 function processedXmlNow() {
-  const doc = autoBeam(cleanBeams(addAccidentals(parseXml(S.piece.xml))));
+  const doc = autoBeam(cleanBeams(stripAutoBeams(addAccidentals(parseXml(S.piece.xml)))));
   const root = doc.documentElement;
   const keep = new Set(S.parts.filter(p => p.keep).map(p => p.id));
   const removed = S.parts.some(p => !p.keep);
@@ -1115,13 +1115,21 @@ function cleanBeams(doc) {
 }
 /* the editor's "Belka": join the chosen note to the next one with a beam, or part them; the bar's beams become
    explicit (copied from the automatic ones first) so the choice stays */
+/* beams are drawn by the rules (Gould) in every bar, also in a scan and after an edit; only a bar whose beams the
+   player set by hand (Belka) keeps its own (Nat: "beams should be made automatically") */
+function stripAutoBeams(doc) {
+  [...doc.getElementsByTagName("measure")].forEach(m => { if (m.getAttribute("solo-beams") !== "hand") [...m.getElementsByTagName("beam")].forEach(b => b.remove()); });
+  return doc;
+}
 function setBeamJoin(doc, m, n, join) {
-  if (!m.getElementsByTagName("beam").length) {
-    const tmp = autoBeam(parseXml(new XMLSerializer().serializeToString(doc)));
+  if (m.getAttribute("solo-beams") !== "hand") {
+    [...m.getElementsByTagName("beam")].forEach(b => b.remove());
+    const tmp = autoBeam(stripAutoBeams(parseXml(new XMLSerializer().serializeToString(doc))));
     const part = m.parentNode, pi = [...doc.getElementsByTagName("part")].indexOf(part), mi = kids(part, "measure").indexOf(m);
     const am = kids(tmp.getElementsByTagName("part")[pi], "measure")[mi], an = kids(am, "note");
     kids(m, "note").forEach((x, i) => kids(an[i], "beam").forEach(b => insertBeam(x, doc.importNode(b, true))));
   }
+  m.setAttribute("solo-beams", "hand");
   const v = (txt(n, "voice") || "1") + "/" + (txt(n, "staff") || "1");
   const list = kids(m, "note").filter(x => !kid(x, "chord") && !kid(x, "grace") && (txt(x, "voice") || "1") + "/" + (txt(x, "staff") || "1") === v);
   const i = list.indexOf(n); if (i < 0 || i + 1 >= list.length) return "last";
