@@ -465,6 +465,7 @@ function splitHomrParts(doc) {
         });
         if (!count) {
           const n = doc.createElement("note");
+          n.setAttribute("print-object", "no");          // nothing read in the bar: it stays empty, as on the paper (no rest put in)
           n.innerHTML = `<rest measure="yes"/><duration>${Math.round(div * beats * 4 / beatType)}</duration><voice>1</voice>`;
           const bar = kid(m, "barline"); bar && bar.getAttribute("location") === "right" ? m.insertBefore(n, bar) : m.appendChild(n);
         }
@@ -485,7 +486,7 @@ function padParts(parts) {
     }));
     for (let k = kids(p, "measure").length; k < most; k++) {
       const m = p.ownerDocument.createElement("measure");
-      m.innerHTML = `<note><rest measure="yes"/><duration>${Math.round(div * beats * 4 / bt)}</duration><voice>1</voice></note>`;
+      m.innerHTML = `<note print-object="no"><rest measure="yes"/><duration>${Math.round(div * beats * 4 / bt)}</duration><voice>1</voice></note>`;
       p.appendChild(m);
     }
   });
@@ -771,7 +772,7 @@ function checkReading(xml, ans = {}) {
     lines.forEach((idxs, L) => {
       const lineMs = ms.map((m, i) => i).filter(i => lineOf[i] === L);
       const onlyFar = lineMs.every(i => { const ns = kids(ms[i], "note").filter(n => kid(n, "pitch")); return !ns.length || (farBy.get(i) && farBy.get(i).all); });
-      if (onlyFar) idxs.forEach(i => { const m = ms[i]; const ns = kids(m, "note"); const full = ns.reduce((a, n) => a + (kid(n, "chord") ? 0 : parseFloat(txt(n, "duration")) || 0), 0); ns.forEach(n => n.remove()); const r = doc.createElement("note"); r.innerHTML = `<rest measure="yes"/><duration>${Math.round(full)}</duration><voice>1</voice>`; const bl = kids(m, "barline").find(b => (b.getAttribute("location") || "right") === "right"); m.insertBefore(r, bl || null); issues.push(`Takt ${i + 1}: usunięto znaki pod pięciolinią (to pewnie podpisy, nie nuty)`); });
+      if (onlyFar) idxs.forEach(i => { const m = ms[i]; const ns = kids(m, "note"); const full = ns.reduce((a, n) => a + (kid(n, "chord") ? 0 : parseFloat(txt(n, "duration")) || 0), 0); ns.forEach(n => n.remove()); const r = doc.createElement("note"); r.setAttribute("print-object", "no"); r.innerHTML = `<rest measure="yes"/><duration>${Math.round(full)}</duration><voice>1</voice>`; const bl = kids(m, "barline").find(b => (b.getAttribute("location") || "right") === "right"); m.insertBefore(r, bl || null); issues.push(`Takt ${i + 1}: usunięto znaki pod pięciolinią (to pewnie podpisy, nie nuty)`); });
       else idxs.forEach(i => issues.push(`Takt ${i + 1}: nuta daleko od pięciolinii, sprawdź`));
     });
   });
@@ -1308,7 +1309,7 @@ function rebarScore(doc, parts, from, beats, bt) {
   parts.forEach((part, i) => {
     for (let k = counts[i]; k < max; k++) {
       const ms = kids(part, "measure"), last = ms[from + counts[i] - 1 + (k - counts[i])], div = divAt(part, last), cap = Math.round(div * 4 * beatsOf(beats) / bt);
-      const m = doc.createElement("measure"); m.innerHTML = `<note><rest measure="yes"/><duration>${cap}</duration><voice>1</voice></note>`;
+      const m = doc.createElement("measure"); m.innerHTML = `<note print-object="no"><rest measure="yes"/><duration>${cap}</duration><voice>1</voice></note>`;
       last.after(m); const fin = kids(last, "barline").find(b => (b.getAttribute("location") || "right") === "right"); if (fin) m.appendChild(fin);
     }
   });

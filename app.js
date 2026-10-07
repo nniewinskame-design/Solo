@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.14";
+const VERSION = "4.2.15";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -3272,13 +3272,17 @@ $("#tempo-reset").addEventListener("click", () => setBpm(Math.round(S.baseBpm ||
 /* note size: 50-200 %, remembered for the piece (and as the default for new pieces) */
 /* A4 pages zoom like a PDF: the sheet itself grows (and can be moved sideways), its lines stay as on paper.
    "Dopasuj do ekranu" zooms the music instead, and the lines are laid out again. */
-const zoomNow = () => S.page === "screen" ? S.zoom : (S.pz || 1), zoomMax = () => S.page === "screen" ? 2 : 1.8;
+/* while editing on the A4 page, two fingers zoom the editing view: bigger notes and fewer bars a line, for easier
+   tapping (Nat); the page itself, print and PDF keep their size and lines */
+const editPinch = () => S.editMode && S.page !== "screen";
+const zoomNow = () => editPinch() ? (S.ez || 1) : S.page === "screen" ? S.zoom : (S.pz || 1), zoomMax = () => editPinch() ? 2.5 : S.page === "screen" ? 2 : 1.8;
 function applyPageZoom() {
   const pg = $("#pages"), a4 = S.mode === "pages";
   pg.classList.toggle("a4", a4); pg.style.width = "";
   requestAnimationFrame(drawLoop);
 }
 const setZoom = z => {
+  if (editPinch()) { S.ez = Math.round(Math.max(1, Math.min(2.5, z)) * 4) / 4; S.loadedKey = null; render(); return; }
   z = Math.round(Math.max(S.page === "screen" ? .5 : .6, Math.min(zoomMax(), z)) * 10) / 10;
   if (S.page === "screen") { S.zoom = z; store.set("zoom2", z); if (S.piece) S.piece.zoom = z; render(); }
   else { S.pz = z; S.loadedKey = null; render(); }
