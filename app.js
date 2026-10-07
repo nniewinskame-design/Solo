@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.3";
+const VERSION = "4.2.4";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -549,7 +549,7 @@ function loadState(piece, settings) {
     if (Number.isInteger(settings.preset)) S.preset = settings.preset;
     if (settings.bpm >= 20 && settings.bpm <= 300) S.bpm = Math.round(settings.bpm);
     if (settings.zoom >= .5 && settings.zoom <= 2) S.zoom = settings.zoom;
-    if (settings.pz >= .5 && settings.pz <= 3) S.pz = settings.pz;
+    if (settings.pz >= .6 && settings.pz <= 1.8) S.pz = settings.pz;
     if (Number.isInteger(settings.readOct)) S.readOct = Math.max(-2, Math.min(2, settings.readOct));
     /* settings saved before 3.9: the octave picked for the reading clef sat inside the transposition and moved every
        part; it now belongs to the part being read only */
@@ -820,7 +820,11 @@ function pagedXml(xml, opts) {
   opts.breaks = "encoded"; pagedXml.key = key; pagedXml.out = out;
   return out;
 }
-function a4Options(extra, zoom = S.zoom) {
+/* the size of the notes on the A4 page: a scan's own staff size (as on its paper) times "Wielkość nut" (+/−); the
+   screen, the PDF, print and the picture all use it, so they look the same (Nat: +/− did not enlarge the notes and the
+   picture came out smaller) */
+const paperZoom = () => (S.layout === "orig" && S.hasLines ? scanZoom() : 1) * (S.pz || 1);
+function a4Options(extra, zoom = paperZoom()) {
   const z = zoom, r = v => Math.round(v / z);
   return { pageWidth: r(2100), pageHeight: r(2970), scale: 50, adjustPageHeight: false, breaks: castsOff() ? "line" : S.layout === "orig" && S.hasLines ? "encoded" : "auto", header: "auto", footer: "none",
     pageMarginTop: r(110), pageMarginBottom: r(110), pageMarginLeft: r(150), pageMarginRight: r(150), spacingSystem: 6, svgViewBox: true,
@@ -898,7 +902,7 @@ function endLines(root) {
          in time (Nat: a rest was pulled onto the bar line) */
       const lo = Math.min(...xs), hi = Math.max(...xs);
       if (lo - L > 3.5 * sp) return lin([L, R], [NL, NR]);
-      const a = NL + (i ? 1.5 : 1.8) * sp, b = NR - (R - hi);
+      const a = NL + (i ? 1.5 : 2.6) * sp, b = NR - (R - hi);
       if (a >= NR - sp) return lin([L, R], [NL, NR]);
       const os = lo > L ? [L, lo] : [lo], ns = lo > L ? [NL, a] : [a];
       if (hi > lo && b > a + 1) { os.push(hi); ns.push(b); }
@@ -961,7 +965,7 @@ async function doRender() {
       /* a scan shown as in the original: its lines are filled to the full width, the last one too, and the staff gets
          the size it has on the paper relative to the line's length (an exercise book prints big staves) */
       const orig = S.layout === "orig" && S.hasLines;
-      opts = a4Options(orig ? { minLastJustification: 0 } : {}, orig ? scanZoom() : 1);
+      opts = a4Options(orig ? { minLastJustification: 0 } : {}, paperZoom());
     }
     else {
       const px = 38 * S.zoom;
@@ -2781,7 +2785,7 @@ document.addEventListener("visibilitychange", () => {
 /* ---------------- Print & export ---------------- */
 async function printScore() {
   await engineReady; stopPlayback();
-  const po = a4Options({}, 1), px = pagedXml(processedXml(), po);
+  const po = a4Options({}), px = pagedXml(processedXml(), po);
   tk.setOptions(po);                 // the paper size, as the PDF (not the screen's zoom)
   tk.loadData(px);
   let html = "";
@@ -2858,7 +2862,7 @@ function buildPdf(images, w, h, title) {
 let pdfBusy = false;
 /* the score (or one part of it) as PDF pages */
 async function pdfBlob(xml, title) {
-  const po = a4Options({}, 1), px = pagedXml(xml, po); tk.setOptions(po); tk.loadData(px);
+  const po = a4Options({}), px = pagedXml(xml, po); tk.setOptions(po); tk.loadData(px);
   const svgs = []; for (let i = 1; i <= tk.getPageCount(); i++) svgs.push(tk.renderToSVG(i));
   S.loadedKey = null;
   const images = [];
@@ -3244,16 +3248,16 @@ $("#tempo-reset").addEventListener("click", () => setBpm(Math.round(S.baseBpm ||
 /* note size: 50-200 %, remembered for the piece (and as the default for new pieces) */
 /* A4 pages zoom like a PDF: the sheet itself grows (and can be moved sideways), its lines stay as on paper.
    "Dopasuj do ekranu" zooms the music instead, and the lines are laid out again. */
-const zoomNow = () => S.page === "screen" ? S.zoom : (S.pz || 1), zoomMax = () => S.page === "screen" ? 2 : 3;
+const zoomNow = () => S.page === "screen" ? S.zoom : (S.pz || 1), zoomMax = () => S.page === "screen" ? 2 : 1.8;
 function applyPageZoom() {
   const pg = $("#pages"), a4 = S.mode === "pages";
-  pg.classList.toggle("a4", a4); pg.style.width = a4 ? `calc(min(960px, 100%) * ${S.pz || 1})` : "";
+  pg.classList.toggle("a4", a4); pg.style.width = "";
   requestAnimationFrame(drawLoop);
 }
 const setZoom = z => {
-  z = Math.round(Math.max(.5, Math.min(zoomMax(), z)) * 10) / 10;
+  z = Math.round(Math.max(S.page === "screen" ? .5 : .6, Math.min(zoomMax(), z)) * 10) / 10;
   if (S.page === "screen") { S.zoom = z; store.set("zoom2", z); if (S.piece) S.piece.zoom = z; render(); }
-  else { S.pz = z; applyPageZoom(); }
+  else { S.pz = z; S.loadedKey = null; render(); }
   $("#zoom-val").textContent = Math.round(z * 100) + "%"; if (S.piece) { S.dirty = true; autosave(); }
 };
 $("#zoom-in").addEventListener("click", () => setZoom(zoomNow() + .1));
