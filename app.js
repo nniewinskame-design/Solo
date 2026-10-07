@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.8";
+const VERSION = "4.2.9";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -558,7 +558,7 @@ function loadState(piece, settings) {
     if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
     if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
     S.pageMine = !!settings.pageMine;
-    S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = !!settings.swing;
+    S.under = settings.under === "chord" || settings.under === "fn" ? settings.under : ""; S.swing = false;          // no swing (Nat, 8 Oct)
     S.meterLines = settings.meterLines !== false;
   }
   /* clef and key chosen by hand for the view (before 4.0 test 44) are dropped: they are edited in the music now;
@@ -2250,7 +2250,9 @@ function partShapes(part) {
       const nx = notes.slice(i + 1, i + 40).find(y => Math.abs(y.at - end) < 1e-3 && kid(y.n, "pitch") && tied(y.n, "stop") && midiOf(kid(y.n, "pitch")) === mi);
       if (!nx) break; q += nx.q; cur = nx;
     }
-    map.set(x.n, { g0: gAt(x.at), g1: gAt(x.at + x.q), acc, len, q });
+    /* the level the note ends at: inside its own time (a new dynamic on the next note is not a crescendo) */
+    const nots = x.n.getElementsByTagName("notations")[0];
+    map.set(x.n, { g0: gAt(x.at), g1: gAt(x.at + x.q * 0.999), acc, len, q, q0: x.q, tieStop: tied(x.n, "stop") && !!kid(x.n, "pitch"), ferm: !!(nots && nots.getElementsByTagName("fermata").length) });
   });
   return map;
 }
@@ -2279,7 +2281,8 @@ function playShapes(slots) {
         const part = parts.get(slot.pid), bar = bars[mIdx.get(m)]; if (!part || !bar) return null;
         let list = stNotes.get(st); if (!list) { list = [...st.querySelectorAll(NOTE_SEL)]; stNotes.set(st, list); }
         let sh = byPart.get(part); if (!sh) { sh = partShapes(part); byPart.set(part, sh); meas.set(part, kids(part, "measure")); }
-        const xm = meas.get(part)[bar - 1], n = xm && kids(xm, "note")[list.indexOf(el)];
+        /* the drawn note → the note in the file (empty room is not drawn, so it is skipped when counting) */
+        const xm = meas.get(part)[bar - 1], j = xm ? xmlIndexOf(xm, list.indexOf(el)) : -1, n = xm && j >= 0 && kids(xm, "note")[j];
         return (n && sh.get(n)) || null;
       } catch { return null; }
     };
@@ -2436,8 +2439,19 @@ async function play(fromMs, opt = {}) {
       else if (pos < eps || qd - pos < eps) e.dur += third;
     });
   }
+  /* a tie is one sound: the first note lasts through the tied ones, which are not struck again (the cursor still
+     follows them) */
+  ev.forEach(e => {
+    const sh = e.shape; if (!sh) return;
+    if (sh.tieStop) e.silent = true;
+    else if (sh.q > sh.q0 + 1e-6) e.dur *= sh.q / sh.q0;
+  });
+  /* a fermata holds its note about twice as long, and everything after it waits (the cursor and clicks too) */
+  const ferm = new Map(); ev.forEach(e => { if (e.shape && e.shape.ferm && !e.silent && e.q0 >= fromMs - 1) ferm.set(e.q0, Math.max(ferm.get(e.q0) || 0, e.dur)); });
+  const holdBefore = ms => { let x = 0; ferm.forEach((d, q) => { if (q < ms - 1) x += d; }); return x; };
+  if (ferm.size) ev.forEach(e => { e.t += holdBefore(e.q0); if (ferm.has(e.q0) && e.shape && e.shape.ferm) e.dur += ferm.get(e.q0); });
   ev.sort((a, b) => a.t - b.t);
-  const rangeLen = Number.isFinite(B) ? sec(B - fromMs) : ev.reduce((m, e) => Math.max(m, e.t + e.dur), 0);
+  const rangeLen = (Number.isFinite(B) ? sec(B - fromMs) + holdBefore(B) : ev.reduce((m, e) => Math.max(m, e.t + e.dur), 0));
   /* count-in: one full bar of the metre (also before a pickup), and the music starts on its own beat: a pickup of
      one beat in 3/4 hears "1, 2" and comes in on 3; from the middle of a bar the clicks run on the bar's beats */
   const first = Math.max(0, bars.findIndex((b, i) => b.t <= fromMs + 1 && barEnd(i) > fromMs + 1));
@@ -2450,7 +2464,7 @@ async function play(fromMs, opt = {}) {
   }
   if (pb.click === "all") for (let i = first; i < nb && bars[i].t < B; i++) {
     const m = meter(i), bt = full(i) / m.n, g = gridStart(i), e = Math.min(barEnd(i), B);
-    for (let j = 0; j < m.n * 2; j++) { const t = g + j * bt; if (t >= e - 1) break; if (t < bars[i].t - 1 || t < fromMs - 1) continue; clicks.push({ t: countLen + sec(t - fromMs), acc: j === 0 }); }
+    for (let j = 0; j < m.n * 2; j++) { const t = g + j * bt; if (t >= e - 1) break; if (t < bars[i].t - 1 || t < fromMs - 1) continue; clicks.push({ t: countLen + sec(t - fromMs) + holdBefore(t + 1), acc: j === 0 }); }
   }
   ev.forEach(e => { e.t += countLen; });
   const total = countLen + rangeLen, fileLen = pb.loop ? total : total + 0.5, a4 = tuner.a4 || 440;
@@ -2738,7 +2752,6 @@ function buildPracticeSheet() {
   const base = S.baseBpm || 120, pct = Math.round(curBpm() / base * 100);
   $$("#speedseg button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.pct === pct)));
   $$("#clickseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.c === pb.click)));
-  $("#swing").checked = !!S.swing;
   const M = $("#mix"); M.innerHTML = "";
   S.parts.filter(p => p.keep).forEach(p => {
     const name = p.name || "Partia", l = document.createElement("label"); l.className = "li";
@@ -3178,8 +3191,7 @@ function syncLayout() {
 }
 $$("#pageseg button").forEach(b => b.addEventListener("click", () => { S.page = b.dataset.page; S.pageMine = true; syncLayout(); S.loadedKey = null; changed(); }));
 $$("#underseg button").forEach(b => b.addEventListener("click", () => { S.under = b.dataset.u; syncArrange(); changed(); }));
-$("#swing").addEventListener("change", e => { S.swing = e.target.checked; S.dirty = true; autosave(); if (playState) play(playPos()); });
-function syncArrange() { $$("#underseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.u === (S.under || "")))); $("#swing").checked = !!S.swing; }
+function syncArrange() { $$("#underseg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.u === (S.under || "")))); }
 /* Opis → Instrument: chosen from the list (the player's own instruments first), not typed */
 function fillInstrumentSelect() {
   const sel = $("#f-instrument"), cur = S.piece.instrument || "", mine = (typeof profile === "function" ? profile().instruments : []).map(instrById).filter(Boolean);
@@ -3399,6 +3411,24 @@ async function handleFiles(files) {
   await addPages(files);
   if (pending.length && openSheetId !== "pages") { if (S.view !== "home") go("home"); openSheet("pages"); }
 }
+/* a file that prints ♭ ♯ ♮ without saying the pitch (<accidental> but no <alter>): the pitch follows the sign, and the
+   sign holds to the bar line at its octave, as when reading; so playing, the tuner and the editor all hear what is printed */
+function alterFromAccidentals(xml) {
+  const ALT = { flat: -1, sharp: 1, natural: 0, "double-sharp": 2, "sharp-sharp": 2, "flat-flat": -2, "double-flat": -2 };
+  let changed = false;
+  const doc = parseXml(xml);
+  [...doc.getElementsByTagName("measure")].forEach(m => {
+    const held = new Map();
+    kids(m, "note").forEach(n => {
+      const p = kid(n, "pitch"); if (!p) return;
+      const k = (txt(n, "staff") || "1") + txt(p, "step") + txt(p, "octave"), acc = kid(n, "accidental"), sign = acc && ALT[acc.textContent.trim()];
+      let al = kid(p, "alter");
+      if (sign != null) { held.set(k, sign); if (!al || +al.textContent !== sign) { if (!al) { al = doc.createElement("alter"); p.insertBefore(al, kid(p, "octave")); } al.textContent = String(sign); changed = true; } if (!sign && al) { al.remove(); } return; }
+      if (!al && held.has(k) && held.get(k)) { al = doc.createElement("alter"); al.textContent = String(held.get(k)); p.insertBefore(al, kid(p, "octave")); changed = true; }
+    });
+  });
+  return changed ? new XMLSerializer().serializeToString(doc) : xml;
+}
 async function openXmlFile(f, zipped = false) {
   try {
     let xml;
@@ -3414,6 +3444,7 @@ async function openXmlFile(f, zipped = false) {
     xml = xml.replace(/^\uFEFF/, "");
     if (/<score-timewise\b/.test(xml) && !/<score-partwise\b/.test(xml)) throw new Error("Ten plik MusicXML jest w układzie „timewise”. Zapisz go w programie jako zwykły MusicXML.");
     if (!/<score-partwise\b/.test(xml)) throw new Error("W tym pliku nie ma nut.");
+    xml = alterFromAccidentals(xml);
     /* the same file opened again: the piece already in the library, not a copy (B-80) */
     const same = (await DB.all().catch(() => [])).find(p => p.xml === xml);
     if (same) { await openFromLibrary(same); hud("Ten utwór już masz w bibliotece."); return; }
