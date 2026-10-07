@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2";
+const VERSION = "4.2.1";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -3348,19 +3348,37 @@ function buildOrigSheet() {
 let pending = [];
 const MAX_PAGES = 12;
 const isXmlFile = f => /\.(musicxml|xml|mxl)$/i.test(f.name) || /musicxml/.test(f.type);
+/* "Plik" lets any file be picked (iPhone and some Android phones grey out .musicxml and .mxl when the picker is given a
+   list of types); what it is, is read from the file itself: a MusicXML text, a compressed .mxl (a zip), a PDF or a picture */
+async function sniffFile(f) {
+  if (isXmlFile(f)) return "xml";
+  if (/^image\//.test(f.type) || /\.(jpe?g|png|heic|heif|webp|gif|bmp)$/i.test(f.name)) return "image";
+  if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) return "pdf";
+  try {
+    const head = new Uint8Array(await f.slice(0, 4096).arrayBuffer());
+    if (head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46) return "pdf";            // %PDF
+    if (head[0] === 0x50 && head[1] === 0x4b) return "mxl";                                                   // PK (zip)
+    const text = new TextDecoder().decode(head);
+    if (/<(score-partwise|score-timewise)\b/.test(text) || /<!DOCTYPE score-/.test(text)) return "xml";
+  } catch {}
+  return "";
+}
 async function handleFiles(files) {
   files = Array.from(files || []); if (!files.length) return;
   if (cam.open) await closeCamera();
   hideWelcome();
-  const xmlF = files.find(isXmlFile);
-  if (xmlF) { await openXmlFile(xmlF); return; }
+  const kinds = await Promise.all(files.map(sniffFile));
+  const xi = kinds.findIndex(k => k === "xml" || k === "mxl");
+  if (xi >= 0) { await openXmlFile(files[xi], kinds[xi] === "mxl"); return; }
+  files = files.filter((f, i) => kinds[i] === "image" || kinds[i] === "pdf");
+  if (!files.length) { hud("To nie są nuty, zdjęcie ani PDF.", 3500); return; }
   await addPages(files);
   if (pending.length && openSheetId !== "pages") { if (S.view !== "home") go("home"); openSheet("pages"); }
 }
-async function openXmlFile(f) {
+async function openXmlFile(f, zipped = false) {
   try {
     let xml;
-    if (/\.mxl$/i.test(f.name) || f.type === "application/vnd.recordare.musicxml") {
+    if (zipped || /\.mxl$/i.test(f.name) || f.type === "application/vnd.recordare.musicxml") {
       const zip = await JSZip.loadAsync(f);
       let path = null;
       const cont = zip.file("META-INF/container.xml");
@@ -3369,7 +3387,9 @@ async function openXmlFile(f) {
       if (!path || !zip.file(path)) throw new Error("W tym pliku nie ma nut.");
       xml = await zip.file(path).async("string");
     } else xml = await f.text();
-    if (!/<(score-partwise|score-timewise)\b/.test(xml)) throw new Error("W tym pliku nie ma nut.");
+    xml = xml.replace(/^\uFEFF/, "");
+    if (/<score-timewise\b/.test(xml) && !/<score-partwise\b/.test(xml)) throw new Error("Ten plik MusicXML jest w układzie „timewise”. Zapisz go w programie jako zwykły MusicXML.");
+    if (!/<score-partwise\b/.test(xml)) throw new Error("W tym pliku nie ma nut.");
     /* the same file opened again: the piece already in the library, not a copy (B-80) */
     const same = (await DB.all().catch(() => [])).find(p => p.xml === xml);
     if (same) { await openFromLibrary(same); hud("Ten utwór już masz w bibliotece."); return; }
