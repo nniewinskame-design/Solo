@@ -1,6 +1,6 @@
 /* Solo · interface. Logic for music lives in core.js; this file wires the screens. */
 "use strict";
-const VERSION = "4.2.13";
+const VERSION = "4.2.14";
 const BUILD = document.documentElement.dataset.build || "";
 const icon = id => `<svg class="i"><use href="#${id}"/></svg>`;
 const plural = (n, one, few, many) => n === 1 ? one : (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) ? few : many;
@@ -557,7 +557,9 @@ function loadState(piece, settings) {
     /* settings saved before 3.9: the octave picked for the reading clef sat inside the transposition and moved every
        part; it now belongs to the part being read only */
     else if (S.iv && (S.iv.d || S.iv.s)) { const s12 = S.iv.s, oc = Math.trunc(s12 / 12); if (oc && Math.abs(s12 % 12) <= 6) { S.iv = { d: S.iv.d - 7 * oc, s: s12 - 12 * oc }; S.readOct = oc; } }
-    if (settings.layout === "orig" || settings.layout === "fit") S.layout = settings.layout;
+    /* a layout is kept only when the player chose it (Jak w oryginale / Dopasuj); 4.2.11 saved "fit" for files with
+       their own lines by mistake, so an unchosen saved layout is not used */
+    if ((settings.layout === "orig" || settings.layout === "fit") && settings.layoutMine) S.layout = settings.layout;
     S.layoutMine = !!settings.layoutMine;
     if (settings.page === "a4" || settings.page === "screen") S.page = settings.page;
     S.pageMine = !!settings.pageMine;
